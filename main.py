@@ -57,6 +57,14 @@ UART_TX_CHAR_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # Notify
 BATTERY_FULL_VOLTAGE = 3.9
 BATTERY_EMPTY_VOLTAGE = 3.5
 
+# Advanced "envelope" pattern safety limits.
+# These only change the *timing* of in-spec intensity commands (0-9). They never
+# exceed the documented range or invent opcodes, so the device hardware is not at
+# extra risk; the limits exist to protect comfort and avoid flooding the BLE link.
+MIN_PATTERN_PERIOD = 0.5  # seconds for one full pulse cycle (comfort + BLE floor)
+MIN_STEP_DELAY = 0.08  # minimum seconds between successive intensity writes
+ENVELOPE_FLOOR = 1  # lowest level used in a pattern; never hard-jolts up from 0
+
 # Modern color scheme - Dark theme (professional medical/wellness aesthetic)
 COLORS = {
     "bg_dark": "#0F1419",
@@ -392,6 +400,65 @@ class StrengthBadge(BoxLayout):
         self.label.text = str(self.value)
 
 
+class SegmentedToggle(BoxLayout):
+    """A two-or-more option segmented control (e.g. Standard / Advanced)."""
+
+    def __init__(self, options, on_select, selected=0, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = "horizontal"
+        self.size_hint = (1, None)
+        self.height = dp(36)
+        self.spacing = dp(8)
+        self._on_select = on_select
+        self.selected = selected
+        self.buttons = []
+        for i, opt in enumerate(options):
+            btn = Button(
+                text=opt,
+                font_size=sp(13),
+                bold=True,
+                background_normal="",
+                background_down="",
+                background_color=(0, 0, 0, 0),
+                color=get_color_from_hex(COLORS["text_primary"]),
+            )
+            with btn.canvas.before:
+                btn._bg_color = Color(rgba=(0, 0, 0, 0))
+                btn._bg_rect = RoundedRectangle(
+                    pos=btn.pos, size=btn.size, radius=[dp(10)]
+                )
+            btn.bind(pos=self._make_updater(btn), size=self._make_updater(btn))
+            btn.bind(on_press=self._make_presser(i))
+            self.buttons.append(btn)
+            self.add_widget(btn)
+        self.select(selected, fire=False)
+
+    def _make_updater(self, btn):
+        def _update(*args):
+            btn._bg_rect.pos = btn.pos
+            btn._bg_rect.size = btn.size
+
+        return _update
+
+    def _make_presser(self, index):
+        def _press(*args):
+            self.select(index)
+
+        return _press
+
+    def select(self, index, fire=True):
+        self.selected = index
+        for i, btn in enumerate(self.buttons):
+            if i == index:
+                btn._bg_color.rgba = get_color_from_hex(COLORS["accent_blue"])
+                btn.color = get_color_from_hex(COLORS["text_primary"])
+            else:
+                btn._bg_color.rgba = get_color_from_hex(COLORS["bg_card_light"])
+                btn.color = get_color_from_hex(COLORS["text_secondary"])
+        if fire and self._on_select:
+            self._on_select(index)
+
+
 class MainScreen(BoxLayout):
     timer_text = StringProperty("10:00")
     battery_level = StringProperty("--")
@@ -418,6 +485,11 @@ class MainScreen(BoxLayout):
         self.device_identity = None
         self.stim_side = "D"  # D=both, A=left, C=right
         self.led_intensity = "E"  # E=low (always), F=mid, G=high
+
+        # Advanced mode: envelope-pattern test (modulates intensity over time)
+        self.advanced_mode = False
+        self.pattern_period = 4.0  # seconds held at each level (peak / floor dwell)
+        self.envelope_running = False
 
         # Build UI
         self._build_status_bar()
@@ -586,10 +658,11 @@ class MainScreen(BoxLayout):
         strength_card = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(180),
+            height=dp(210),
             padding=dp(24),
             spacing=dp(16),
         )
+        self.strength_card = strength_card
 
         with strength_card.canvas.before:
             Color(rgba=get_color_from_hex(COLORS["bg_card"]))
@@ -610,6 +683,14 @@ class MainScreen(BoxLayout):
             height=dp(24),
         )
         strength_card.add_widget(strength_label)
+
+        # Standard / Advanced mode toggle
+        self.mode_toggle = SegmentedToggle(
+            options=["Standard", "Advanced"],
+            on_select=self._on_mode_select,
+            selected=0,
+        )
+        strength_card.add_widget(self.mode_toggle)
 
         # Strength display row
         strength_row = BoxLayout(orientation="horizontal", spacing=dp(24))
@@ -639,7 +720,191 @@ class MainScreen(BoxLayout):
         self.strength_slider.slider.bind(value=self.on_strength_change)
         strength_card.add_widget(self.strength_slider)
 
+        # Advanced (envelope pattern) panel — hidden in Standard mode
+        self.advanced_panel = self._build_advanced_panel()
+        strength_card.add_widget(self.advanced_panel)
+
         self.add_widget(strength_card)
+        self._reflect_mode_ui()
+
+    def _build_advanced_panel(self):
+        """Build the collapsible advanced (envelope pattern) controls."""
+        panel = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            height=dp(60),
+            spacing=dp(4),
+        )
+
+        # Pattern name + live status
+        top = BoxLayout(orientation="horizontal", size_hint=(1, None), height=dp(20))
+        pattern_label = Label(
+            text="Pattern: Pulse",
+            font_size=sp(13),
+            bold=True,
+            color=get_color_from_hex(COLORS["text_secondary"]),
+            halign="left",
+            valign="middle",
+        )
+        pattern_label.bind(size=lambda i, v: setattr(i, "text_size", v))
+        self.pattern_status = Label(
+            text="",
+            font_size=sp(12),
+            color=get_color_from_hex(COLORS["accent_blue_light"]),
+            halign="right",
+            valign="middle",
+        )
+        self.pattern_status.bind(size=lambda i, v: setattr(i, "text_size", v))
+        top.add_widget(pattern_label)
+        top.add_widget(self.pattern_status)
+        panel.add_widget(top)
+
+        # Rate control (seconds per full pulse cycle)
+        rate_row = BoxLayout(
+            orientation="horizontal", size_hint=(1, None), height=dp(36), spacing=dp(8)
+        )
+        rate_label = Label(
+            text="Hold",
+            font_size=sp(13),
+            color=get_color_from_hex(COLORS["text_muted"]),
+            size_hint=(None, 1),
+            width=dp(40),
+        )
+        self.rate_slider = Slider(
+            min=1.0,
+            max=10.0,
+            value=self.pattern_period,
+            step=0.5,
+            size_hint=(1, 1),
+            cursor_size=(dp(18), dp(18)),
+            cursor_image="",
+            cursor_disabled_image="",
+        )
+        self.rate_slider.bind(value=self._on_rate_change)
+        self.rate_value_label = Label(
+            text=f"{self.pattern_period:.1f}s",
+            font_size=sp(13),
+            color=get_color_from_hex(COLORS["text_secondary"]),
+            size_hint=(None, 1),
+            width=dp(48),
+        )
+        rate_row.add_widget(rate_label)
+        rate_row.add_widget(self.rate_slider)
+        rate_row.add_widget(self.rate_value_label)
+        panel.add_widget(rate_row)
+        return panel
+
+    def _reflect_mode_ui(self):
+        """Show/hide the advanced panel and resize the card to match the mode."""
+        advanced = self.advanced_mode
+        self.advanced_panel.opacity = 1 if advanced else 0
+        self.advanced_panel.disabled = not advanced
+        self.advanced_panel.height = dp(60) if advanced else 0
+        self.strength_card.height = dp(270) if advanced else dp(210)
+
+    def _on_mode_select(self, index):
+        advanced = index == 1
+        if advanced == self.advanced_mode:
+            return
+        self.advanced_mode = advanced
+        self._reflect_mode_ui()
+        if self.is_running:
+            if advanced:
+                # Begin modulating; the envelope loop guards against duplicates.
+                self.loop_thread.run_coroutine(self.run_envelope())
+            else:
+                # Envelope loop exits on its next check; restore a steady level.
+                self._set_badge(int(self.strength))
+                self.loop_thread.run_coroutine(
+                    self.send_command(f"{int(self.strength)}\n")
+                )
+
+    def _on_rate_change(self, instance, value):
+        self.pattern_period = float(value)
+        self.rate_value_label.text = f"{value:.1f}s"
+
+    @mainthread
+    def _set_badge(self, value):
+        self.strength_badge.value = value
+
+    @mainthread
+    def _set_pattern_status(self, text):
+        if hasattr(self, "pattern_status"):
+            self.pattern_status.text = text
+
+    def _envelope_active(self):
+        return (
+            self.is_running
+            and self.advanced_mode
+            and self.client is not None
+            and self.client.is_connected
+        )
+
+    async def _emit_level(self, level):
+        """Send one intensity level and reflect it on the badge."""
+        await self.send_command(f"{level}\n")
+        self._set_badge(level)
+
+    async def run_envelope(self):
+        """Modulate intensity over time (Pulse pattern) while in Advanced mode.
+
+        Shape per cycle: quick ramp up -> HOLD at peak -> quick ramp down -> HOLD
+        at floor. The hold phases matter: the device slews intensity internally,
+        so a level must be sustained long enough to actually be felt. The Hold
+        slider sets that dwell time directly. All commands are documented 0-9
+        digits; ramp steps and holds are floored for comfort and BLE safety.
+        """
+        if self.envelope_running:
+            return
+        self.envelope_running = True
+        floor = ENVELOPE_FLOOR
+        ramp_step_delay = 0.2  # brief; just smooths the onset/offset edges
+        self._set_pattern_status("● live")
+        try:
+            while self._envelope_active():
+                peak = max(floor, int(self.strength))
+                # Hold time at each level (peak and floor) comes straight from the slider.
+                hold = max(0.8, float(self.pattern_period))
+                if peak <= floor:
+                    # Nothing to modulate (intensity at/below floor) — hold steady.
+                    await self._emit_level(peak)
+                    await asyncio.sleep(0.2)
+                    continue
+
+                # Ramp up to peak
+                for level in range(floor + 1, peak + 1):
+                    if not self._envelope_active():
+                        break
+                    await self._emit_level(level)
+                    await asyncio.sleep(ramp_step_delay)
+                # Hold at peak
+                if self._envelope_active():
+                    await self._emit_level(peak)
+                    await asyncio.sleep(hold)
+                # Ramp down to floor
+                for level in range(peak - 1, floor - 1, -1):
+                    if not self._envelope_active():
+                        break
+                    await self._emit_level(level)
+                    await asyncio.sleep(ramp_step_delay)
+                # Hold at floor
+                if self._envelope_active():
+                    await self._emit_level(floor)
+                    await asyncio.sleep(hold)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.envelope_running = False
+            self._set_pattern_status("")
+            # If we dropped back to Standard while still running, restore a steady level.
+            if (
+                self.is_running
+                and not self.advanced_mode
+                and self.client
+                and self.client.is_connected
+            ):
+                self._set_badge(int(self.strength))
+                await self.send_command(f"{int(self.strength)}\n")
 
     def _update_strength_rect(self, instance, value):
         self.strength_rect.pos = instance.pos
@@ -657,8 +922,11 @@ class MainScreen(BoxLayout):
         new_value = max(1, min(9, self.strength + delta))
         self.strength = new_value
         self.strength_slider.slider.value = new_value
-        self.strength_badge.value = new_value
-        if self.is_running:
+        # While an envelope is running, the badge reflects the live pulse level,
+        # and the loop reads self.strength as the peak — so don't overwrite either.
+        if not (self.advanced_mode and self.is_running):
+            self.strength_badge.value = new_value
+        if self.is_running and not self.advanced_mode:
             self.loop_thread.run_coroutine(self.send_command(f"{int(self.strength)}\n"))
 
     def main_button_pressed(self, instance):
@@ -911,6 +1179,10 @@ class MainScreen(BoxLayout):
         await self.send_command(f"{self.stim_side}\n")  # D=both, A=left, C=right
         await self.send_command(f"{self.led_intensity}\n")  # E=low, F=mid, G=high
         print("Device started.")
+        # In Advanced mode, begin the envelope pattern only after the full startup
+        # sequence completes (scheduled on this same loop, so no race).
+        if self.advanced_mode:
+            asyncio.ensure_future(self.run_envelope())
 
     async def stop_device(self):
         # Full stop sequence (from APK endSession — same for all devices)
@@ -945,9 +1217,10 @@ class MainScreen(BoxLayout):
             progress = ((total_time - self.remaining_time) / total_time) * 100
             self.timer_progress.progress = progress
 
-            # Send keep-alive every 10 seconds
+            # Send keep-alive every 10 seconds. In Advanced mode the envelope loop
+            # is already sending intensity commands constantly, so skip it there.
             self.keepalive_counter += 1
-            if self.keepalive_counter % 10 == 0:
+            if self.keepalive_counter % 10 == 0 and not self.advanced_mode:
                 self.loop_thread.run_coroutine(
                     self.send_command(f"{int(self.strength)}\n")
                 )
@@ -966,8 +1239,11 @@ class MainScreen(BoxLayout):
 
     def on_strength_change(self, instance, value):
         self.strength = int(value)
-        self.strength_badge.value = self.strength
-        if self.is_running:
+        # In Advanced mode the slider sets the pulse *peak*; the envelope loop reads
+        # self.strength directly and the badge shows the live level, so leave both.
+        if not (self.advanced_mode and self.is_running):
+            self.strength_badge.value = self.strength
+        if self.is_running and not self.advanced_mode:
             # Send the new strength command when the device is running
             self.loop_thread.run_coroutine(self.send_command(f"{int(self.strength)}\n"))
 
