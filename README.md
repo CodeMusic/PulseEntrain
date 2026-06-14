@@ -1,103 +1,123 @@
-# Pulse-Libre Desktop Application
+# PulseEntrain
 
-A Kivy application to control the [Pulsetto device](https://juraj.bednar.io/pulsetto) via Bluetooth Low Energy (BLE). The app allows you to set the strength of the device, start a timer, and monitor battery and charging status.
+**PulseEntrain combines vagus nerve stimulation with binaural-beat entrainment** — pairing gentle electrical stimulation (via the [Pulsetto](https://pulsetto.tech/) device) with audio designed to nudge your brain toward a target state. The goal is a single, calm, customizable session that works on the body and the mind at the same time.
 
-This app is designed for desktop platforms (macOS, should work on Linux and maybe Windows) and mirrors the functionality of the mobile app available [here](https://github.com/jooray/PulseLibre).
+It is a fork and evolution of the original `pulse-libre-desktop` Pulsetto controller, expanded into an entrainment platform with both a desktop and a mobile app.
 
+> ⚠️ **Wellness / entertainment, not medical.** PulseEntrain is for relaxation and experimentation. It is not a medical device and makes no diagnostic or treatment claims. See [Safety](#safety) before use.
 
-## Screenshot
+---
 
-![Pulse-Libre Desktop Screenshot](images/screenshot.png)
+## What it does
 
-### UI Design
+### 1. Program catalog
+A curated library of **programs that influence your state** — relaxation, focus, sleep, and more. Each program pairs binaural-beat audio with an optional Pulsetto stimulation envelope, so you can just pick one and press play.
 
-The application features a modern, dark-themed interface inspired by contemporary mobile health and wellness apps:
+### 2. Manual mode
+Build your own session by hand:
+- **Entrainment frequency** — set the target beat frequency directly (e.g. an alpha or theta band).
+- **Background noise** — choose a noise bed (e.g. white / pink / brown) to sit under the beats.
+- **Pulsetto option** — enable vagus nerve stimulation alongside the audio, with intensity and pulse pattern.
 
-- **Card-based layout** with rounded corners and subtle shadows
-- **Status bar** showing Connection, Battery, and Charging status at a glance
-- **Session Timer** with large, easy-to-read display and progress indicator
-- **Intensity Control** with slider and +/- buttons for precise adjustment
-- **Large action buttons** with clear visual states (Start/Stop/Scan)
-- **Responsive animations** for button presses and state changes
-- **Clean typography** using system fonts for optimal readability
+### 3. AI-generated sessions *(planned)*
+Describe what you want in a prompt, and PulseEntrain will:
+- generate a matching **binaural program**, and
+- optionally generate **background instrumental music** to accompany it.
 
+Generated sessions can be **saved and reused** later.
+*This arrives after the catalog and manual mode are complete (see [Roadmap](#roadmap)).*
 
-## Features
+---
 
-- Scan and connect to [Pulsetto devices](https://juraj.bednar.io/pulsetto) automatically.
-- Set strength levels from 1 to 9.
-- Start and stop a timer (default 4 minutes).
-- Display battery level and charging status.
-- Compatible with desktop platforms (Windows, macOS, Linux).
+## Roadmap
 
-## Protocol
+| Feature | Status |
+|---|---|
+| Pulsetto control (intensity, timer, status) | ✅ Available |
+| Binaural-beat audio playback | ✅ Available |
+| Advanced pulse-envelope mode (desktop) | ✅ Available |
+| Program catalog | 🛠️ In progress |
+| Manual mode (frequency + noise + Pulsetto) | 🛠️ In progress |
+| AI-generated sessions (+ optional generated music, saveable) | 🔜 Planned |
+| **Lumenate Nova** visual entrainment | 🔜 Coming soon |
 
-We reverse engineered the protocol of both Pulsetto Lite and Fit devices. There
-is no difference between the different session types in the wave they produce,
-the only difference is recommended length and the small fact that the Sleep
-program starts with the LED dimmed. There are no session type settings in the
-app precisely for this reason - just set the time and intensity and you are
-good to go.
+---
 
-For those interested, the full protocol documentation is
-[here](docs/PULSETTO_PROTOCOL.md).
+## Supported hardware
 
-## Prerequisites
+| Modality | Device | Status |
+|---|---|---|
+| Vagus nerve stimulation | **[Pulsetto](https://pulsetto.tech/)** | ✅ Supported |
+| Audio (binaural beats) | Any headphones | ✅ Supported |
+| Visual entrainment | **[Lumenate Nova](https://lumenate.co/lumenate-nova/)** | 🔜 Coming soon |
 
-- Python 3.7 or higher
-- [Poetry](https://python-poetry.org/docs/#installation) package manager
+Binaural beats **require stereo headphones** — each ear must receive a different tone for the effect to work.
 
-## Installation
+---
 
-1. **Clone the repository**
+## How it works
 
-   ```bash
-   git clone https://github.com/jooray/pulse-libre-desktop.git
-   cd pulsetto-libre-desktop
-   ```
+### What are binaural beats?
+When two slightly different tones are played separately to each ear — say **200 Hz** in the left and **210 Hz** in the right — the brain perceives a third, phantom "beat" at the *difference* between them (here, **10 Hz**). The idea behind **brainwave entrainment** is that this perceived rhythm gently encourages brain activity toward that frequency band, each of which is loosely associated with a state of mind:
 
-2. **Install dependencies using Poetry**
+| Band | Approx. range | Loosely associated with |
+|---|---|---|
+| Delta | 0.5–4 Hz | Deep sleep |
+| Theta | 4–8 Hz | Drowsiness, meditation, dreaming |
+| Alpha | 8–13 Hz | Relaxed, calm focus |
+| Beta | 13–30 Hz | Alert, active thinking |
+| Gamma | 30 Hz+ | High-level processing |
 
-   ```bash
-   poetry install
-   ```
+Binaural beats only work over **headphones**, and the evidence for entrainment is suggestive but mixed — treat it as a relaxation aid, not a guaranteed outcome.
 
-## Running the Application
+### What is vagus nerve stimulation?
+The **vagus nerve** is the main nerve of the parasympathetic ("rest and digest") system, running from the brainstem down through the neck to the organs. **Transcutaneous vagus nerve stimulation (tVNS)** applies mild electrical pulses to a branch of the nerve near the skin to influence autonomic balance — explored as a way to support calm and stress relief. The **Pulsetto** is a consumer tVNS device; PulseEntrain drives it over Bluetooth and can modulate its intensity in rhythm with a session.
 
-   ```bash
-   poetry run python main.py
-   ```
-## Usage
+---
 
-- Upon starting, the app will attempt to scan and connect to a Pulsetto device.
-- If a device is not found, a "Scan" button will appear. Press it to scan again.
-- Once connected, battery level and charging status will be displayed.
-- Use the slider to set the desired strength (1-9).
-- Press the "Start" button to begin the timer and activate the device.
-- Press the "Stop" button to stop the device and the timer.
+## The apps
 
-## Why? Backstory
+- **Desktop** (`main.py`) — a [Kivy](https://kivy.org/) app that controls the Pulsetto over Bluetooth LE: intensity, session timer, battery/charging status, and an **Advanced** pulse-envelope mode for rhythmic stimulation patterns.
+- **Mobile** (`mobile/`) — a React Native app (PulseEntrain) — the primary client as the platform grows.
 
-I was stranded in a car in a storm. The storm took out all the cell towers. With nothing
-to do, I decided to do some biohacking, chill out, use some Near Infrarred Light and
-do some vagal stimulation to remove the stress of freaking wind that was shaking my car
-and throwing over reusable bathrooms around me.
+The Pulsetto BLE protocol was reverse-engineered; full details are in [docs/PULSETTO_PROTOCOL.md](docs/PULSETTO_PROTOCOL.md).
 
-I turned the device on, but it needed to login and go to the internet. Which was of course
-not working because of the storm.
+---
 
-Why does an electric nerve stimulator need an account and access to the Internet? I sighed.
-A few moments later, I wanted to learn about BLE hacking and reverse engineering. The code
-was written mostly by ChatGPT anyway, but I did some nice reverse engineering of the protocol.
-The result is this micro app. Have fun.
+## Running the desktop app
 
-## Information about Pulsetto device
+**Prerequisites:** Python 3.11+ and the [Poetry](https://python-poetry.org/docs/#installation) package manager.
 
-The device's original app has multiple modes (Stress, Pain, Burnout, ...), but
-they are actually all the same, just with different recommendations on how often to do
-them and different program lengths. There is no difference in what the device does.
+```bash
+poetry install
+poetry run python main.py
+```
 
-The only thing that you set on your device is the strength level (1-9) and the
-app starts a timer. (and LED intensity)
+On launch it scans for a Pulsetto device. Once connected, set the intensity (1–9), choose a duration, and press **Start**. Switch to the **Advanced** tab to shape the stimulation into rhythmic pulse patterns.
 
-Get your [Pulsetto device](https://juraj.bednar.io/pulsetto).
+---
+
+## Content library
+
+Entrainment programs live in `entrainment_assets/`, organized by category. Each track ships with:
+
+- the audio file,
+- a cover image, and
+- an `.imed` metadata file (JSON) holding its name, length, description, strength, your personal rating, and play count.
+
+---
+
+## Safety
+
+- PulseEntrain is a **wellness / entertainment** tool, not a medical device, and is not a substitute for professional care.
+- Follow Pulsetto's own guidance for placement, intensity, and session length. Do not exceed documented limits.
+- Vagus nerve stimulation and brainwave entrainment have **contraindications** — if you are pregnant, have a heart condition, epilepsy/seizure history, or an implanted electronic device (e.g. a pacemaker), consult a qualified professional before use.
+- Stop immediately if anything feels uncomfortable.
+
+---
+
+## Credits
+
+Built on the reverse-engineered Pulsetto protocol from the original `pulse-libre` project. Devices:
+- Pulsetto — https://pulsetto.tech/
+- Lumenate Nova — https://lumenate.co/lumenate-nova/
