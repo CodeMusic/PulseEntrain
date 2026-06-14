@@ -17,36 +17,11 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BleManager } from 'react-native-ble-plx';
-import {
-  request,
-  requestMultiple,
-  check,
-  checkMultiple,
-  PERMISSIONS,
-  RESULTS,
-  openSettings,
-} from 'react-native-permissions';
-import { Buffer } from 'buffer'; // Import Buffer for base64 encoding
 import KeepAwake from 'react-native-keep-awake';
+import { usePulsetto } from '../pulsetto/PulsettoProvider';
 
-// Initialize BLE Manager
-const manager = new BleManager();
-
-// BLE Constants
-const DEVICE_NAME_PREFIX = 'Pulsetto';
-const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const UART_RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Write
-const UART_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // Notify
-
-// Battery Voltage Constants (from official APK: 3.5V=0%, 3.9V=100%)
-const BATTERY_FULL_VOLTAGE = 3.9;
-const BATTERY_EMPTY_VOLTAGE = 3.5;
-
-// Keep-alive constants
-const KEEPALIVE_INTERVAL = 10000; // Send keepalive every 10 seconds
-const STATUS_POLL_INTERVAL = 30000; // Poll battery status every 30 seconds (idle)
-const SESSION_POLL_INTERVAL = 3000; // Poll battery status every 3 seconds (during session)
+// BLE (manager, UUIDs, voltages, intervals) now lives in
+// src/pulsetto/PulsettoProvider.js — a single BLE owner shared app-wide.
 
 // Persistent storage keys
 const STORAGE_KEY_STRENGTH = '@pulselibre/strength';
@@ -58,8 +33,6 @@ const DEFAULT_DAILY_GOAL = 2;
 const MIN_COUNTING_SECONDS = 60;
 const DAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-// Helper: sleep for ms milliseconds
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Helper: start of week (Monday) at 00:00 for the given date
 const startOfWeekMonday = date => {
@@ -110,10 +83,6 @@ const ManualScreen = () => {
   // State Variables
   const [timer, setTimer] = useState(10); // Timer in minutes
   const [strength, setStrength] = useState(5); // Default strength
-  const [battery, setBattery] = useState(null); // Battery level
-  const [charging, setCharging] = useState(null); // Charging status
-  const [scanning, setScanning] = useState(false); // Scanning state
-  const [connectedDevice, setConnectedDevice] = useState(null); // Connected device
   const [isRunning, setIsRunning] = useState(false); // Timer running state
   const [remainingTime, setRemainingTime] = useState(0); // Remaining time in seconds
   const [appState, setAppState] = useState(AppState.currentState);
@@ -126,12 +95,19 @@ const ManualScreen = () => {
 
   // Reference for intervals to allow clearing
   const intervalRef = useRef(null);
-  const keepaliveRef = useRef(null);
-  const statusPollRef = useRef(null);
-  const appStateRef = useRef(AppState.currentState);
-  const disconnectSubscriptionRef = useRef(null);
-  const isReconnectingRef = useRef(false);
   const sessionStartRef = useRef(null);
+
+  // Pulsetto BLE is owned by the shared provider (single BLE manager app-wide).
+  const {
+    connectedDevice,
+    battery,
+    charging,
+    scanning,
+    scanForDevices,
+    startSession,
+    stopSession,
+    setIntensity,
+  } = usePulsetto();
 
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
@@ -204,73 +180,6 @@ const ManualScreen = () => {
     );
   }, [sessions, prefsLoaded]);
 
-  // Request permissions on mount
-  useEffect(() => {
-    requestBluetoothPermissions();
-
-    // Listen for app state changes
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    return () => {
-      subscription?.remove();
-      manager.stopDeviceScan();
-      if (connectedDevice) {
-        manager.cancelDeviceConnection(connectedDevice.id);
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (keepaliveRef.current) {
-        clearInterval(keepaliveRef.current);
-      }
-      if (statusPollRef.current) {
-        clearInterval(statusPollRef.current);
-      }
-      if (disconnectSubscriptionRef.current) {
-        disconnectSubscriptionRef.current.remove();
-      }
-    };
-  }, []);
-
-  // Handle app state changes
-  const handleAppStateChange = (nextAppState) => {
-    appStateRef.current = nextAppState;
-    setAppState(nextAppState);
-
-    // When app comes to foreground, refresh device status
-    if (nextAppState === 'active' && connectedDevice) {
-      console.log('App became active, refreshing device status...');
-      queryDeviceStatus(connectedDevice);
-    }
-  };
-
-  // Handle device disconnection - auto-reconnect
-  const handleDisconnection = () => {
-    console.log('Device disconnected, attempting to reconnect...');
-    setConnectedDevice(null);
-    setBattery(null);
-    setCharging(null);
-
-    // Clear any existing intervals
-    if (keepaliveRef.current) {
-      clearInterval(keepaliveRef.current);
-      keepaliveRef.current = null;
-    }
-    if (statusPollRef.current) {
-      clearInterval(statusPollRef.current);
-      statusPollRef.current = null;
-    }
-
-    // Don't stop the timer - we'll resume when reconnected
-    // Auto-scan and reconnect
-    if (!isReconnectingRef.current) {
-      isReconnectingRef.current = true;
-      setTimeout(() => {
-        scanForDevices();
-        isReconnectingRef.current = false;
-      }, 1000); // Small delay before reconnecting
-    }
-  };
 
   // Keep screen awake while running
   useEffect(() => {
@@ -287,368 +196,6 @@ const ManualScreen = () => {
     };
   }, [isRunning]);
 
-  // Start keepalive interval when device is running
-  useEffect(() => {
-    if (isRunning && connectedDevice) {
-      console.log('Starting keepalive interval...');
-
-      // Send strength level periodically to keep device alive
-      keepaliveRef.current = setInterval(() => {
-        console.log('Sending keepalive with current strength...');
-        sendCommand(`${strength}\n`);
-      }, KEEPALIVE_INTERVAL);
-
-      return () => {
-        if (keepaliveRef.current) {
-          console.log('Clearing keepalive interval');
-          clearInterval(keepaliveRef.current);
-        }
-      };
-    }
-  }, [isRunning, connectedDevice, strength]);
-
-  // Poll device status periodically when connected
-  // (interval is managed by startStatusPolling, this just sets up initial polling)
-  useEffect(() => {
-    if (connectedDevice) {
-      // Initial polling is started in connectToDevice via startStatusPolling
-      return () => {
-        if (statusPollRef.current) {
-          console.log('Clearing status polling interval');
-          clearInterval(statusPollRef.current);
-          statusPollRef.current = null;
-        }
-      };
-    }
-  }, [connectedDevice]);
-
-  // Start/restart status polling with a given interval
-  const startStatusPolling = (interval) => {
-    if (statusPollRef.current) {
-      clearInterval(statusPollRef.current);
-    }
-    console.log(`Starting status polling every ${interval / 1000}s...`);
-    statusPollRef.current = setInterval(() => {
-      queryDeviceStatus(connectedDevice);
-    }, interval);
-  };
-
-  // Request Bluetooth and Location permissions
-  const requestBluetoothPermissions = async () => {
-    if (Platform.OS === 'android') {
-      const permissions = [
-        PERMISSIONS.ANDROID.BLUETOOTH_SCAN,
-        PERMISSIONS.ANDROID.BLUETOOTH_CONNECT,
-        PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
-      ];
-
-      try {
-        const statuses = await checkMultiple(permissions);
-
-        const permissionsToRequest = [];
-
-        for (const permission of permissions) {
-          if (statuses[permission] !== RESULTS.GRANTED) {
-            permissionsToRequest.push(permission);
-          }
-        }
-
-        if (permissionsToRequest.length > 0) {
-          const newStatuses = await requestMultiple(permissionsToRequest);
-
-          const allGranted = Object.values(newStatuses).every(
-            status => status === RESULTS.GRANTED
-          );
-
-          if (allGranted) {
-            scanForDevices();
-          } else {
-            Alert.alert(
-              'Permissions Required',
-              'Location and Bluetooth permissions are required for scanning.',
-              [
-                { text: 'Grant Permissions', onPress: () => requestBluetoothPermissions() },
-                { text: 'Open Settings', onPress: () => openSettings(), style: 'cancel' },
-              ]
-            );
-          }
-        } else {
-          scanForDevices();
-        }
-      } catch (error) {
-        console.error('Permission request error:', error);
-        Alert.alert('Permission Error', error.message, [{ text: 'OK' }]);
-      }
-    } else if (Platform.OS === 'ios') {
-      // Handle iOS permissions
-      try {
-        const status = await check(PERMISSIONS.IOS.BLUETOOTH);
-
-        if (status !== RESULTS.GRANTED) {
-          const newStatus = await request(PERMISSIONS.IOS.BLUETOOTH);
-          if (newStatus === RESULTS.GRANTED) {
-            scanForDevices();
-          } else {
-            Alert.alert(
-              'Permissions Required',
-              'Bluetooth permission is required for scanning.',
-              [
-                { text: 'Grant Permissions', onPress: () => requestBluetoothPermissions() },
-                { text: 'Open Settings', onPress: () => openSettings(), style: 'cancel' },
-              ]
-            );
-          }
-        } else {
-          scanForDevices();
-        }
-      } catch (error) {
-        console.error('Permission request error:', error);
-        Alert.alert('Permission Error', error.message, [{ text: 'OK' }]);
-      }
-    }
-  };
-
-  // Scan for BLE devices
-  const scanForDevices = () => {
-    if (scanning || connectedDevice) {
-      console.log('Scan already in progress or device already connected.');
-      return;
-    }
-
-    console.log('Starting device scan...');
-    setScanning(true);
-    manager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        console.log('Scan error:', error);
-        setScanning(false);
-        Alert.alert('Scan Error', error.message || JSON.stringify(error), [{ text: 'OK' }]);
-        return;
-      }
-
-      if (device.name?.startsWith(DEVICE_NAME_PREFIX)) {
-        console.log('Found device:', device.name);
-        manager.stopDeviceScan();
-        setScanning(false);
-        connectToDevice(device);
-      }
-    });
-
-    // Set a timeout to stop scanning after 10 seconds
-    setTimeout(() => {
-      if (scanning) {
-        manager.stopDeviceScan();
-        setScanning(false);
-        console.log('Scanning timed out');
-        Alert.alert('Scan Timeout', 'No device found. Please try scanning again.', [
-          { text: 'OK' },
-        ]);
-      }
-    }, 10000); // 10 seconds
-  };
-
-  // Connect to the BLE device
-  const connectToDevice = async device => {
-    try {
-      console.log(`Connecting to device: ${device.name}`);
-      const connected = await manager.connectToDevice(device.id, { autoConnect: false });
-      console.log('Connected to device:', connected.name);
-
-      // Discover services and characteristics
-      await connected.discoverAllServicesAndCharacteristics();
-      console.log('Services and characteristics discovered');
-
-      // Set up disconnection listener
-      if (disconnectSubscriptionRef.current) {
-        disconnectSubscriptionRef.current.remove();
-      }
-      disconnectSubscriptionRef.current = manager.onDeviceDisconnected(
-        connected.id,
-        (error, disconnectedDevice) => {
-          console.log('Device disconnected:', disconnectedDevice?.name, error?.message);
-          handleDisconnection();
-        }
-      );
-
-      setConnectedDevice(connected);
-
-      // Subscribe to notifications
-      subscribeToNotifications(connected);
-
-      // Query firmware version and device identity
-      await queryDeviceInfo(connected);
-
-      // Query initial battery and charging status
-      await queryDeviceStatus(connected);
-
-      // Start idle status polling
-      startStatusPolling(STATUS_POLL_INTERVAL);
-
-      // If a session was running, resume it with full start sequence
-      if (isRunning && remainingTime > 0) {
-        console.log('Resuming session after reconnection...');
-        await sendCommand('+\n', connected);
-        await sendCommand('-\n', connected);
-        await sleep(250);
-        await sendCommand('0\n', connected);
-        await sleep(450);
-        await sendCommand('5\n', connected);
-        await sleep(450);
-        await sendCommand('0\n', connected);
-        await sleep(450);
-        await sendCommand(`${strength}\n`, connected);
-        await sleep(250);
-        await sendCommand('D\n', connected);
-        await sendCommand('E\n', connected);
-        startStatusPolling(SESSION_POLL_INTERVAL);
-      }
-    } catch (error) {
-      console.error('Connection error:', error);
-      // Don't show alert, just retry after a delay
-      console.log('Will retry connection...');
-      setTimeout(() => {
-        if (!isReconnectingRef.current) {
-          isReconnectingRef.current = true;
-          scanForDevices();
-          isReconnectingRef.current = false;
-        }
-      }, 2000);
-    }
-  };
-
-  // Query device status (battery and charging)
-  const queryDeviceStatus = async device => {
-    console.log('Querying device status...');
-    await sendCommand('u\n', device); // Query charging status
-    await sendCommand('Q\n', device); // Query battery
-  };
-
-  // Query device info (firmware version and identity, called once on connect)
-  const queryDeviceInfo = async device => {
-    console.log('Querying device info...');
-    await sendCommand('v\n', device); // Firmware version
-    await sendCommand('i\n', device); // Device identity
-  };
-
-  // Subscribe to notifications from the device
-  const subscribeToNotifications = device => {
-    console.log('Subscribing to notifications...');
-    device.monitorCharacteristicForService(
-      UART_SERVICE_UUID,
-      UART_TX_CHAR_UUID,
-      (error, characteristic) => {
-        if (error) {
-          console.error('Notification error:', error);
-          return;
-        }
-
-        if (characteristic?.value) {
-          const decodedValue = Buffer.from(characteristic.value, 'base64').toString('utf-8');
-          const rawBytes = Buffer.from(characteristic.value, 'base64');
-          console.log('Received notification (decoded):', decodedValue);
-          console.log('Received notification (raw bytes):', rawBytes);
-          handleNotification(decodedValue, rawBytes);
-        }
-      }
-    );
-  };
-
-  // Handle incoming notifications
-  const handleNotification = (decodedData, rawBytes) => {
-    // Debugging: Log both decoded and raw data
-    console.log(`Decoded Data: "${decodedData}"`);
-    console.log(`Raw Bytes: ${rawBytes.toString('hex')}`);
-
-    // Trim the decoded data to remove leading/trailing whitespace
-    const trimmedData = decodedData.trim();
-
-    // Check for Battery Information
-    if (trimmedData.startsWith('Batt:')) {
-      try {
-        const batteryVoltage = parseFloat(trimmedData.split('Batt:')[1]);
-        const batteryPercentage = calculateBatteryPercentage(batteryVoltage);
-        setBattery(batteryPercentage);
-        console.log(`Battery Voltage: ${batteryVoltage}V => ${batteryPercentage}%`);
-      } catch (error) {
-        console.error('Failed to parse battery data:', error);
-      }
-    }
-
-    // Check for Charging Status based on raw bytes
-    // Assuming 'u0' (0x75 0x01 0x30) = Not Charging, 'u1' (0x75 0x01 0x31) = Charging
-    if (rawBytes.length >= 3 && rawBytes[0] === 0x75 && rawBytes[1] === 0x01) {
-      if (rawBytes[2] === 0x30) {
-        // '0'
-        setCharging('Not Charging');
-        console.log('Charging Status: Not Charging');
-      } else if (rawBytes[2] === 0x31) {
-        // '1'
-        setCharging('Charging');
-        console.log('Charging Status: Charging');
-      } else {
-        console.warn('Unknown charging status byte:', rawBytes[2]);
-      }
-    }
-
-    // Handle other notifications
-    // Firmware version response
-    if (trimmedData.startsWith('fw:')) {
-      console.log(`Firmware version: ${trimmedData.substring(3)}`);
-    }
-
-    // Device identity response
-    if (trimmedData.startsWith('Pulsetto_') || trimmedData.startsWith('pulsetto_')) {
-      console.log(`Device identity: ${trimmedData}`);
-    }
-  };
-
-  // Calculate battery percentage based on voltage
-  const calculateBatteryPercentage = voltage => {
-    if (voltage >= BATTERY_FULL_VOLTAGE) {
-      return 100;
-    } else if (voltage <= BATTERY_EMPTY_VOLTAGE) {
-      return 0;
-    } else {
-      return Math.round(
-        ((voltage - BATTERY_EMPTY_VOLTAGE) / (BATTERY_FULL_VOLTAGE - BATTERY_EMPTY_VOLTAGE)) * 100
-      );
-    }
-  };
-
-  // Send a command to the device (writeWithResponse — for ramp commands: + and -)
-  const sendCommand = async (command, device = connectedDevice) => {
-    if (!device) {
-      console.log('Device not connected. Cannot send command.');
-      return;
-    }
-
-    try {
-      const base64Command = Buffer.from(command).toString('base64');
-      // Auto-detect write type: ramp commands (+/-) use writeWithResponse
-      const cmdChar = command.trim();
-      if (cmdChar === '+' || cmdChar === '-') {
-        console.log(`Sending command (withResponse): "${command.trim()}"`);
-        await device.writeCharacteristicWithResponseForService(
-          UART_SERVICE_UUID,
-          UART_RX_CHAR_UUID,
-          base64Command
-        );
-      } else {
-        console.log(`Sending command (withoutResponse): "${command.trim()}"`);
-        await device.writeCharacteristicWithoutResponseForService(
-          UART_SERVICE_UUID,
-          UART_RX_CHAR_UUID,
-          base64Command
-        );
-      }
-    } catch (error) {
-      console.error('Failed to send command:', error);
-      // Check if it's a disconnection error
-      if (error.message?.includes('not connected') || error.message?.includes('disconnected')) {
-        console.log('Device appears disconnected, triggering reconnection...');
-        handleDisconnection();
-      }
-    }
-  };
 
   // Handle Start Button Press
   const handleStart = async () => {
@@ -657,7 +204,6 @@ const ManualScreen = () => {
       return;
     }
 
-    console.log('Start button pressed.');
     sessionStartRef.current = {
       time: Date.now(),
       plannedSeconds: timer * 60,
@@ -666,24 +212,8 @@ const ManualScreen = () => {
     setIsRunning(true);
     setRemainingTime(timer * 60); // Set remaining time in seconds
 
-    // Full startup ramp sequence (from official APK beginSession)
-    await sendCommand('+\n'); // rampUp (writeWithResponse)
-    await sendCommand('-\n'); // rampDown (writeWithResponse)
-    await sleep(250);
-    await sendCommand('0\n'); // level 0
-    await sleep(450);
-    await sendCommand('5\n'); // brief calibration pulse
-    await sleep(450);
-    await sendCommand('0\n'); // back to zero
-    await sleep(450);
-    await sendCommand(`${strength}\n`); // target intensity
-    await sleep(250);
-    await sendCommand('D\n'); // both sides
-    await sendCommand('E\n'); // LED intensity low (least distracting)
-
-    // Switch to fast polling during session
-    startStatusPolling(SESSION_POLL_INTERVAL);
-    console.log(`Session started for ${timer} minutes with strength ${strength}.`);
+    // The provider runs the full ramp sequence + keepalive + fast polling.
+    await startSession(strength);
   };
 
   // Handle Stop Button Press
@@ -710,16 +240,8 @@ const ManualScreen = () => {
     setIsRunning(false);
     setRemainingTime(0); // Reset remaining time
 
-    if (connectedDevice) {
-      // Full stop sequence (from official APK endSession)
-      await sendCommand('+\n'); // rampUp (writeWithResponse)
-      await sendCommand('-\n'); // rampDown (writeWithResponse)
-      await sendCommand('-\n'); // endSession (writeWithResponse)
-      console.log('Device stopped.');
-      // Switch back to slow polling when idle
-      startStatusPolling(STATUS_POLL_INTERVAL);
-      await queryDeviceStatus(connectedDevice); // Update status
-    }
+    // The provider runs the stop sequence and returns to idle polling.
+    await stopSession();
   };
 
   // Implement countdown timer
@@ -752,8 +274,7 @@ const ManualScreen = () => {
     console.log(`Strength slider changed to: ${value}`);
 
     if (isRunning && connectedDevice) {
-      await sendCommand(`${value}\n`); // Update strength
-      console.log(`Strength updated to ${value} while running.`);
+      await setIntensity(value); // Update strength on the device
     }
   };
 

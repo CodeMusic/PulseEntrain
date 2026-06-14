@@ -9,6 +9,7 @@ import CategoryScreen from './src/screens/CategoryScreen';
 import DoseDetailScreen from './src/screens/DoseDetailScreen';
 import ManualScreen from './src/screens/ManualScreen';
 import AboutScreen from './src/screens/AboutScreen';
+import { PulsettoProvider } from './src/pulsetto/PulsettoProvider';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,7 @@ const navTheme = {
 export default function App() {
   return (
     <SafeAreaProvider>
+      <PulsettoProvider>
       <StatusBar barStyle="light-content" />
       <NavigationContainer theme={navTheme}>
         <Stack.Navigator
@@ -58,6 +60,7 @@ export default function App() {
           <Stack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
         </Stack.Navigator>
       </NavigationContainer>
+      </PulsettoProvider>
     </SafeAreaProvider>
   );
 }
