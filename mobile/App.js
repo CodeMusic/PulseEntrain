@@ -382,10 +382,10 @@ const App = () => {
     } else if (Platform.OS === 'ios') {
       // Handle iOS permissions
       try {
-        const status = await check(PERMISSIONS.IOS.BLUETOOTH_PERIPHERAL);
+        const status = await check(PERMISSIONS.IOS.BLUETOOTH);
 
         if (status !== RESULTS.GRANTED) {
-          const newStatus = await request(PERMISSIONS.IOS.BLUETOOTH_PERIPHERAL);
+          const newStatus = await request(PERMISSIONS.IOS.BLUETOOTH);
           if (newStatus === RESULTS.GRANTED) {
             scanForDevices();
           } else {

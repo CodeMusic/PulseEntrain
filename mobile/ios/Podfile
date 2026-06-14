@@ -8,6 +8,11 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
+# react-native-permissions: compile in the iOS permission handlers the app uses.
+# Without this, check()/request() throw "No permission handler detected".
+require_relative '../node_modules/react-native-permissions/scripts/setup'
+setup_permissions(['Bluetooth'])
+
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
