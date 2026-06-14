@@ -6,6 +6,13 @@ const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
  *
  * @type {import('metro-config').MetroConfig}
  */
-const config = {};
+const defaultConfig = getDefaultConfig(__dirname);
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+const config = {
+  resolver: {
+    // Ensure bundled audio (require('./assets/audio/X.mp3')) resolves as an asset.
+    assetExts: [...new Set([...defaultConfig.resolver.assetExts, 'mp3'])],
+  },
+};
+
+module.exports = mergeConfig(defaultConfig, config);
