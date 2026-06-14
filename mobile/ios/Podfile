@@ -14,7 +14,7 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
-target 'PulseLibre' do
+target 'PulseEntrain' do
   config = use_native_modules!
 
   use_react_native!(
@@ -23,7 +23,7 @@ target 'PulseLibre' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  target 'PulseLibreTests' do
+  target 'PulseEntrainTests' do
     inherit! :complete
     # Pods for testing
   end
@@ -36,5 +36,22 @@ target 'PulseLibre' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Workaround: Xcode 26 / Apple Clang regressed C++20 consteval, breaking the
+    # {fmt} library bundled with React Native. fmt's base.h only disables consteval
+    # for OLD Apple Clang (< 14000029L); patch it to disable for ALL Apple Clang.
+    # Remove once RN ships a newer fmt that builds clean on Xcode 26.
+    fmt_base = File.join(installer.sandbox.root.to_s, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      original = File.read(fmt_base)
+      patched = original.gsub(
+        '#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L',
+        '#elif defined(__apple_build_version__)  // patched: consteval broken on Xcode 26 clang'
+      )
+      unless patched == original
+        File.chmod(0644, fmt_base)        # CocoaPods leaves fmt sources read-only
+        File.write(fmt_base, patched)
+      end
+    end
   end
 end

@@ -7,11 +7,11 @@
 #define TIMEOUT_SECONDS 600
 #define TEXT_TO_LOOK_FOR @"Welcome to React"
 
-@interface PulseLibreTests : XCTestCase
+@interface PulseEntrainTests : XCTestCase
 
 @end
 
-@implementation PulseLibreTests
+@implementation PulseEntrainTests
 
 - (BOOL)findSubviewInView:(UIView *)view matching:(BOOL (^)(UIView *view))test
 {
