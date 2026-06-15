@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ScrollView, View, Text, Image, Switch, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { COLORS } from '../theme';
-import { doseById, imageSource } from '../catalog/data';
+import { doseById, imageSource, audioSource } from '../catalog/data';
 import StrengthBadge from '../components/StrengthBadge';
 
-export default function DoseDetailScreen({ route }) {
+export default function DoseDetailScreen({ route, navigation }) {
   const { id } = route.params;
   const dose = doseById(id);
   const [usePulsetto, setUsePulsetto] = useState(true);
@@ -19,12 +19,14 @@ export default function DoseDetailScreen({ route }) {
   const img = imageSource(dose.image);
 
   const start = () => {
-    Alert.alert(
-      'Player coming next',
-      `"${dose.name}" will play its binaural track${
-        usePulsetto ? ' and run the Pulsetto for the track length' : ''
-      } once the player is wired (Stage 5).`,
-    );
+    if (!audioSource(dose.audio)) {
+      Alert.alert(
+        'Not in this build',
+        `"${dose.name}" isn't bundled in this local build yet. A few demo tracks ship in the app for now — streaming comes later.`,
+      );
+      return;
+    }
+    navigation.navigate('Player', { id: dose.id, usePulsetto });
   };
 
   return (

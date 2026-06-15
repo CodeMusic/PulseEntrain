@@ -2,11 +2,13 @@
 // scripts/sync-catalog.js. (audio map is imported later, in the player stage.)
 import catalog from './catalog.json';
 import { images } from './images';
+import { audio } from './audio';
 
 export const CATEGORIES = catalog.categories;
 export const DOSES = catalog.doses;
 
 export const imageSource = name => (name && images[name]) || null;
+export const audioSource = name => (name && audio[name]) || null;
 
 export const dosesByCategory = cat => DOSES.filter(d => d.category === cat);
 export const doseById = id => DOSES.find(d => d.id === id);

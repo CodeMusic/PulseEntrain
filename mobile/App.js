@@ -7,6 +7,7 @@ import { COLORS } from './src/theme';
 import SpringboardScreen from './src/screens/SpringboardScreen';
 import CategoryScreen from './src/screens/CategoryScreen';
 import DoseDetailScreen from './src/screens/DoseDetailScreen';
+import PlayerScreen from './src/screens/PlayerScreen';
 import ManualScreen from './src/screens/ManualScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import { PulsettoProvider } from './src/pulsetto/PulsettoProvider';
@@ -56,6 +57,7 @@ export default function App() {
             options={({ route }) => ({ title: route.params?.category || 'Category' })}
           />
           <Stack.Screen name="DoseDetail" component={DoseDetailScreen} options={{ title: '' }} />
+          <Stack.Screen name="Player" component={PlayerScreen} options={{ title: '' }} />
           <Stack.Screen name="Manual" component={ManualScreen} options={{ title: 'Manual' }} />
           <Stack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
         </Stack.Navigator>
