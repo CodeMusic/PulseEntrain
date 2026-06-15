@@ -19,26 +19,40 @@ export const clampStrobe = hz => {
   return Math.min(MAX_NOVA_STROBE_HZ, Math.max(MIN_NOVA_STROBE_HZ, v));
 };
 
-// Symmetric strobe frame: [period_µs, on_µs, onLevel×1e6] little-endian (12 bytes).
-function encodeSymmetric(freqHz, duty = 0.5, onLevel = 1.0) {
-  const periodUs = Math.round(1e6 / freqHz);
-  const onUs = Math.round((duty / freqHz) * 1e6);
-  const level = Math.round(onLevel * 1e6);
-  const buf = Buffer.alloc(12);
-  buf.writeUInt32LE(periodUs >>> 0, 0);
-  buf.writeUInt32LE(onUs >>> 0, 4);
-  buf.writeUInt32LE(level >>> 0, 8);
-  return buf.toString('base64');
-}
+// Strobe frame layout. 'symmetric' = 3×uint32 (12B) [period_µs, on_µs, level×1e6].
+// 'independent' = 10×uint32 (40B) per-eye [period,on,period',on',level]×2.
+// If the device lights but won't flicker on one, flip this to try the other.
+const FRAME_LAYOUT = 'symmetric';
+// The device reads the frame as [on_µs, period_µs, level] — sending the
+// documented [period, on, …] order left the LEDs constant-on (on-time > period,
+// so it can never switch off). Swap so the device sees on < period and cycles.
+const SWAP_PERIOD_ON = true;
 
-// "Off" frame — zero on-time and zero level → LEDs dark. Stopping the data
-// stream alone does not clear the last strobe frame, so we send this on stop.
+function packLE(values) {
+  const buf = Buffer.alloc(values.length * 4);
+  values.forEach((v, i) => buf.writeUInt32LE(v >>> 0, i * 4));
+  return buf;
+}
+function frameValues(freqHz, duty, onLevel) {
+  const period = Math.round(1e6 / freqHz);
+  const on = Math.round((duty / freqHz) * 1e6);
+  const level = Math.round(onLevel * 1e6);
+  const a = SWAP_PERIOD_ON ? on : period;
+  const b = SWAP_PERIOD_ON ? period : on;
+  return FRAME_LAYOUT === 'independent'
+    ? [a, b, a, b, level, a, b, a, b, level]
+    : [a, b, level];
+}
+function encodeFrame(freqHz, duty = 0.5, onLevel = 1.0) {
+  return packLE(frameValues(freqHz, duty, onLevel)).toString('base64');
+}
+// "Off" frame — on-time 0 + level 0 → LEDs dark (stopping the stream alone
+// doesn't clear the last frame).
 function encodeOff() {
-  const buf = Buffer.alloc(12);
-  buf.writeUInt32LE(100000, 0); // arbitrary period
-  buf.writeUInt32LE(0, 4); // on-time 0
-  buf.writeUInt32LE(0, 8); // level 0
-  return buf.toString('base64');
+  return packLE(frameValues(8, 0, 0)).toString('base64');
+}
+function frameHex(freqHz) {
+  return packLE(frameValues(freqHz, 0.5, 1.0)).toString('hex');
 }
 
 export class NovaController {
@@ -102,7 +116,7 @@ export class NovaController {
         '0000180a-0000-1000-8000-00805f9b34fb', // Device Information
         '0000180f-0000-1000-8000-00805f9b34fb', // Battery
       ]);
-      const match = known.find(d => this._isNova(d)) || (known.length === 1 ? known[0] : null);
+      const match = known.find(d => this._isNova(d));
       if (match && (await this._setup(match.id))) return true;
     } catch (e) {}
 
@@ -152,6 +166,9 @@ export class NovaController {
           if (u === CH_TELEMETRY) this.telemetryChar = c;
         }
       }
+      console.log(
+        `[Nova] chars: stream=${!!this.streamChar} strobe=${!!this.strobeChar} telemetry=${!!this.telemetryChar}`,
+      );
       if (!this.strobeChar) {
         this.onStatus('error');
         return false;
@@ -208,7 +225,14 @@ export class NovaController {
       } else if (this.currentHz > this.targetHz) {
         this.currentHz = Math.max(this.targetHz, this.currentHz - 0.5);
       }
-      this.strobeChar.writeWithoutResponse(encodeSymmetric(this.currentHz)).catch(() => {});
+      const hz = this.currentHz;
+      if (hz !== this._lastLoggedHz) {
+        this._lastLoggedHz = hz;
+        console.log(`[Nova] ${FRAME_LAYOUT} ${hz.toFixed(1)}Hz ${frameHex(hz)}`);
+      }
+      this.strobeChar
+        .writeWithoutResponse(encodeFrame(hz))
+        .catch(e => console.log('[Nova] write err:', e && e.message));
     }, 250);
   }
 
