@@ -22,11 +22,11 @@ export const clampStrobe = hz => {
 // Strobe frame layout. 'symmetric' = 3×uint32 (12B) [period_µs, on_µs, level×1e6].
 // 'independent' = 10×uint32 (40B) per-eye [period,on,period',on',level]×2.
 // If the device lights but won't flicker on one, flip this to try the other.
-const FRAME_LAYOUT = 'symmetric';
+const FRAME_LAYOUT = 'independent';
 // The device reads the frame as [on_µs, period_µs, level] — sending the
 // documented [period, on, …] order left the LEDs constant-on (on-time > period,
 // so it can never switch off). Swap so the device sees on < period and cycles.
-const SWAP_PERIOD_ON = true;
+const SWAP_PERIOD_ON = false;
 
 function packLE(values) {
   const buf = Buffer.alloc(values.length * 4);
