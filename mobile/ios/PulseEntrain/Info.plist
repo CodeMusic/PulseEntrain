@@ -35,6 +35,11 @@
 	<string>Need Bluetooth access to communicate with the device.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Need location access to scan for Bluetooth devices.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>bluetooth-central</string>
+	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
