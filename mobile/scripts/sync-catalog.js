@@ -36,10 +36,10 @@ const AUDIO_SUBSET = new Set([
   'Medications & Drugs/French Roast',
 ]);
 
-// Widen how much audio gets bundled without editing the list above:
-//   SYNC_ALL_AUDIO=1     bundle every track (~4.2 GB)
-//   SYNC_AUDIO_LIMIT=N   bundle the first N tracks (across categories)
-const BUNDLE_ALL = process.env.SYNC_ALL_AUDIO === '1';
+// Audio bundling: ALL 96 tracks by default (until streaming is hosted).
+//   SYNC_AUDIO_SUBSET=1  bundle only the curated 7-track subset (small/fast)
+//   SYNC_AUDIO_LIMIT=N   bundle just the first N tracks
+const BUNDLE_ALL = process.env.SYNC_AUDIO_SUBSET !== '1';
 const BUNDLE_LIMIT = process.env.SYNC_AUDIO_LIMIT ? parseInt(process.env.SYNC_AUDIO_LIMIT, 10) : null;
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -50,13 +50,17 @@ function rmrf(dir) {
 function ensure(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
+// Copy only if missing or changed — keeps the prestart hook fast (no 4 GB re-copy).
+function copyIfNeeded(src, dest) {
+  if (fs.existsSync(dest) && fs.statSync(dest).size === fs.statSync(src).size) return;
+  fs.copyFileSync(src, dest);
+}
 
 function main() {
   if (!fs.existsSync(ASSETS_DIR)) {
     console.error(`entrainment_assets not found at ${ASSETS_DIR}`);
     process.exit(1);
   }
-  rmrf_outputs();
   ensure(OUT_IMAGES);
   ensure(OUT_AUDIO);
 
@@ -79,13 +83,14 @@ function main() {
       const meta = JSON.parse(fs.readFileSync(path.join(catDir, imedFile), 'utf8'));
       const base = path.basename(imedFile, '.imed');
       const key = `${category}/${base}`;
+      const id = slug(key); // safe filename base — no spaces/+/& (Metro-friendly)
 
       // image (always bundled if present)
       const imgSrc = path.join(catDir, `${base}.jpg`);
       let image = null;
       if (fs.existsSync(imgSrc)) {
-        const imgName = `${base}.jpg`;
-        fs.copyFileSync(imgSrc, path.join(OUT_IMAGES, imgName));
+        const imgName = `${id}.jpg`;
+        copyIfNeeded(imgSrc, path.join(OUT_IMAGES, imgName));
         imageEntries.push(imgName);
         image = imgName;
       } else {
@@ -100,14 +105,14 @@ function main() {
       const underLimit = BUNDLE_LIMIT == null || audioEntries.length < BUNDLE_LIMIT;
       const bundledAudio = wanted && underLimit && fs.existsSync(audioSrc);
       if (bundledAudio) {
-        const audioName = `${base}.mp3`;
-        fs.copyFileSync(audioSrc, path.join(OUT_AUDIO, audioName));
+        const audioName = `${id}.mp3`;
+        copyIfNeeded(audioSrc, path.join(OUT_AUDIO, audioName));
         audioEntries.push(audioName);
         audio = audioName;
       }
 
       catalog.push({
-        id: slug(key),
+        id,
         category,
         name: meta.name || base,
         strength: meta.strength ?? null,

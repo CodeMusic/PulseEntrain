@@ -33,6 +33,8 @@
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Need Bluetooth access to communicate with the device.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Need Bluetooth access to communicate with the device.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Need location access to scan for Bluetooth devices.</string>
 	<key>UIBackgroundModes</key>

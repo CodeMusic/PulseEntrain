@@ -1,26 +1,50 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Switch, Alert, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
 import { BinauralEngine, bandFor } from '../audio/binauralEngine';
+import { NovaController, MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 
 const BACKGROUNDS = ['none', 'white', 'pink', 'brown'];
 const BG_LABEL = { none: 'None', white: 'White', pink: 'Pink', brown: 'Brown' };
 const BANDS = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
 
+const NOVA_STATUS = {
+  idle: 'Flickers light in sync with the beat',
+  scanning: 'Searching for Nova…',
+  connected: 'Connected',
+  notfound: 'Not found — is it on and nearby?',
+  error: 'Connection error',
+  disconnected: 'Disconnected',
+};
+
 export default function BinauralPanel() {
   const engineRef = useRef(null);
+  const novaRef = useRef(null);
   const [beat, setBeat] = useState(10);
+  const [carrier, setCarrier] = useState(200);
   const [volume, setVolume] = useState(0.8);
   const [background, setBackground] = useState('none');
   const [playing, setPlaying] = useState(false);
+  const [novaEnabled, setNovaEnabled] = useState(false);
+  const [novaStatus, setNovaStatus] = useState('idle');
 
-  // stop the engine if the user leaves this screen
-  useEffect(() => () => engineRef.current && engineRef.current.stop(), []);
+  // stop everything if the user leaves this screen
+  useEffect(
+    () => () => {
+      if (engineRef.current) engineRef.current.stop();
+      if (novaRef.current) novaRef.current.disconnect();
+    },
+    [],
+  );
 
   const ensureEngine = () => {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
     return engineRef.current;
+  };
+  const ensureNova = () => {
+    if (!novaRef.current) novaRef.current = new NovaController(setNovaStatus);
+    return novaRef.current;
   };
 
   const toggle = () => {
@@ -28,15 +52,24 @@ export default function BinauralPanel() {
     if (playing) {
       e.stop();
       setPlaying(false);
+      if (novaRef.current) novaRef.current.stopStrobe();
     } else {
-      e.start({ carrier: 200, beat, volume, background });
+      e.start({ carrier, beat, volume, background });
       setPlaying(true);
+      if (novaEnabled && novaRef.current && novaRef.current.connected) {
+        novaRef.current.startStrobe(beat);
+      }
     }
   };
 
   const onBeat = v => {
     setBeat(v);
     if (playing) engineRef.current.setBeat(v);
+    if (novaEnabled && novaRef.current && novaRef.current.connected) novaRef.current.setFrequency(v);
+  };
+  const onCarrier = v => {
+    setCarrier(v);
+    if (playing) engineRef.current.setCarrier(v);
   };
   const onVol = v => {
     setVolume(v);
@@ -45,6 +78,30 @@ export default function BinauralPanel() {
   const onBg = bg => {
     setBackground(bg);
     if (playing) engineRef.current.setBackground(bg);
+  };
+
+  const toggleNova = val => {
+    if (val) {
+      Alert.alert(
+        '⚠️ Photosensitivity warning',
+        `The Lumenate Nova flashes light to match the beat. Flashing light can trigger seizures in people with photosensitive epilepsy. For safety the light is capped at ${MAX_NOVA_STROBE_HZ} Hz. Do not use if you (or anyone nearby who can see it) may be photosensitive, and stop immediately if you feel unwell.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'I understand — connect',
+            onPress: async () => {
+              setNovaEnabled(true);
+              const ok = await ensureNova().connect();
+              if (ok && playing) ensureNova().startStrobe(beat);
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+    } else {
+      setNovaEnabled(false);
+      if (novaRef.current) novaRef.current.disconnect();
+    }
   };
 
   return (
@@ -74,6 +131,19 @@ export default function BinauralPanel() {
         ))}
       </View>
 
+      <Text style={styles.label}>Carrier · {Math.round(carrier)} Hz</Text>
+      <Slider
+        minimumValue={80}
+        maximumValue={500}
+        step={5}
+        value={carrier}
+        onValueChange={onCarrier}
+        minimumTrackTintColor={COLORS.accentBlueLight}
+        maximumTrackTintColor={COLORS.bgCardLight}
+        thumbTintColor="#fff"
+        style={styles.slider}
+      />
+
       <Text style={styles.label}>Background</Text>
       <View style={styles.bgRow}>
         {BACKGROUNDS.map(bg => (
@@ -98,6 +168,24 @@ export default function BinauralPanel() {
         style={styles.slider}
       />
 
+      <View style={styles.novaRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.novaTitle}>Lumenate Nova (visual)</Text>
+          <Text style={styles.novaSub}>{NOVA_STATUS[novaStatus] || NOVA_STATUS.idle}</Text>
+        </View>
+        <Switch
+          value={novaEnabled}
+          onValueChange={toggleNova}
+          trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }}
+          thumbColor="#fff"
+        />
+      </View>
+      {novaEnabled && beat > MAX_NOVA_STROBE_HZ ? (
+        <Text style={styles.novaCap}>
+          Light capped at {MAX_NOVA_STROBE_HZ} Hz for safety (audio beat stays {beat.toFixed(1)} Hz).
+        </Text>
+      ) : null}
+
       <TouchableOpacity style={[styles.playBtn, playing && styles.stopBtn]} onPress={toggle} activeOpacity={0.85}>
         <Text style={styles.playTxt}>{playing ? '■ Stop' : '▶ Play binaural'}</Text>
       </TouchableOpacity>
@@ -121,7 +209,18 @@ const styles = StyleSheet.create({
   bgChipActive: { backgroundColor: COLORS.accentBlue },
   bgChipTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
   bgChipTxtActive: { color: '#fff' },
-  playBtn: { backgroundColor: COLORS.accentGreen, borderRadius: 30, paddingVertical: 16, alignItems: 'center', marginTop: 26 },
+  novaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.bgCard,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 22,
+  },
+  novaTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
+  novaSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  novaCap: { color: COLORS.accentOrange, fontSize: 12, marginTop: 8 },
+  playBtn: { backgroundColor: COLORS.accentGreen, borderRadius: 30, paddingVertical: 16, alignItems: 'center', marginTop: 22 },
   stopBtn: { backgroundColor: COLORS.accentRed },
   playTxt: { color: '#fff', fontSize: 17, fontWeight: '700' },
 });

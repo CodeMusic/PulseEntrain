@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Platform, Alert, AppState } from 'react-native';
-import { BleManager } from 'react-native-ble-plx';
+import { bleManager as manager } from '../ble/manager';
 import {
   request,
   requestMultiple,
@@ -13,7 +13,7 @@ import {
 import { Buffer } from 'buffer';
 
 // ---- BLE constants (Pulsetto UART) — lifted verbatim from the controller ----
-const manager = new BleManager();
+// `manager` is the shared BleManager (see src/ble/manager.js).
 const DEVICE_NAME_PREFIX = 'Pulsetto';
 const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const UART_RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Write
