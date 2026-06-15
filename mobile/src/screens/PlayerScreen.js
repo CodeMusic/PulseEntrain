@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, { useProgress, usePlaybackState, State } from 'react-native-track-player';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,13 +24,58 @@ export default function PlayerScreen({ route, navigation }) {
   const { position, duration } = useProgress(500);
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);
+
   const pausedForBreakRef = useRef(false);
   const endedRef = useRef(false);
+  const pendingRetryRef = useRef(false);
+  const connectedRef = useRef(pulsetto.connected);
+  connectedRef.current = pulsetto.connected;
 
   const isPlaying = playbackState?.state === State.Playing;
   const audio = dose ? audioSource(dose.audio) : null;
+  const strength = (dose && dose.strength) || 5;
 
-  const teardown = useCallback(async () => {
+  // ---- helpers ----
+  const beginAudio = async () => {
+    try {
+      await TrackPlayer.play();
+    } catch (e) {}
+  };
+
+  const startStim = async () => {
+    try {
+      await pulsetto.startSession(strength);
+    } catch (e) {}
+  };
+
+  // Recursive so a failed retry can re-prompt.
+  const promptNotAttached = () => {
+    Alert.alert(
+      'Pulsetto not attached',
+      "Your Pulsetto isn't connected. Attach it and retry, or continue with a pure binaural session.",
+      [
+        { text: 'Binaural only', style: 'cancel', onPress: () => beginAudio() },
+        {
+          text: 'Retry',
+          onPress: () => {
+            pendingRetryRef.current = true;
+            pulsetto.scanForDevices();
+            // If the scan window passes with no connection, ask again.
+            setTimeout(() => {
+              if (pendingRetryRef.current && !connectedRef.current) {
+                pendingRetryRef.current = false;
+                promptNotAttached();
+              }
+            }, 12000);
+          },
+        },
+      ],
+      { cancelable: false },
+    );
+  };
+
+  const teardown = async () => {
+    pendingRetryRef.current = false;
     try {
       await TrackPlayer.reset();
     } catch (e) {}
@@ -39,34 +84,9 @@ export default function PlayerScreen({ route, navigation }) {
         await pulsetto.stopSession();
       } catch (e) {}
     }
-  }, [pulsetto]);
+  };
 
-  const startAll = useCallback(async () => {
-    // bump play count
-    try {
-      const k = playCountKey(dose.id);
-      const cur = parseInt((await AsyncStorage.getItem(k)) || '0', 10) || 0;
-      await AsyncStorage.setItem(k, String(cur + 1));
-    } catch (e) {}
-    if (wantPulsetto) {
-      if (pulsetto.connected) {
-        await pulsetto.startSession(dose.strength || 5);
-      } else {
-        Alert.alert(
-          'Pulsetto not attached',
-          "Your Pulsetto isn't connected. Attach it and retry, or continue with a pure binaural session.",
-          [
-            { text: 'Binaural only', style: 'cancel' },
-            { text: 'Retry', onPress: () => pulsetto.scanForDevices() },
-          ],
-        );
-      }
-    }
-    await TrackPlayer.play();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dose, wantPulsetto, pulsetto]);
-
-  // Load track + start on mount; tear everything down on leave.
+  // ---- load + start on mount ----
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -85,7 +105,21 @@ export default function PlayerScreen({ route, navigation }) {
       });
       if (cancelled) return;
       setLoading(false);
-      await startAll();
+
+      // bump play count
+      try {
+        const k = playCountKey(dose.id);
+        const cur = parseInt((await AsyncStorage.getItem(k)) || '0', 10) || 0;
+        await AsyncStorage.setItem(k, String(cur + 1));
+      } catch (e) {}
+
+      // Decide whether to play now or wait for the user's choice.
+      if (wantPulsetto && !pulsetto.connected) {
+        promptNotAttached(); // audio waits — only plays on "Binaural only" or a good retry
+      } else {
+        if (wantPulsetto) await startStim();
+        await beginAudio();
+      }
     })();
     return () => {
       cancelled = true;
@@ -94,14 +128,28 @@ export default function PlayerScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Natural end → stop Pulsetto.
+  // A retry scan that connects → start stim + audio.
+  useEffect(() => {
+    if (pendingRetryRef.current && pulsetto.connected) {
+      pendingRetryRef.current = false;
+      (async () => {
+        await startStim();
+        await beginAudio();
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulsetto.connected]);
+
+  // Natural end → stop the stim.
   useEffect(() => {
     if (playbackState?.state === State.Ended && !endedRef.current) {
       endedRef.current = true;
       if (pulsetto.sessionActive) pulsetto.stopSession();
     }
-  }, [playbackState, pulsetto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackState]);
 
+  // ---- controls ----
   const togglePlay = async () => {
     if (isPlaying) {
       await TrackPlayer.pause();
@@ -113,7 +161,7 @@ export default function PlayerScreen({ route, navigation }) {
       await TrackPlayer.play();
       if (pausedForBreakRef.current) {
         pausedForBreakRef.current = false;
-        await pulsetto.setIntensity(dose.strength || 5);
+        await pulsetto.setIntensity(strength);
       }
     }
   };
@@ -123,7 +171,7 @@ export default function PlayerScreen({ route, navigation }) {
     await TrackPlayer.seekTo(0);
     await TrackPlayer.play();
     if (wantPulsetto && !pulsetto.sessionActive && pulsetto.connected) {
-      await pulsetto.startSession(dose.strength || 5);
+      await startStim();
     }
   };
 
@@ -132,6 +180,7 @@ export default function PlayerScreen({ route, navigation }) {
     navigation.goBack();
   };
 
+  // ---- render ----
   if (!dose) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -205,34 +254,14 @@ const styles = StyleSheet.create({
   art: { width: '100%', height: 300, borderRadius: 20, backgroundColor: COLORS.bgCardLight },
   title: { color: COLORS.textPrimary, fontSize: 26, fontWeight: '800', marginTop: 22, textAlign: 'center' },
   sub: { color: COLORS.textSecondary, fontSize: 14, marginTop: 6, textAlign: 'center' },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.bgCardLight,
-    marginTop: 28,
-    overflow: 'hidden',
-  },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: COLORS.bgCardLight, marginTop: 28, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: COLORS.accentBlue },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   time: { color: COLORS.textMuted, fontSize: 12 },
   controls: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 30, gap: 28 },
-  ctrlMain: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: COLORS.accentGreen,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  ctrlMain: { width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.accentGreen, justifyContent: 'center', alignItems: 'center' },
   ctrlMainTxt: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  ctrlSecondary: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.bgCard,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  ctrlSecondary: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.bgCard, justifyContent: 'center', alignItems: 'center' },
   ctrlSecondaryTxt: { color: COLORS.textPrimary, fontSize: 20 },
   notBundled: { color: COLORS.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 16 },
   secondaryBtn: { marginTop: 24, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 24, backgroundColor: COLORS.bgCard },
