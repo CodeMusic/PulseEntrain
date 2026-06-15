@@ -5,6 +5,7 @@ const NOVA_NAME = 'Lumenate Nova';
 // Full characteristic UUIDs (service UUIDs aren't needed — we find chars by UUID).
 const CH_STREAM = 'abcdef01-2345-6789-abcd-ef0123456789'; // stream-rate control (1 byte)
 const CH_STROBE = 'f2c51a4e-2a46-4bef-b18f-cb00c716cfa6'; // strobe timing stream (LE uint32 array)
+const CH_TELEMETRY = '12345678-9abc-4def-8012-3456789abcde'; // accelerometer notify (engine wants a subscriber)
 
 // ⚠️ SAFETY (protocol §6): the device enforces NO frequency limit. Stroboscopic
 // light 3–60 Hz can provoke photosensitive seizures (15–25 Hz peak risk). We cap
@@ -30,6 +31,16 @@ function encodeSymmetric(freqHz, duty = 0.5, onLevel = 1.0) {
   return buf.toString('base64');
 }
 
+// "Off" frame — zero on-time and zero level → LEDs dark. Stopping the data
+// stream alone does not clear the last strobe frame, so we send this on stop.
+function encodeOff() {
+  const buf = Buffer.alloc(12);
+  buf.writeUInt32LE(100000, 0); // arbitrary period
+  buf.writeUInt32LE(0, 4); // on-time 0
+  buf.writeUInt32LE(0, 8); // level 0
+  return buf.toString('base64');
+}
+
 export class NovaController {
   constructor(onStatus) {
     this.onStatus = onStatus || (() => {});
@@ -38,7 +49,10 @@ export class NovaController {
     this.strobeChar = null;
     this.strobing = false;
     this.targetHz = 8;
-    this.rampTimer = null;
+    this.currentHz = 2;
+    this.tickTimer = null;
+    this.telemetryChar = null;
+    this.telemetrySub = null;
   }
 
   get connected() {
@@ -135,12 +149,21 @@ export class NovaController {
           const u = (c.uuid || '').toLowerCase();
           if (u === CH_STREAM) this.streamChar = c;
           if (u === CH_STROBE) this.strobeChar = c;
+          if (u === CH_TELEMETRY) this.telemetryChar = c;
         }
       }
       if (!this.strobeChar) {
         this.onStatus('error');
         return false;
       }
+      // Step 3 (protocol brief): subscribe to telemetry — the strobe engine
+      // expects an active stream subscriber. We ignore the data.
+      if (this.telemetryChar) {
+        try {
+          this.telemetrySub = this.telemetryChar.monitor(() => {});
+        } catch (e) {}
+      }
+      // Step 4: start the data stream.
       if (this.streamChar) {
         await this.streamChar.writeWithoutResponse(Buffer.from([0x01]).toString('base64'));
       }
@@ -149,8 +172,9 @@ export class NovaController {
         this.device = null;
         this.streamChar = null;
         this.strobeChar = null;
+        this.telemetryChar = null;
         this.strobing = false;
-        this._clearRamp();
+        this._clearTick();
         this.onStatus('disconnected');
       });
       this.onStatus('connected');
@@ -161,49 +185,47 @@ export class NovaController {
     }
   }
 
-  _clearRamp() {
-    if (this.rampTimer) {
-      clearTimeout(this.rampTimer);
-      this.rampTimer = null;
+  _clearTick() {
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
     }
   }
 
-  async _writeStrobe(hz) {
-    if (!this.strobeChar) return;
-    try {
-      await this.strobeChar.writeWithoutResponse(encodeSymmetric(clampStrobe(hz)));
-    } catch (e) {}
-  }
-
-  // Ramp from a low frequency up to the target so the strobe never starts abruptly (§6).
+  // Continuously stream the strobe frame (~every 250ms) while ramping currentHz
+  // toward targetHz. A single frame just holds a static on-level, so the device
+  // needs the frame streamed to actually flicker; ramping avoids an abrupt onset (§6).
   startStrobe(hz) {
     this.targetHz = clampStrobe(hz);
-    if (!this.device) return;
+    this.currentHz = Math.min(2, this.targetHz);
+    if (!this.device || !this.strobeChar) return;
     this.strobing = true;
-    this._clearRamp();
-    const target = this.targetHz;
-    let cur = Math.min(2, target);
-    const inc = Math.max(0.5, (target - cur) / 8);
-    const step = () => {
-      if (!this.strobing) return;
-      this._writeStrobe(cur);
-      if (cur < target) {
-        cur = Math.min(target, cur + inc);
-        this.rampTimer = setTimeout(step, 150);
+    this._clearTick();
+    this.tickTimer = setInterval(() => {
+      if (!this.strobing || !this.strobeChar) return;
+      if (this.currentHz < this.targetHz) {
+        this.currentHz = Math.min(this.targetHz, this.currentHz + 0.5);
+      } else if (this.currentHz > this.targetHz) {
+        this.currentHz = Math.max(this.targetHz, this.currentHz - 0.5);
       }
-    };
-    step();
+      this.strobeChar.writeWithoutResponse(encodeSymmetric(this.currentHz)).catch(() => {});
+    }, 250);
   }
 
-  // Live update from the slider — small deltas, applied directly.
+  // Live update from the slider — the tick ramps toward the new target.
   setFrequency(hz) {
     this.targetHz = clampStrobe(hz);
-    if (this.strobing && this.device) this._writeStrobe(this.targetHz);
   }
 
   async stopStrobe() {
     this.strobing = false;
-    this._clearRamp();
+    this._clearTick();
+    // Stopping the stream does NOT clear the LEDs — send an explicit off frame.
+    if (this.strobeChar) {
+      try {
+        await this.strobeChar.writeWithoutResponse(encodeOff());
+      } catch (e) {}
+    }
     if (this.streamChar) {
       try {
         await this.streamChar.writeWithoutResponse(Buffer.from([0x00]).toString('base64'));
@@ -213,10 +235,17 @@ export class NovaController {
 
   async disconnect() {
     await this.stopStrobe();
+    if (this.telemetrySub) {
+      try {
+        this.telemetrySub.remove();
+      } catch (e) {}
+      this.telemetrySub = null;
+    }
     const dev = this.device;
     this.device = null;
     this.streamChar = null;
     this.strobeChar = null;
+    this.telemetryChar = null;
     if (dev) {
       try {
         await bleManager.cancelDeviceConnection(dev.id);
