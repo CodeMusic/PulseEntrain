@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ScrollView, View, Text, Image, Switch, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { ScrollView, View, Text, Switch, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource } from '../catalog/data';
+import ArtImage from '../components/ArtImage';
 import StrengthBadge from '../components/StrengthBadge';
 
 export default function DoseDetailScreen({ route, navigation }) {
@@ -31,7 +32,7 @@ export default function DoseDetailScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {img ? <Image source={img} style={styles.hero} /> : <View style={[styles.hero, styles.heroEmpty]} />}
+      <ArtImage source={img} height={220} radius={18} hpad={16} />
       <Text style={styles.title}>{dose.name}</Text>
       <View style={styles.metaRow}>
         <StrengthBadge strength={dose.strength} label={dose.strengthLabel} />

@@ -58,5 +58,27 @@ target 'PulseEntrain' do
         File.write(fmt_base, patched)
       end
     end
+
+    # Workaround: react-native-audio-api 0.8.0's Constants.h uses bare `size_t`
+    # without including <cstddef>, which fails on Xcode 26 clang. Add the include
+    # and qualify the type. Remove once the library ships a fix.
+    audio_const = File.join(
+      installer.sandbox.root.to_s, '..', '..',
+      'node_modules', 'react-native-audio-api', 'common', 'cpp', 'audioapi', 'core', 'Constants.h'
+    )
+    if File.exist?(audio_const)
+      original = File.read(audio_const)
+      patched = original.gsub(
+        'static constexpr size_t MAX_FFT_SIZE',
+        'static constexpr std::size_t MAX_FFT_SIZE'
+      )
+      unless patched.include?('#include <cstddef>')
+        patched = patched.sub('#include <limits>', "#include <cstddef>\n#include <limits>")
+      end
+      unless patched == original
+        File.chmod(0644, audio_const) rescue nil
+        File.write(audio_const, patched)
+      end
+    end
   end
 end

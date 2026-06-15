@@ -19,6 +19,7 @@ import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import KeepAwake from 'react-native-keep-awake';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
+import BinauralPanel from '../components/BinauralPanel';
 
 // BLE (manager, UUIDs, voltages, intervals) now lives in
 // src/pulsetto/PulsettoProvider.js — a single BLE owner shared app-wide.
@@ -91,6 +92,7 @@ const ManualScreen = () => {
   const [sessions, setSessions] = useState([]);
   const [dailyGoal, setDailyGoal] = useState(DEFAULT_DAILY_GOAL);
   const [showLogs, setShowLogs] = useState(false);
+  const [tab, setTab] = useState('pulsetto'); // 'pulsetto' | 'binaural'
   const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   // Reference for intervals to allow clearing
@@ -383,6 +385,26 @@ const ManualScreen = () => {
         contentContainerStyle={styles.mainContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* mode tabs */}
+        <View style={styles.segmented}>
+          <TouchableOpacity
+            onPress={() => setTab('pulsetto')}
+            style={[styles.segBtn, tab === 'pulsetto' && styles.segBtnActive]}
+          >
+            <Text style={[styles.segTxt, tab === 'pulsetto' && styles.segTxtActive]}>Pulsetto</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setTab('binaural')}
+            style={[styles.segBtn, tab === 'binaural' && styles.segBtnActive]}
+          >
+            <Text style={[styles.segTxt, tab === 'binaural' && styles.segTxtActive]}>Binaural</Text>
+          </TouchableOpacity>
+        </View>
+
+        {tab === 'binaural' ? (
+          <BinauralPanel />
+        ) : (
+          <>
         {/* Weekly Tracker */}
         <View style={styles.weekCard}>
           <View style={styles.weekRow}>
@@ -528,6 +550,8 @@ const ManualScreen = () => {
             </Text>
           </TouchableOpacity>
         </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Session History Modal */}
@@ -643,6 +667,17 @@ const ManualScreen = () => {
 // Styles
 const getStyles = isDarkMode =>
   StyleSheet.create({
+    segmented: {
+      flexDirection: 'row',
+      backgroundColor: isDarkMode ? '#1A1F2E' : '#E5E7EB',
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 16,
+    },
+    segBtn: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
+    segBtnActive: { backgroundColor: '#3B82F6' },
+    segTxt: { color: isDarkMode ? '#9CA3AF' : '#6B7280', fontWeight: '600', fontSize: 14 },
+    segTxtActive: { color: '#FFFFFF' },
     container: {
       flex: 1,
       backgroundColor: isDarkMode ? '#0F1419' : '#F3F4F6',

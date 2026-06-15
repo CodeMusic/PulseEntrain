@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, { useProgress, usePlaybackState, State } from 'react-native-track-player';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource } from '../catalog/data';
+import ArtImage from '../components/ArtImage';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { setupPlayer } from '../audio/player';
 
@@ -231,7 +232,7 @@ export default function PlayerScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Image source={imageSource(dose.image)} style={styles.art} />
+      <ArtImage source={imageSource(dose.image)} height={260} radius={20} hpad={24} />
       <Text style={styles.title}>{dose.name}</Text>
       <Text style={styles.sub}>
         {dose.category}
