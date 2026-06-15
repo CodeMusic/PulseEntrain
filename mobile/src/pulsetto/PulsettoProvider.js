@@ -26,6 +26,15 @@ const SESSION_POLL_INTERVAL = 3000;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Safety: the Pulsetto only accepts level 0-9. Coerce any input (a tampered
+// .imed strength, a bad slider value, NaN, etc.) into range so the device can
+// never be sent something out of bounds. 0 = off (ramp / pause); stim is 1-9.
+const clampLevel = (n, min = 0) => {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return min;
+  return Math.min(9, Math.max(min, v));
+};
+
 const PulsettoContext = createContext(null);
 
 export const usePulsetto = () => {
@@ -157,7 +166,7 @@ export function PulsettoProvider({ children }) {
     if (keepaliveRef.current) clearInterval(keepaliveRef.current);
     keepaliveRef.current = setInterval(() => {
       if (sessionActiveRef.current && connectedRef.current) {
-        sendCommand(`${activeStrengthRef.current}\n`);
+        sendCommand(`${clampLevel(activeStrengthRef.current, 0)}\n`);
       }
     }, KEEPALIVE_INTERVAL);
   };
@@ -179,7 +188,7 @@ export function PulsettoProvider({ children }) {
     await sleep(450);
     await sendCommand('0\n', device);
     await sleep(450);
-    await sendCommand(`${strength}\n`, device); // target intensity
+    await sendCommand(`${clampLevel(strength, 1)}\n`, device); // target intensity (1-9)
     await sleep(250);
     await sendCommand('D\n', device); // both sides
     await sendCommand('E\n', device); // LED low
@@ -311,6 +320,7 @@ export function PulsettoProvider({ children }) {
   // Begin a session. Returns true if the device actually started, false if no
   // device is connected (caller decides whether to prompt / go audio-only).
   const startSession = async (strength = 5) => {
+    strength = clampLevel(strength, 1); // never begin a session outside 1-9
     activeStrengthRef.current = strength;
     setSession(true);
     const device = connectedRef.current;
@@ -335,6 +345,7 @@ export function PulsettoProvider({ children }) {
   };
 
   const setIntensity = async value => {
+    value = clampLevel(value, 0); // 0 = mute (pause); active stim is 1-9
     activeStrengthRef.current = value;
     if (sessionActiveRef.current && connectedRef.current) {
       await sendCommand(`${value}\n`);

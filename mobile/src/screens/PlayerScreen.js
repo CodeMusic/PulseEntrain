@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, { useProgress, usePlaybackState, State } from 'react-native-track-player';
+import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource } from '../catalog/data';
@@ -16,6 +17,8 @@ const fmt = s => {
   return `${m}:${sec}`;
 };
 const playCountKey = id => `@pulseentrain/playcount/${id}`;
+// Track strength (1-7) → default Pulsetto intensity (1-9): strength + 1, clamped.
+const defaultIntensityFor = dose => Math.min(9, Math.max(1, ((dose && dose.strength) || 4) + 1));
 
 export default function PlayerScreen({ route, navigation }) {
   const { id, usePulsetto: wantPulsetto } = route.params;
@@ -25,6 +28,11 @@ export default function PlayerScreen({ route, navigation }) {
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);
 
+  const [intensity, setIntensityVal] = useState(defaultIntensityFor(dose));
+  const [volume, setVolume] = useState(1);
+  const intensityRef = useRef(intensity);
+  intensityRef.current = intensity;
+
   const pausedForBreakRef = useRef(false);
   const endedRef = useRef(false);
   const pendingRetryRef = useRef(false);
@@ -33,7 +41,6 @@ export default function PlayerScreen({ route, navigation }) {
 
   const isPlaying = playbackState?.state === State.Playing;
   const audio = dose ? audioSource(dose.audio) : null;
-  const strength = (dose && dose.strength) || 5;
 
   // ---- helpers ----
   const beginAudio = async () => {
@@ -44,11 +51,10 @@ export default function PlayerScreen({ route, navigation }) {
 
   const startStim = async () => {
     try {
-      await pulsetto.startSession(strength);
+      await pulsetto.startSession(intensityRef.current);
     } catch (e) {}
   };
 
-  // Recursive so a failed retry can re-prompt.
   const promptNotAttached = () => {
     Alert.alert(
       'Pulsetto not attached',
@@ -60,7 +66,6 @@ export default function PlayerScreen({ route, navigation }) {
           onPress: () => {
             pendingRetryRef.current = true;
             pulsetto.scanForDevices();
-            // If the scan window passes with no connection, ask again.
             setTimeout(() => {
               if (pendingRetryRef.current && !connectedRef.current) {
                 pendingRetryRef.current = false;
@@ -103,19 +108,18 @@ export default function PlayerScreen({ route, navigation }) {
         artist: dose.category,
         artwork: imageSource(dose.image) || undefined,
       });
+      await TrackPlayer.setVolume(1);
       if (cancelled) return;
       setLoading(false);
 
-      // bump play count
       try {
         const k = playCountKey(dose.id);
         const cur = parseInt((await AsyncStorage.getItem(k)) || '0', 10) || 0;
         await AsyncStorage.setItem(k, String(cur + 1));
       } catch (e) {}
 
-      // Decide whether to play now or wait for the user's choice.
       if (wantPulsetto && !pulsetto.connected) {
-        promptNotAttached(); // audio waits — only plays on "Binaural only" or a good retry
+        promptNotAttached(); // audio waits for the user's choice
       } else {
         if (wantPulsetto) await startStim();
         await beginAudio();
@@ -128,7 +132,7 @@ export default function PlayerScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A retry scan that connects → start stim + audio.
+  // Retry scan that connects → start stim + audio.
   useEffect(() => {
     if (pendingRetryRef.current && pulsetto.connected) {
       pendingRetryRef.current = false;
@@ -161,7 +165,7 @@ export default function PlayerScreen({ route, navigation }) {
       await TrackPlayer.play();
       if (pausedForBreakRef.current) {
         pausedForBreakRef.current = false;
-        await pulsetto.setIntensity(strength);
+        await pulsetto.setIntensity(intensityRef.current); // restore to slider value
       }
     }
   };
@@ -178,6 +182,19 @@ export default function PlayerScreen({ route, navigation }) {
   const stopAndBack = async () => {
     await teardown();
     navigation.goBack();
+  };
+
+  const onIntensity = v => {
+    const val = Math.round(v);
+    setIntensityVal(val);
+    intensityRef.current = val;
+    // don't un-mute a paused session; the new value applies on resume
+    if (!pausedForBreakRef.current) pulsetto.setIntensity(val);
+  };
+
+  const onVolume = v => {
+    setVolume(v);
+    TrackPlayer.setVolume(v);
   };
 
   // ---- render ----
@@ -210,9 +227,10 @@ export default function PlayerScreen({ route, navigation }) {
       ? ' · Pulsetto on'
       : ' · Pulsetto (not attached)'
     : ' · Binaural only';
+  const showIntensity = wantPulsetto && pulsetto.connected;
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Image source={imageSource(dose.image)} style={styles.art} />
       <Text style={styles.title}>{dose.name}</Text>
       <Text style={styles.sub}>
@@ -243,26 +261,63 @@ export default function PlayerScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
       )}
-    </View>
+
+      {/* Pulsetto intensity — only when enabled and connected */}
+      {showIntensity && (
+        <View style={styles.sliderBlock}>
+          <Text style={styles.sliderLabel}>Pulsetto intensity · {intensity}</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={1}
+            maximumValue={9}
+            step={1}
+            value={intensity}
+            onValueChange={onIntensity}
+            minimumTrackTintColor={COLORS.accentGreen}
+            maximumTrackTintColor={COLORS.bgCardLight}
+            thumbTintColor="#fff"
+          />
+        </View>
+      )}
+
+      {/* Volume */}
+      <View style={styles.sliderBlock}>
+        <Text style={styles.sliderLabel}>Volume</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={1}
+          value={volume}
+          onValueChange={onVolume}
+          minimumTrackTintColor={COLORS.accentBlue}
+          maximumTrackTintColor={COLORS.bgCardLight}
+          thumbTintColor="#fff"
+        />
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bgDark, padding: 24 },
-  center: { justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: COLORS.bgDark },
+  content: { padding: 24, paddingBottom: 40 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { color: COLORS.textMuted },
-  art: { width: '100%', height: 300, borderRadius: 20, backgroundColor: COLORS.bgCardLight },
+  art: { width: '100%', height: 260, borderRadius: 20, backgroundColor: COLORS.bgCardLight },
   title: { color: COLORS.textPrimary, fontSize: 26, fontWeight: '800', marginTop: 22, textAlign: 'center' },
   sub: { color: COLORS.textSecondary, fontSize: 14, marginTop: 6, textAlign: 'center' },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: COLORS.bgCardLight, marginTop: 28, overflow: 'hidden' },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: COLORS.bgCardLight, marginTop: 24, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: COLORS.accentBlue },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   time: { color: COLORS.textMuted, fontSize: 12 },
-  controls: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 30, gap: 28 },
+  controls: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 26, gap: 28 },
   ctrlMain: { width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.accentGreen, justifyContent: 'center', alignItems: 'center' },
   ctrlMainTxt: { color: '#fff', fontSize: 28, fontWeight: '700' },
   ctrlSecondary: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.bgCard, justifyContent: 'center', alignItems: 'center' },
   ctrlSecondaryTxt: { color: COLORS.textPrimary, fontSize: 20 },
+  sliderBlock: { marginTop: 22 },
+  sliderLabel: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  slider: { width: '100%', height: 40 },
   notBundled: { color: COLORS.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 16 },
   secondaryBtn: { marginTop: 24, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 24, backgroundColor: COLORS.bgCard },
   secondaryTxt: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
