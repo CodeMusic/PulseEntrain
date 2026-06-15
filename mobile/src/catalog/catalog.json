@@ -20,8 +20,8 @@
       "lengthDisplay": "30:00",
       "description": "Slip on your headphones and let the binaural tones guide your mind down from busy alpha into deep, low frequencies. As the waves wash lower, bouts of sadness seem to dissolve, easing you back toward a quiet, accessible happiness.",
       "image": "AntiSad.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "AntiSad.mp3",
+      "bundledAudio": true
     },
     {
       "id": "calm_sleep_calm_me",
@@ -33,8 +33,8 @@
       "lengthDisplay": "20:00",
       "description": "Calm ME works on two levels at once. When anxiety grips you it eases the rising tide and helps you move past it, and used beforehand it steadies your nerves for public speaking, crowds, or parties so you arrive relaxed and at ease.",
       "image": "Calm ME.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Calm ME.mp3",
+      "bundledAudio": true
     },
     {
       "id": "calm_sleep_content",
@@ -46,8 +46,8 @@
       "lengthDisplay": "20:00",
       "description": "Content calms and uplifts at once, sweeping away negative thoughts until everything simply feels right. Soothing yet quietly energizing, it leaves you smiling and worry-free, a welcome relief through life's more stressful stretches.",
       "image": "Content.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Content.mp3",
+      "bundledAudio": true
     },
     {
       "id": "calm_sleep_insomniac",
@@ -59,8 +59,8 @@
       "lengthDisplay": "45:00",
       "description": "Much stronger than our other sleep doses, so be prepared to get knocked out. Made for those plagued by persistent sleeplessness, it gently rocks you down into the deepest sleep you have ever had, even if you are a troubled sleeper.",
       "image": "Insomniac.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Insomniac.mp3",
+      "bundledAudio": true
     },
     {
       "id": "calm_sleep_serene",
@@ -85,8 +85,8 @@
       "lengthDisplay": "25:00",
       "description": "A soft, weightless drift toward sleep, as if cradled and watched over by something gentle and serene. Warm, slow tones loosen every muscle and ease you down into a peaceful, untroubled rest.",
       "image": "Sleeping Angel.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Sleeping Angel.mp3",
+      "bundledAudio": true
     },
     {
       "id": "calm_sleep_tranquil",
@@ -98,8 +98,8 @@
       "lengthDisplay": "30:00",
       "description": "Tranquil is a soul dose that brings no tiredness, sleep, or drowsiness. Instead it eases your soul, harmonizes you with the earth, and space, and everything that is, melting you gently into the warmth of an invisible glow that must be felt to be understood.",
       "image": "Tranquil.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Tranquil.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_a_bomb",
@@ -111,8 +111,8 @@
       "lengthDisplay": "30:00",
       "description": "A slow, deliberate buildup of emotion that swells into pure euphoria before everything detonates. BOOOM! The A-BOMB goes off and the frequency level propels you into the deepest reaches of space, where there is no reality left to hold onto.",
       "image": "A-BOMB.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "A-BOMB.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_aftermath",
@@ -124,8 +124,8 @@
       "lengthDisplay": "30:00",
       "description": "A surge of well-being, exhilaration, and euphoria arrives with a massive increase in alertness and energy that sweeps fatigue away entirely. The rush leaves you bombed and never lets up until it is over.",
       "image": "Aftermath.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Aftermath.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_black_sunshine",
@@ -137,8 +137,8 @@
       "lengthDisplay": "35:00",
       "description": "The anti-stimulant. It takes your brain and twists it so that everything shines with a beautiful glow, then reverses all that glow deep inside you. Black Sunshine puts you in a room with your soul and lets the two of you talk it out, but without talking. Not for casual users.",
       "image": "Black Sunshine.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Black Sunshine.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_cliff_hanger",
@@ -150,8 +150,8 @@
       "lengthDisplay": "35:00",
       "description": "Stand at the edge of a cliff with your eyes closed. Vertigo takes hold, the world spins, and the air turns thin yet crisp, carrying that drunken hazy high you would normally only feel at high altitude. You sense the danger of the drop without ever seeing it. Lie down for this one, advanced users only.",
       "image": "Cliff Hanger.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Cliff Hanger.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_diet",
@@ -163,8 +163,8 @@
       "lengthDisplay": "30:00",
       "description": "A focused appetite-taming session that quiets cravings and steadies the will, settling the mind into calm, satisfied control. Lean back and let the gentle pulse dissolve the urge to reach for more.",
       "image": "Diet+.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Diet+.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_masochist",
@@ -176,8 +176,8 @@
       "lengthDisplay": "30:00",
       "description": "For those who crave pleasure braided with pain. It opens in a wash of opiate numbness and pleasure waves, swells into intense near-orgasmic ecstasy, then twists into sharp pings of pain mixed through the euphoria. Not for the faint of heart and not intended for all users.",
       "image": "Masochist.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Masochist.mp3",
+      "bundledAudio": true
     },
     {
       "id": "experimental_mystery",
@@ -202,8 +202,8 @@
       "lengthDisplay": "30:00",
       "description": "Brain + is our hybrid recreational smart drug, designed to bring you to that next level. Rather than dulling the senses, it stirs the brainwaves tied to analytical and imaginative thought, leaving you in a place of deep contemplation and crisp mental clarity as the session unfolds.",
       "image": "Brain +.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Brain +.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_confidence",
@@ -215,8 +215,8 @@
       "lengthDisplay": "30:00",
       "description": "For the moments that ask the most of you: before a big date, before socializing, before a test, before speaking or performing in front of a large crowd. Shyness can grip us all, and this dose has proven highly effective in pushing back the tide of self awareness.",
       "image": "Confidence.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Confidence.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_energizer",
@@ -241,8 +241,8 @@
       "lengthDisplay": "42:07",
       "description": "A lavish boxed journey of layered binaural tones that build wave upon wave into a swelling, full-body rush of bliss. Each pass lifts you higher into warm, radiant euphoria before letting you drift gently back down.",
       "image": "Euphoria Box.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Euphoria Box.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_excite",
@@ -254,8 +254,8 @@
       "lengthDisplay": "50:00",
       "description": "Excite eases you from slight euphoria into somatic responses, tingling, heat and then melts away anxiety to leave you in the Venus state of love, sexuality, sensuality, and harmony. Layer by layer it carries the mind and body toward a state of warm, willing readiness.",
       "image": "Excite.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Excite.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_gray_b_gone",
@@ -267,8 +267,8 @@
       "lengthDisplay": "30:00",
       "description": "Gray-B-Gone lifts the dull gray haze of a flat, foggy day. Bright, clearing tones sweep the clouds from your mind and leave a fresh, colorful lightness in their place.",
       "image": "Gray-B-Gone.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Gray-B-Gone.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_inspire",
@@ -280,8 +280,8 @@
       "lengthDisplay": "30:00",
       "description": "Tuned to the Theta 3-7Hz range tied to recall, fantasy, imagery, creativity, and inspiration, Inspire opens the floodgates for writers, artists, and dreamers. Ideas flow freely, writer's block lifts, and the imagination roams without limit across a thirty minute session.",
       "image": "Inspire.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Inspire.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_quick_happy",
@@ -293,8 +293,8 @@
       "lengthDisplay": "05:00",
       "description": "Quick Happy is for when you need that quick little pick-me-up, carrying you from a busy alpha state down into deep relaxation in just five minutes. A gentle, brief mood lift that's perfect for brightening a morning or an afternoon.",
       "image": "Quick Happy.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Quick Happy.mp3",
+      "bundledAudio": true
     },
     {
       "id": "focus_energy_victory",
@@ -306,8 +306,8 @@
       "lengthDisplay": "30:00",
       "description": "Victory puts your mind in a state like you've already won. Whether before sport, a workout, a speech, or any moment that demands a winning edge, it hands you a huge mental advantage so that triumph feels certain before you've even begun.",
       "image": "Victory.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Victory.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_rave",
@@ -319,8 +319,8 @@
       "lengthDisplay": "30:00",
       "description": "Party all night. The lights, the waves of bliss that wash over your entire body, the euphoria that streams through your veins, pumping music, non-stop dance. A warm-hearted, emotionally connected state with powerful sensory enhancement. For experienced listeners only.",
       "image": "!RAVE!.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "!RAVE!.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_5htp",
@@ -332,8 +332,8 @@
       "lengthDisplay": "25:00",
       "description": "5HTP is the precursor your brain uses to make serotonin, your HAPPY hormone. This gentle session aims to balance your serotonin and melatonin, lifting mood and easing you toward calmer, deeper sleep.",
       "image": "5HTP.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "5HTP.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_absinthe",
@@ -345,8 +345,8 @@
       "lengthDisplay": "45:00",
       "description": "Lucidity hits slowly as your speech becomes very articulate and your ideas clear. A surreal state where you feel drunk but you aren't, the green muse of clarity and dreamlike perception that once inspired Van Gogh and Baudelaire.",
       "image": "Absinthe.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Absinthe.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_acid",
@@ -358,8 +358,8 @@
       "lengthDisplay": "30:00",
       "description": "An initial burst followed by a stream-of-conscious mellowing that fades into bliss. Expect a notably intense onset, shifting perceptions, emotional waves, and a long drift through altered awareness.",
       "image": "Acid.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Acid.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_adrenaline",
@@ -371,8 +371,8 @@
       "lengthDisplay": "30:00",
       "description": "Tap into the fight-or-flight surge. This session is designed to deliver a burst of highly powerful, self-confident energy, sharpening you for moments that demand intense physical or mental exertion.",
       "image": "Adrenaline.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Adrenaline.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_adrenochrome",
@@ -384,8 +384,8 @@
       "lengthDisplay": "30:00",
       "description": "An oxidation product of adrenaline that earned its notoriety through cult literary references. Known for a reputation of disorientation and hallucination, this session carries you into strange, unsteady territory.",
       "image": "Adrenochrome.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Adrenochrome.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_alcohol",
@@ -397,8 +397,8 @@
       "lengthDisplay": "35:00",
       "description": "Like sinking into a few glasses of spirits: relaxation, mood lift, happiness, giddiness, talkativeness, lowered inhibitions and eased social anxiety. The effects arrive intensely then diminish into flighty, overexcited warmth, with none of the hangover.",
       "image": "Alcohol.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Alcohol.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_anasthesia",
@@ -410,8 +410,8 @@
       "lengthDisplay": "30:00",
       "description": "A short-lived but crazy numbing experience that leaves you deeply disoriented. Stay near your bed and let the world swirl around you as a heavy sedative haze takes hold.",
       "image": "Anasthesia.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Anasthesia.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_antimigraine",
@@ -423,8 +423,8 @@
       "lengthDisplay": "20:00",
       "description": "Designed for headache relief, this session carries you from a normal alpha state down to a migraine-busting .5hz level. Soothing relief for those battling migraines, cluster headaches, or everyday tension.",
       "image": "AntiMigraine.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "AntiMigraine.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_bufotoad",
@@ -436,8 +436,8 @@
       "lengthDisplay": "35:00",
       "description": "Inspired by the psychoactive venom of certain toad species, this is one of our strongest doses. A potent, otherworldly journey best left to experienced listeners; beginners should start elsewhere.",
       "image": "BufoToad.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "BufoToad.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_cocaine",
@@ -449,8 +449,8 @@
       "lengthDisplay": "30:00",
       "description": "Increases alertness and wakefulness, elevates the mood, brings a mild to high degree of euphoria, sharpens thinking and concentration, and floods you with energy while melting away fatigue. A surging stimulant rush that comes close to the extreme.",
       "image": "Cocaine.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Cocaine.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_crack",
@@ -462,8 +462,8 @@
       "lengthDisplay": "30:00",
       "description": "A purified, faster-hitting cousin of cocaine, producing effects within minutes that are intensely euphoric and last 20 to 30 minutes. An overwhelming high gives way to euphoria with possible delusions, then a harsh comedown. Not for inexperienced listeners.",
       "image": "Crack.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Crack.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_crack_unofficial",
@@ -475,8 +475,8 @@
       "lengthDisplay": "26:00",
       "description": "An unofficial, harder-edged variant built for an explosive rush: a near-instant surge of euphoric energy that peaks fast and crashes hard. A raw, jagged ride for thrill-seeking listeners only.",
       "image": "Crack_unofficial.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Crack_unofficial.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_crystal_meth",
@@ -488,8 +488,8 @@
       "lengthDisplay": "35:00",
       "description": "A relentless stimulant session bringing increased energy and alertness, a vanishing need for sleep, euphoria, heightened sexuality, and racing talkativeness. It blends a stimulant edge with MDMA-like openness and intellectual expansion, but its sweaty, voice-hearing intensity earns its Very Strong rating; use with caution.",
       "image": "Crystal Meth.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Crystal Meth.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_dmt",
@@ -501,8 +501,8 @@
       "lengthDisplay": "35:00",
       "description": "The feeling of this dose is as though one had been struck by noetic lightning. The ordinary world is almost instantaneously replaced, not only with a hallucination, but a hallucination whose alien character is its utter alienness. Nothing in this world can prepare one for the impressions that fill your mind when you enter the sensorium. The paradox is that it is the most powerful yet most harmless of all these things. Load Universe into Cannon. Aim at Brain. Fire.",
       "image": "DMT.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "DMT.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_dxm",
@@ -514,8 +514,8 @@
       "lengthDisplay": "45:00",
       "description": "Mood lift, euphoria, giggling and laughing, the dissociation of mind from body, and creative dreamlike experiences. Many feel warm, empathic sentiments toward others, and some swear this audio journey surpasses the substance itself.",
       "image": "DXM.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "DXM.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_demerol",
@@ -527,8 +527,8 @@
       "lengthDisplay": "30:00",
       "description": "A synthetic opioid-style session that slows your brain activity and brings on strong sedation and euphoria. The smooth onset is felt 10 to 15 minutes in, settling you into a heavy, painless calm.",
       "image": "Demerol.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Demerol.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_dexies",
@@ -540,8 +540,8 @@
       "lengthDisplay": "35:00",
       "description": "A raw amphetamine-style ride with nothing smooth about it: racing thoughts, jitters, a pounding heart, and chaotic, uncontrolled dissociation. This could be a rough one, recommended for advanced listeners only.",
       "image": "Dexies.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Dexies.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_divinorum",
@@ -553,8 +553,8 @@
       "lengthDisplay": "30:00",
       "description": "Divine: to see in new light the world around you, shimmering. A deep, inward spiritual journey designed to help you see within yourself.",
       "image": "Divinorum.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Divinorum.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_downer",
@@ -566,8 +566,8 @@
       "lengthDisplay": "20:00",
       "description": "When you want to calm Dooooown. Downer takes you from high to low in 20 minutes flat, melting away stress and anxiety into a relaxed, settled calm without sending you to sleep.",
       "image": "Downer.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Downer.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_ect",
@@ -579,8 +579,8 @@
       "lengthDisplay": "10:00",
       "description": "A jolting, high-intensity session of stuttering pulses and sudden surges meant to scramble and then reset the mind. A disorienting, electric ride for adventurous listeners only.",
       "image": "ECT.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "ECT.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_ecstasy",
@@ -592,8 +592,8 @@
       "lengthDisplay": "30:00",
       "description": "Sometimes you just want to make it happen, and make it happen hard and good. Ecstasy was designed to bring you to the mind-state of near orgasm, our strongest, fastest, most sensual dose.",
       "image": "Ecstasy.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Ecstasy.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_french_roast",
@@ -618,8 +618,8 @@
       "lengthDisplay": "30:00",
       "description": "A circulatory-boosting session aimed at sharpening alertness, short-term memory, and concentration. It promises a clearer, brighter head, with hints of mood lift and an easing of mental fog.",
       "image": "Ginko.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Ginko.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_hash",
@@ -631,8 +631,8 @@
       "lengthDisplay": "45:00",
       "description": "Stronger than marijuana, hash brings on mood lift, euphoria, laughter, relaxation, stress reduction, and creative, philosophical, deep thinking, all with much greater effects than marijuana.",
       "image": "HASH.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "HASH.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_hangover_cure",
@@ -644,8 +644,8 @@
       "lengthDisplay": "30:00",
       "description": "A soothing morning recovery session of gentle low-frequency tones that ease a throbbing head and settle a queasy stomach. Soft, warming harmonics wash away the fog and restore a sense of clear, rehydrated calm.",
       "image": "Hangover Cure.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Hangover Cure.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_heroin",
@@ -657,8 +657,8 @@
       "lengthDisplay": "30:00",
       "description": "A surge of euphoria accompanied by warm skin flushing, dry mouth, and heavy extremities. The experience transitions into \"the nod\"-an alternating state between wakefulness and drowsiness where you will dream while awake, and be awake while you dream. Characterized as roughly ten times more intense than the Opium dose, recommended only for experienced users willing to test their limits.",
       "image": "Heroin.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Heroin.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_inhalant",
@@ -670,8 +670,8 @@
       "lengthDisplay": "30:00",
       "description": "A wild and crazy ride of spinning dizziness and rushing disorientation. The session sweeps you up in a gaseous, head-rush swirl that builds quickly and tumbles through a chaotic, lightheaded haze.",
       "image": "Inhalant.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Inhalant.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_juiceit",
@@ -683,8 +683,8 @@
       "lengthDisplay": "30:00",
       "description": "Designed for the sports or workout user, JuiceIT! flows through three frequency levels to enhance athletic performance. At 3Hz reaction time sharpens, at 3.5Hz comes an enhancement of receptivity, and at 6.3Hz learning accelerates-a non-chemical lift for training and competition.",
       "image": "JuiceIT!.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "JuiceIT!.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_kava",
@@ -696,8 +696,8 @@
       "lengthDisplay": "30:00",
       "description": "A tranquil island reverie modeled after the cool, earthy kava root beverage. Listeners drift into numbing relaxation of both mind and muscle, settling into a unique euphoric calm that is unlike being high or drunk.",
       "image": "Kava.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Kava.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_ketamine",
@@ -709,8 +709,8 @@
       "lengthDisplay": "35:00",
       "description": "Effects range from mild inebriation, dreamy thinking, and clumsy, robotic movement to extreme difficulty moving, complete dissociation, and entering other realities with classic near-death-experience visions. Expect delayed sensations, vertigo, heightened sociability, and a profoundly altered perception of the world.",
       "image": "Ketamine.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Ketamine.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_lsd",
@@ -722,8 +722,8 @@
       "lengthDisplay": "35:00",
       "description": "An increase in energy and stimulation, surging associative and creative thinking, mood lift, and heightened awareness and appreciation. The journey opens into closed- and open-eye visuals and a profound, life-changing spiritual experience-the best known and most researched psychedelic.",
       "image": "LSD.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "LSD.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_marijuana",
@@ -735,8 +735,8 @@
       "lengthDisplay": "45:00",
       "description": "All the effects of that sticky-icky leaf, without the smoke. The session emulates a mellow elevation of mood, philosophical drifting thoughts, heightened appreciation of music, and pleasant waves of physical sensation rolling into that characteristic high.",
       "image": "Marijuana.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Marijuana.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_morning_glory",
@@ -748,8 +748,8 @@
       "lengthDisplay": "30:00",
       "description": "Emotions may shift rapidly through a range from fear to euphoria, while gentle hallucinations distort and transform shapes and movements. Time may seem to slow and the body to bend, with many reporting an enjoyable, mentally stimulating experience of heightened understanding.",
       "image": "Morning Glory.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Morning Glory.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_morphine",
@@ -761,8 +761,8 @@
       "lengthDisplay": "30:00",
       "description": "A sensation of sinking into slowness with a coherent, calming pull. Relaxation builds until it nearly overwhelms, then breaks into a wash of relief and emotional detachment from daily concerns. As one tester put it: everything is just good, everything is just good.",
       "image": "Morphine.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Morphine.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_nicotine",
@@ -774,8 +774,8 @@
       "lengthDisplay": "30:00",
       "description": "Nicotine can both invigorate and relax, riding a rapid rush of adrenaline. The session quickens the pulse and lifts physical response before gradually settling back into calm as it wears off.",
       "image": "Nicotine.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Nicotine.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_nitrous",
@@ -787,8 +787,8 @@
       "lengthDisplay": "10:00",
       "description": "A quick-high of rapid onset and offset bringing giggling, euphoria, and exhilaration. Sound distorts, external stimuli fade, and a clumsy loss of dexterity and balance sweeps in almost instantly before lifting just as fast-a brief, intense burst.",
       "image": "Nitrous.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Nitrous.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_opium",
@@ -800,8 +800,8 @@
       "lengthDisplay": "30:00",
       "description": "Opium can bring euphoria followed by a sense of well-being and a calm, drowsy sedation. Breathing slows, time reverses or stops, and the world softens into a gentle haze.",
       "image": "Opium.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Opium.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_oxy",
@@ -813,8 +813,8 @@
       "lengthDisplay": "30:00",
       "description": "The perfect simulation of a high-level dose, hitting with full force and none of the slow time-release. One of the most intense prescription-style experiences offered, designed for advanced users only.",
       "image": "Oxy.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Oxy.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_peyote",
@@ -826,8 +826,8 @@
       "lengthDisplay": "35:00",
       "description": "A mystical loss of oneself, a disorientation of the senses, with distortions in body image and perception. The session opens a true altered state of consciousness alongside an inability to communicate and a heightened suggestibility-not a toy, and not for the weak minded.",
       "image": "Peyote.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Peyote.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_prozium",
@@ -839,8 +839,8 @@
       "lengthDisplay": "30:00",
       "description": "The ups and downs of life can hurt. This dose aims to even out mood fluctuations, promoting emotional equilibrium and resilience-meant to be applied whenever feeling angry, sad, or off-balance to settle into calm stability.",
       "image": "Prozium.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Prozium.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_quit",
@@ -852,8 +852,8 @@
       "lengthDisplay": "30:00",
       "description": "When between 4Hz and 6Hz the human brain enters a state of attitude and behavior change. This dose targets the 8Hz frequency to stimulate the synapses and aid addiction cessation, used during cravings or preventatively-most effective when paired with personal willpower.",
       "image": "QUIT!.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "QUIT!.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_ritalin",
@@ -865,8 +865,8 @@
       "lengthDisplay": "28:00",
       "description": "Increases in alertness and focus while blocking hunger and fatigue. Listeners may feel waves of warmth followed by strong, hyper-attentive alertness and awareness, with sustained effects carrying throughout the day.",
       "image": "Ritalin.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Ritalin.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_speed",
@@ -878,8 +878,8 @@
       "lengthDisplay": "30:00",
       "description": "A stimulant rush of heightened wakefulness bringing increased energy and alertness, a decreased need for sleep, euphoria, increased sexuality, and visual and auditory hallucinations. More extreme than other wake-you-up doses-recommended only for advanced users.",
       "image": "Speed.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Speed.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_trip",
@@ -891,8 +891,8 @@
       "lengthDisplay": "35:00",
       "description": "A hallucinogenic journey of open-eye visual effects-lights gaining auras, star-patterns, and rainbowing around every glow. Time distorts and emotions sharpen into connection and wonder, with one of the most interesting effects being the feeling of awakening for the first time from a previous state of sleep. Not recommended for everyone.",
       "image": "Trip.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Trip.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_viagra",
@@ -904,8 +904,8 @@
       "lengthDisplay": "20:00",
       "description": "The perfect compliment to sexual activity. Orgasms begin at normal intensity but the session allows for new, strong arousal minutes later, with subsequent peaks delayed and more intense.",
       "image": "Viagra.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Viagra.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_vico",
@@ -917,8 +917,8 @@
       "lengthDisplay": "30:00",
       "description": "Modeled after a strong dose of Vicodin, this session brings improvement of mood, reduction of discomfort, and extreme euphoria rolling in waves. It progresses toward light-headedness and a soft sedation, dissolving into a gentle haze as it concludes.",
       "image": "Vico.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Vico.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_white_crosses",
@@ -930,8 +930,8 @@
       "lengthDisplay": "30:00",
       "description": "A stimulant rush laced with euphoria and crystalline mental clarity, opening into a sense of openness and intellectual expansion. For new users there is a mild psychedelic shimmer, but with repeated use those mind-expanding edges fade and pure physical and mental stimulation take over. A hybrid designer dose for experienced users.",
       "image": "White Crosses.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "White Crosses.mp3",
+      "bundledAudio": true
     },
     {
       "id": "medications_drugs_yaba",
@@ -943,8 +943,8 @@
       "lengthDisplay": "30:00",
       "description": "A potent fusion of hallucinogenic and stimulant effects. Expect an extreme sense of alertness laced with sound distortion, vivid colors, and intense visual effects-keeping you aware and awake inside a powerful, vivid experience that warrants cautious use.",
       "image": "YaBa.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "YaBa.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_alpha",
@@ -969,8 +969,8 @@
       "lengthDisplay": "30:00",
       "description": "Normally generated when you are awake, with the attention focused outside, dealing with the outside world. It is also generated when solving logical problems, such as mental arithmetic. Alert focusing, vitality, concentration on tasks; Earth resonance. Beta causes an increase in mental ability, focus, alertness, and IQ.",
       "image": "Beta.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Beta.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_condition",
@@ -982,8 +982,8 @@
       "lengthDisplay": "20:00",
       "description": "Take Condition before any other dose in the library and it will prepare your brain to accept that dose more openly. A gentle priming that leaves your mind more receptive and the experience that follows that much richer.",
       "image": "Condition.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Condition.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_delta",
@@ -995,8 +995,8 @@
       "lengthDisplay": "30:00",
       "description": "0.5 Hz to 4 Hz. Normally generated in deep sleep, or when unconscious. Those experienced in deep trance states can generate these waves while remaining conscious. Delta is conducive to healing, divine knowledge, personal growth, and meditative states — reaching peak monk-type levels through high-level meditation.",
       "image": "Delta.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Delta.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_epsilon",
@@ -1008,8 +1008,8 @@
       "lengthDisplay": "37:00",
       "description": "A descent into the rarest, slowest brainwave territory, where the body falls utterly still and the mind drifts beneath even the deepest sleep. A profound, near-suspended hush settles over you, drawing you toward the quiet edge of conscious awareness.",
       "image": "Epsilon.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Epsilon.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_gamma",
@@ -1021,8 +1021,8 @@
       "lengthDisplay": "30:00",
       "description": "25 to 35 Hz. Gamma is associated with information-rich, high-level task processing. It may function as a binding mechanism, connecting cortical structures involved in advanced processing with the thalamus and synchronizing the neurons that process sensory input — sometimes called the brain's operating-system frequency.",
       "image": "Gamma.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Gamma.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_reset",
@@ -1034,8 +1034,8 @@
       "lengthDisplay": "20:00",
       "description": "Reset will return your brain to a normal 8hz level, calm and awake. Use it to clear the lingering effects of a previous dose so you can move cleanly from one experience to the next.",
       "image": "Reset.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Reset.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_theta",
@@ -1047,8 +1047,8 @@
       "lengthDisplay": "30:00",
       "description": "4 to 8 Hz. The region between sleep and wakefulness, in which dreaming and other dream-like or hypnagogic experiences occur — the transitional state just before sleep at night or upon waking. Associated with unconscious-conscious communication, creative insight, deep relaxation, advanced meditation, and vivid mental imagery.",
       "image": "Theta.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Theta.mp3",
+      "bundledAudio": true
     },
     {
       "id": "pure_you_choose",
@@ -1060,8 +1060,8 @@
       "lengthDisplay": "60:00",
       "description": "An hour-long journey that hands the controls to you. It travels through Alpha, Beta, Delta, Gamma, and Theta frequencies, and you decide when you have arrived, stopping the moment the state you came for takes hold rather than riding it out to the end. Advanced users only.",
       "image": "You-Choose.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "You-Choose.mp3",
+      "bundledAudio": true
     },
     {
       "id": "sex_intimacy_afterglow",
@@ -1073,8 +1073,8 @@
       "lengthDisplay": "30:00",
       "description": "The feeling of afterglow: when the heat of lust has passed, this is the content glow you bathe in, a quiet inner shimmering that follows the fireworks of orgasm. Lean back, focus on your breathing, and savor the changing sensations as they drift through you.",
       "image": "Afterglow.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Afterglow.mp3",
+      "bundledAudio": true
     },
     {
       "id": "sex_intimacy_extend",
@@ -1086,8 +1086,8 @@
       "lengthDisplay": "20:00",
       "description": "A short, focused audio session designed as a quick listen before intimate moments. The gentle tones aim to relax the body and extend a sense of steady, lasting calm and endurance throughout the experience.",
       "image": "Extend.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Extend.mp3",
+      "bundledAudio": true
     },
     {
       "id": "sex_intimacy_first_love",
@@ -1112,8 +1112,8 @@
       "lengthDisplay": "30:00",
       "description": "An intensifying audio journey of repeated waves of sensation and pleasure. Your body is carried through chaos, doing over and over what makes it feel good, as the glow of pleasure grows more intense with every wave.",
       "image": "MultipleO.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "MultipleO.mp3",
+      "bundledAudio": true
     },
     {
       "id": "sex_intimacy_orgasm",
@@ -1125,8 +1125,8 @@
       "lengthDisplay": "50:00",
       "description": "An immersive sensory experience built around a feeling of intense pleasure, with contractions and vibrations that envelope your entire body and soul. It evokes a sensation unlike any other in the world, difficult to describe yet unmistakable to those who feel it.",
       "image": "Orgasm.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Orgasm.mp3",
+      "bundledAudio": true
     },
     {
       "id": "sex_intimacy_sex",
@@ -1138,8 +1138,8 @@
       "lengthDisplay": "43:00",
       "description": "A warm, enveloping soundscape of pulsing rhythms and rising tones that build toward a heightened sense of intimacy and connection. The layered binaural waves wrap around the listener in a slow, sensual crescendo.",
       "image": "Sex.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Sex.mp3",
+      "bundledAudio": true
     },
     {
       "id": "sex_intimacy_wet_dream",
@@ -1151,8 +1151,8 @@
       "lengthDisplay": "32:00",
       "description": "This session blends simulated fantasy with dream recall, coupled with segments designed to give you lucid levels of control. It aims to guide the listener into elaborate, vivid sensual dreamscapes while keeping them clear enough to remember.",
       "image": "Wet Dream.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Wet Dream.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_astral_projection",
@@ -1164,8 +1164,8 @@
       "lengthDisplay": "30:00",
       "description": "A guided descent into the threshold state where the sense of self loosens from the body. The dose eases you into deep theta — the doorway many associate with astral projection — the feeling of consciousness drifting free of physical limits. Best experienced lying down in a quiet, dark space, fully relaxed and undisturbed.",
       "image": "Astral Projection.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Astral Projection.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_astral_travel",
@@ -1177,8 +1177,8 @@
       "lengthDisplay": "30:00",
       "description": "A companion to Astral Projection that focuses on movement once separation is felt — the sensation of gliding, rising, or traveling beyond the room. A steady deep-theta carrier sustains the experience. Intended for relaxed, reclined listening with no interruptions.",
       "image": "Astral Travel.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Astral Travel.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_chakra",
@@ -1190,8 +1190,8 @@
       "lengthDisplay": "30:00",
       "description": "A balancing session that moves attention through the seven traditional energy centers, from root to crown. The frequencies shift gradually to encourage a sense of alignment, openness, and calm focus. A gentle, grounding experience suited to meditation or wind-down.",
       "image": "Chakra.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Chakra.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_gate_of_hades",
@@ -1203,8 +1203,8 @@
       "lengthDisplay": "30:00",
       "description": "Smoke of their torment. Weeping and gnashing of teeth. Death. Destruction. No rest day and night. Tormented. Their worm does not die. Expect nightmares, near-death experiences, and a strong onset of fear. An intense, disturbing experience intended only for those seeking exposure to extreme negative sensations.",
       "image": "Gate of Hades.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Gate of Hades.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_genesis",
@@ -1216,8 +1216,8 @@
       "lengthDisplay": "30:00",
       "description": "The universe was created with a bang, and we offer you Genesis so you can feel that explosion deep inside. At the start it will feel like a little spark; you will have to concentrate to feel it, like a tiny match burning deep in your soul. By halfway through the dose, the spark will be a forest fire consuming everything that is dark or bad inside you — bad feelings wash away in this incredible soul-fire. By the end, your body will be shaking under an explosion of heat; you may feel jittery, alive, awake, and shaking when the final minutes of Genesis hit you: the Big Bang of your soul.",
       "image": "Genesis.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Genesis.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_hand_of_god",
@@ -1229,8 +1229,8 @@
       "lengthDisplay": "30:00",
       "description": "A dose that has been a lifetime achievement for I-Doser.com, held internal to I-Doser Labs for a very good reason: it isn't meant for public consumption because it is considered just too powerful. The experience reportedly includes fluttering eyelids, great and almost supernatural clairvoyance, rings of light, and great insight — though it carries potential negative effects including fear, an unknowing realization of self, and a breakdown of all senses. Weeping, fear, anger: with such insight could come bad consequences.",
       "image": "Hand of God.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Hand of God.mp3",
+      "bundledAudio": true
     },
     {
       "id": "spiritual_lucid_dream",
@@ -1255,8 +1255,8 @@
       "lengthDisplay": "30:00",
       "description": "An experience in which a person seems to perceive the world from a location outside the physical body — consciousness separating and traveling freely. Associated phenomena include remote viewing and perceiving distant locations. Around 75% of such experiences occur while relaxed and lying down or sitting.",
       "image": "Out of Body.jpg",
-      "audio": null,
-      "bundledAudio": false
+      "audio": "Out of Body.mp3",
+      "bundledAudio": true
     }
   ]
 }

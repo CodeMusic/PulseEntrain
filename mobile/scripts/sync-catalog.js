@@ -36,6 +36,12 @@ const AUDIO_SUBSET = new Set([
   'Medications & Drugs/French Roast',
 ]);
 
+// Widen how much audio gets bundled without editing the list above:
+//   SYNC_ALL_AUDIO=1     bundle every track (~4.2 GB)
+//   SYNC_AUDIO_LIMIT=N   bundle the first N tracks (across categories)
+const BUNDLE_ALL = process.env.SYNC_ALL_AUDIO === '1';
+const BUNDLE_LIMIT = process.env.SYNC_AUDIO_LIMIT ? parseInt(process.env.SYNC_AUDIO_LIMIT, 10) : null;
+
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 function rmrf(dir) {
@@ -87,10 +93,12 @@ function main() {
         console.warn(`  ⚠ no image for ${key}`);
       }
 
-      // audio (only the subset is bundled)
+      // audio — curated subset by default; SYNC_ALL_AUDIO / SYNC_AUDIO_LIMIT widen it
       const audioSrc = path.join(catDir, `${base}.mp3`);
       let audio = null;
-      const bundledAudio = AUDIO_SUBSET.has(key) && fs.existsSync(audioSrc);
+      const wanted = BUNDLE_ALL || BUNDLE_LIMIT != null || AUDIO_SUBSET.has(key);
+      const underLimit = BUNDLE_LIMIT == null || audioEntries.length < BUNDLE_LIMIT;
+      const bundledAudio = wanted && underLimit && fs.existsSync(audioSrc);
       if (bundledAudio) {
         const audioName = `${base}.mp3`;
         fs.copyFileSync(audioSrc, path.join(OUT_AUDIO, audioName));
@@ -142,7 +150,9 @@ function main() {
 
   console.log(`\nCatalog: ${catalog.length} doses across ${categories.length} categories`);
   console.log(`Images bundled: ${imageEntries.length}${missingImages ? ` (missing ${missingImages})` : ''}`);
-  console.log(`Audio bundled (subset): ${audioEntries.length} -> ${audioEntries.join(', ')}`);
+  const mode = BUNDLE_ALL ? 'all' : BUNDLE_LIMIT != null ? `limit ${BUNDLE_LIMIT}` : 'curated subset';
+  const list = audioEntries.length <= 12 ? ` -> ${audioEntries.join(', ')}` : '';
+  console.log(`Audio bundled (${mode}): ${audioEntries.length}${list}`);
 }
 
 function rmrf_outputs() {
