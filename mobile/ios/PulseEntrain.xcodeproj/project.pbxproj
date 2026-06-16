@@ -22,7 +22,7 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = PulseEntrain/Info.plist; sourceTree = "<group>"; };
 		2736C45F31B4B64B299BD3F0 /* Pods-PulseEntrain.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PulseEntrain.debug.xcconfig"; path = "Target Support Files/Pods-PulseEntrain/Pods-PulseEntrain.debug.xcconfig"; sourceTree = "<group>"; };
 		43160424B2B7DD00441B94FF /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-PulseEntrain/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		559DBD3FFAD0086A180638E0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = PulseEntrain/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		559DBD3FFAD0086A180638E0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = PulseEntrain/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		653120D7D4B669A0CF5D8045 /* Pods-PulseEntrain.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PulseEntrain.release.xcconfig"; path = "Target Support Files/Pods-PulseEntrain/Pods-PulseEntrain.release.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = PulseEntrain/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
@@ -128,7 +128,6 @@
 				2736C45F31B4B64B299BD3F0 /* Pods-PulseEntrain.debug.xcconfig */,
 				653120D7D4B669A0CF5D8045 /* Pods-PulseEntrain.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -349,6 +348,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PulseEntrain/PulseEntrain.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = DR37K85CJL;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -385,6 +385,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PulseEntrain/PulseEntrain.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = DR37K85CJL;
 				INFOPLIST_FILE = PulseEntrain/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -11,6 +11,7 @@
     "serve:web": "one serve",
     "clean": "one clean",
     "ios": "ONE_METRO_MODE=1 one run:ios",
+    "ios:device": "ONE_METRO_MODE=1 expo run:ios --device",
     "android": "ONE_METRO_MODE=1 one run:android",
     "prebuild:native": "ONE_METRO_MODE=1 one prebuild",
     "sync-catalog": "node scripts/sync-catalog.cjs",

@@ -2,7 +2,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./*"]
+      "~/*": [
+        "./*"
+      ]
     },
     "strict": false,
     "rootDir": ".",
@@ -14,8 +16,24 @@
     "allowJs": true,
     "checkJs": false,
     "noImplicitAny": false,
-    "types": ["node", "react", "vite/client"],
-    "lib": ["dom", "esnext"]
+    "types": [
+      "node",
+      "react",
+      "vite/client"
+    ],
+    "lib": [
+      "dom",
+      "esnext"
+    ]
   },
-  "exclude": ["node_modules", ".expo", "**/dist", "**/types", "**/__tests__", "ios", "android"]
+  "exclude": [
+    "node_modules",
+    ".expo",
+    "**/dist",
+    "**/types",
+    "**/__tests__",
+    "ios",
+    "android"
+  ],
+  "extends": "expo/tsconfig.base"
 }
