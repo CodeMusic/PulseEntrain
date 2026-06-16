@@ -8,21 +8,24 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { COLORS } from '../theme';
 import { CATEGORIES } from '../catalog/data';
+import { useNav } from '../oneNav';
 
 const PANEL_WIDTH = 290;
 const MenuContext = createContext(null);
 export const useMenu = () => useContext(MenuContext);
 
-export function MenuProvider({ children, navigationRef }) {
+export function MenuProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
+  const nav = useNav();
   const open = () => setIsOpen(true);
   const close = () => setIsOpen(false);
   const go = (screen, params) => {
     setIsOpen(false);
-    if (navigationRef.isReady()) navigationRef.navigate(screen, params);
+    nav.navigate(screen, params);
   };
 
   return (
@@ -33,9 +36,16 @@ export function MenuProvider({ children, navigationRef }) {
   );
 }
 
+const IS_WEB = Platform.OS === 'web';
+
 function Flyout({ isOpen, close, go }) {
   const slide = useRef(new Animated.Value(-PANEL_WIDTH)).current;
   useEffect(() => {
+    // Native: slide the panel in. Web: RNW's JS-driven Animated transform is
+    // unreliable here, so the panel renders statically (the Modal's fade covers
+    // the entrance). The panel only mounts while open, so a static position is
+    // correct.
+    if (IS_WEB) return;
     Animated.timing(slide, {
       toValue: isOpen ? 0 : -PANEL_WIDTH,
       duration: 220,
@@ -48,7 +58,7 @@ function Flyout({ isOpen, close, go }) {
       <TouchableWithoutFeedback onPress={close}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <Animated.View style={[styles.panel, { transform: [{ translateX: slide }] }]}>
+      <Animated.View style={[styles.panel, { transform: [{ translateX: IS_WEB ? 0 : slide }] }]}>
         <Text style={styles.brand}>PulseEntrain</Text>
         <Item label="Home" onPress={() => go('Springboard')} />
         <Item label="About" onPress={() => go('About')} />

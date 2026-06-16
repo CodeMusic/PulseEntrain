@@ -6,6 +6,7 @@ import { BinauralEngine, bandFor } from '../audio/binauralEngine';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { useNova } from '../nova/NovaProvider';
 import NovaExplorer from './NovaExplorer';
+import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 const BACKGROUNDS = ['none', 'white', 'pink', 'brown'];
 const BG_LABEL = { none: 'None', white: 'White', pink: 'Pink', brown: 'Brown' };
@@ -76,6 +77,7 @@ export default function BinauralPanel() {
   };
 
   const toggleNova = val => {
+    if (val && IS_WEB) return nativeOnlyNotice('Lumenate Nova');
     if (val) {
       Alert.alert(
         '⚠️ Photosensitivity warning',

@@ -7,12 +7,18 @@ import StrengthBadge from '../components/StrengthBadge';
 import NovaExplorer from '../components/NovaExplorer';
 import { useNova } from '../nova/NovaProvider';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
+import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 export default function DoseDetailScreen({ route, navigation }) {
   const { id } = route.params;
   const dose = doseById(id);
   const nova = useNova();
-  const [usePulsetto, setUsePulsetto] = useState(true);
+  const [usePulsetto, setUsePulsetto] = useState(!IS_WEB);
+
+  const onPulsetto = v => {
+    if (IS_WEB) return nativeOnlyNotice('Pulsetto');
+    setUsePulsetto(v);
+  };
 
   if (!dose) {
     return (
@@ -35,6 +41,7 @@ export default function DoseDetailScreen({ route, navigation }) {
   };
 
   const toggleNova = val => {
+    if (val && IS_WEB) return nativeOnlyNotice('Lumenate Nova');
     if (val) {
       Alert.alert(
         '⚠️ Photosensitivity warning',
@@ -78,7 +85,7 @@ export default function DoseDetailScreen({ route, navigation }) {
         </View>
         <Switch
           value={usePulsetto}
-          onValueChange={setUsePulsetto}
+          onValueChange={onPulsetto}
           trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }}
           thumbColor="#fff"
         />

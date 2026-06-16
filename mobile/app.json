@@ -1,4 +1,15 @@
 {
-  "name": "PulseEntrain",
-  "displayName": "PulseEntrain"
+  "expo": {
+    "name": "PulseEntrain",
+    "slug": "pulseentrain",
+    "scheme": "pulseentrain",
+    "platforms": ["ios", "android", "web"],
+    "plugins": ["one/expo-plugin"],
+    "ios": {
+      "bundleIdentifier": "com.codemusic.PulseEntrain"
+    },
+    "android": {
+      "package": "com.codemusic.PulseEntrain"
+    }
+  }
 }
