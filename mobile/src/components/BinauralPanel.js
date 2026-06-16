@@ -4,6 +4,7 @@ import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
 import { BinauralEngine, bandFor } from '../audio/binauralEngine';
 import { NovaController, MAX_NOVA_STROBE_HZ } from '../nova/novaController';
+import NovaExplorer from './NovaExplorer';
 
 const BACKGROUNDS = ['none', 'white', 'pink', 'brown'];
 const BG_LABEL = { none: 'None', white: 'White', pink: 'Pink', brown: 'Brown' };
@@ -185,6 +186,8 @@ export default function BinauralPanel() {
           Light capped at {MAX_NOVA_STROBE_HZ} Hz for safety (audio beat stays {beat.toFixed(1)} Hz).
         </Text>
       ) : null}
+
+      {novaEnabled && novaStatus === 'connected' ? <NovaExplorer nova={novaRef.current} /> : null}
 
       <TouchableOpacity style={[styles.playBtn, playing && styles.stopBtn]} onPress={toggle} activeOpacity={0.85}>
         <Text style={styles.playTxt}>{playing ? '■ Stop' : '▶ Play binaural'}</Text>

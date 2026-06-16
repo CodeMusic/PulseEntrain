@@ -19,41 +19,57 @@ export const clampStrobe = hz => {
   return Math.min(MAX_NOVA_STROBE_HZ, Math.max(MIN_NOVA_STROBE_HZ, v));
 };
 
-// Strobe frame layout. 'symmetric' = 3×uint32 (12B) [period_µs, on_µs, level×1e6].
-// 'independent' = 10×uint32 (40B) per-eye [period,on,period',on',level]×2.
-// If the device lights but won't flicker on one, flip this to try the other.
-const FRAME_LAYOUT = 'independent';
-// The device reads the frame as [on_µs, period_µs, level] — sending the
-// documented [period, on, …] order left the LEDs constant-on (on-time > period,
-// so it can never switch off). Swap so the device sees on < period and cycles.
-const SWAP_PERIOD_ON = false;
+// ── Strobe encoder — faithful port of the app's C4500z0.w0 / La.m.{a,b} ──
+// Independent 10×uint32 (40B), little-endian, per eye:
+//   [ period, on, period', on', level ]   (left block, then right block)
+//   La.m.b(seconds) = round(seconds·1e6) clamped uint32   → period/on (µs)
+//   La.m.a(level)   = round(level·1e6)   clamped uint32   → brightness ×1e6
+//   on = duty·period ; period' = phase-adjusted period (= period when phase 0)
+const U32_MAX = 0xffffffff;
+const bSec = s =>
+  !Number.isFinite(s) || s <= 0 ? 0 : Math.min(U32_MAX, Math.max(0, Math.round(s * 1e6)));
+const aLvl = l => (!Number.isFinite(l) ? 0 : Math.min(U32_MAX, Math.max(0, Math.round(l * 1e6))));
 
 function packLE(values) {
   const buf = Buffer.alloc(values.length * 4);
   values.forEach((v, i) => buf.writeUInt32LE(v >>> 0, i * 4));
   return buf;
 }
-function frameValues(freqHz, duty, onLevel) {
-  const period = Math.round(1e6 / freqHz);
-  const on = Math.round((duty / freqHz) * 1e6);
-  const level = Math.round(onLevel * 1e6);
-  const a = SWAP_PERIOD_ON ? on : period;
-  const b = SWAP_PERIOD_ON ? period : on;
-  return FRAME_LAYOUT === 'independent'
-    ? [a, b, a, b, level, a, b, a, b, level]
-    : [a, b, level];
+
+// One eye → 5 ints. Frequency clamped for safety; phaseHz shifts the primed pair
+// (drives the eye's 2nd LED).
+function eyeInts(freqHz, duty, level, phaseHz) {
+  const f = clampStrobe(freqHz);
+  const period = 1 / f; // seconds
+  const periodP = phaseHz && f - phaseHz > 0 ? 1 / (f - phaseHz) : period;
+  return [bSec(period), bSec(period * duty), bSec(periodP), bSec(periodP * duty), aLvl(level)];
 }
-function encodeFrame(freqHz, duty = 0.5, onLevel = 1.0) {
-  return packLE(frameValues(freqHz, duty, onLevel)).toString('base64');
+
+// Full 8-param SyncedValues → 40-byte frame (+ hex for logging).
+function buildFrame(v) {
+  const ints = [
+    ...eyeInts(v.lFreq, v.lDuty, v.lLevel, v.lPhase),
+    ...eyeInts(v.rFreq, v.rDuty, v.rLevel, v.rPhase),
+  ];
+  const buf = packLE(ints);
+  return { b64: buf.toString('base64'), hex: buf.toString('hex') };
 }
-// "Off" frame — on-time 0 + level 0 → LEDs dark (stopping the stream alone
-// doesn't clear the last frame).
-function encodeOff() {
-  return packLE(frameValues(8, 0, 0)).toString('base64');
+
+// All-dark frame (on-time 0, level 0) — used to clear the LEDs on stop.
+function offFrame() {
+  return buildFrame({ lFreq: 8, rFreq: 8, lDuty: 0, rDuty: 0, lLevel: 0, rLevel: 0, lPhase: 0, rPhase: 0 }).b64;
 }
-function frameHex(freqHz) {
-  return packLE(frameValues(freqHz, 0.5, 1.0)).toString('hex');
-}
+
+const DEFAULT_VALUES = beatHz => ({
+  lFreq: beatHz,
+  rFreq: beatHz,
+  lDuty: 0.5,
+  rDuty: 0.5,
+  lLevel: 1,
+  rLevel: 1,
+  lPhase: 0,
+  rPhase: 0,
+});
 
 export class NovaController {
   constructor(onStatus) {
@@ -62,9 +78,10 @@ export class NovaController {
     this.streamChar = null;
     this.strobeChar = null;
     this.strobing = false;
-    this.targetHz = 8;
-    this.currentHz = 2;
+    this.targetBeat = 8;
+    this.values = DEFAULT_VALUES(8);
     this.tickTimer = null;
+    this._lastHex = null;
     this.telemetryChar = null;
     this.telemetrySub = null;
   }
@@ -209,36 +226,44 @@ export class NovaController {
     }
   }
 
-  // Continuously stream the strobe frame (~every 250ms) while ramping currentHz
-  // toward targetHz. A single frame just holds a static on-level, so the device
-  // needs the frame streamed to actually flicker; ramping avoids an abrupt onset (§6).
-  startStrobe(hz) {
-    this.targetHz = clampStrobe(hz);
-    this.currentHz = Math.min(2, this.targetHz);
+  // Continuously stream the current frame (~every 250ms) — the device needs the
+  // frame streamed to keep cycling. Both eyes ramp toward the target beat (§6).
+  startStrobe(beatHz) {
+    this.targetBeat = clampStrobe(beatHz);
+    this.values = { ...this.values, lFreq: Math.min(2, this.targetBeat), rFreq: Math.min(2, this.targetBeat) };
     if (!this.device || !this.strobeChar) return;
     this.strobing = true;
     this._clearTick();
     this.tickTimer = setInterval(() => {
       if (!this.strobing || !this.strobeChar) return;
-      if (this.currentHz < this.targetHz) {
-        this.currentHz = Math.min(this.targetHz, this.currentHz + 0.5);
-      } else if (this.currentHz > this.targetHz) {
-        this.currentHz = Math.max(this.targetHz, this.currentHz - 0.5);
+      const ramp = cur =>
+        cur < this.targetBeat
+          ? Math.min(this.targetBeat, cur + 0.5)
+          : cur > this.targetBeat
+          ? Math.max(this.targetBeat, cur - 0.5)
+          : cur;
+      this.values.lFreq = ramp(this.values.lFreq);
+      this.values.rFreq = ramp(this.values.rFreq);
+      const { b64, hex } = buildFrame(this.values);
+      if (hex !== this._lastHex) {
+        this._lastHex = hex;
+        console.log('[Nova]', hex);
       }
-      const hz = this.currentHz;
-      if (hz !== this._lastLoggedHz) {
-        this._lastLoggedHz = hz;
-        console.log(`[Nova] ${FRAME_LAYOUT} ${hz.toFixed(1)}Hz ${frameHex(hz)}`);
-      }
-      this.strobeChar
-        .writeWithoutResponse(encodeFrame(hz))
-        .catch(e => console.log('[Nova] write err:', e && e.message));
+      this.strobeChar.writeWithoutResponse(b64).catch(e => console.log('[Nova] write err:', e && e.message));
     }, 250);
   }
 
-  // Live update from the slider — the tick ramps toward the new target.
+  // Entrainment: keep both eyes following the audio beat.
   setFrequency(hz) {
-    this.targetHz = clampStrobe(hz);
+    this.targetBeat = clampStrobe(hz);
+  }
+
+  // Explorer: merge per-eye pattern params (brightness / phase / duty) live.
+  setSyncedValues(patch) {
+    this.values = { ...this.values, ...patch };
+    if (this.strobing && this.strobeChar) {
+      this.strobeChar.writeWithoutResponse(buildFrame(this.values).b64).catch(() => {});
+    }
   }
 
   async stopStrobe() {
@@ -247,7 +272,7 @@ export class NovaController {
     // Stopping the stream does NOT clear the LEDs — send an explicit off frame.
     if (this.strobeChar) {
       try {
-        await this.strobeChar.writeWithoutResponse(encodeOff());
+        await this.strobeChar.writeWithoutResponse(offFrame());
       } catch (e) {}
     }
     if (this.streamChar) {
