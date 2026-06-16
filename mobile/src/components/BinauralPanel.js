@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, Switch, Alert, StyleSheet } from 'react-n
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
 import { BinauralEngine, bandFor } from '../audio/binauralEngine';
-import { NovaController, MAX_NOVA_STROBE_HZ } from '../nova/novaController';
+import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
+import { useNova } from '../nova/NovaProvider';
 import NovaExplorer from './NovaExplorer';
 
 const BACKGROUNDS = ['none', 'white', 'pink', 'brown'];
@@ -21,21 +22,20 @@ const NOVA_STATUS = {
 
 export default function BinauralPanel() {
   const engineRef = useRef(null);
-  const novaRef = useRef(null);
+  const nova = useNova();
   const [beat, setBeat] = useState(10);
   const [carrier, setCarrier] = useState(200);
   const [volume, setVolume] = useState(0.8);
   const [background, setBackground] = useState('none');
   const [playing, setPlaying] = useState(false);
-  const [novaEnabled, setNovaEnabled] = useState(false);
-  const [novaStatus, setNovaStatus] = useState('idle');
 
-  // stop everything if the user leaves this screen
+  // stop audio + Nova strobe when leaving this screen (keep the Nova connection)
   useEffect(
     () => () => {
       if (engineRef.current) engineRef.current.stop();
-      if (novaRef.current) novaRef.current.disconnect();
+      nova.stopStrobe();
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -43,30 +43,24 @@ export default function BinauralPanel() {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
     return engineRef.current;
   };
-  const ensureNova = () => {
-    if (!novaRef.current) novaRef.current = new NovaController(setNovaStatus);
-    return novaRef.current;
-  };
 
   const toggle = () => {
     const e = ensureEngine();
     if (playing) {
       e.stop();
       setPlaying(false);
-      if (novaRef.current) novaRef.current.stopStrobe();
+      nova.stopStrobe();
     } else {
       e.start({ carrier, beat, volume, background });
       setPlaying(true);
-      if (novaEnabled && novaRef.current && novaRef.current.connected) {
-        novaRef.current.startStrobe(beat);
-      }
+      if (nova.connected) nova.startStrobe(beat);
     }
   };
 
   const onBeat = v => {
     setBeat(v);
     if (playing) engineRef.current.setBeat(v);
-    if (novaEnabled && novaRef.current && novaRef.current.connected) novaRef.current.setFrequency(v);
+    if (nova.connected) nova.setFrequency(v);
   };
   const onCarrier = v => {
     setCarrier(v);
@@ -85,23 +79,21 @@ export default function BinauralPanel() {
     if (val) {
       Alert.alert(
         '⚠️ Photosensitivity warning',
-        `The Lumenate Nova flashes light to match the beat. Flashing light can trigger seizures in people with photosensitive epilepsy. For safety the light is capped at ${MAX_NOVA_STROBE_HZ} Hz. Do not use if you (or anyone nearby who can see it) may be photosensitive, and stop immediately if you feel unwell.`,
+        `The Lumenate Nova flashes light. Flashing light can trigger seizures in people with photosensitive epilepsy. For safety the light is capped at ${MAX_NOVA_STROBE_HZ} Hz. Do not use if you (or anyone nearby who can see it) may be photosensitive, and stop immediately if you feel unwell.`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'I understand — connect',
             onPress: async () => {
-              setNovaEnabled(true);
-              const ok = await ensureNova().connect();
-              if (ok && playing) ensureNova().startStrobe(beat);
+              const ok = await nova.connect();
+              if (ok && playing) nova.startStrobe(beat);
             },
           },
         ],
         { cancelable: true },
       );
     } else {
-      setNovaEnabled(false);
-      if (novaRef.current) novaRef.current.disconnect();
+      nova.disconnect();
     }
   };
 
@@ -172,22 +164,22 @@ export default function BinauralPanel() {
       <View style={styles.novaRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.novaTitle}>Lumenate Nova (visual)</Text>
-          <Text style={styles.novaSub}>{NOVA_STATUS[novaStatus] || NOVA_STATUS.idle}</Text>
+          <Text style={styles.novaSub}>{NOVA_STATUS[nova.status] || NOVA_STATUS.idle}</Text>
         </View>
         <Switch
-          value={novaEnabled}
+          value={nova.connected}
           onValueChange={toggleNova}
           trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }}
           thumbColor="#fff"
         />
       </View>
-      {novaEnabled && beat > MAX_NOVA_STROBE_HZ ? (
+      {nova.connected && beat > MAX_NOVA_STROBE_HZ ? (
         <Text style={styles.novaCap}>
           Light capped at {MAX_NOVA_STROBE_HZ} Hz for safety (audio beat stays {beat.toFixed(1)} Hz).
         </Text>
       ) : null}
 
-      {novaEnabled && novaStatus === 'connected' ? <NovaExplorer nova={novaRef.current} /> : null}
+      {nova.connected ? <NovaExplorer nova={nova} /> : null}
 
       <TouchableOpacity style={[styles.playBtn, playing && styles.stopBtn]} onPress={toggle} activeOpacity={0.85}>
         <Text style={styles.playTxt}>{playing ? '■ Stop' : '▶ Play binaural'}</Text>

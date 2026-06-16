@@ -6,14 +6,19 @@ import { COLORS } from '../theme';
 // Experimental: drive the Nova's 4 LEDs (2 per eye) for custom patterns.
 // Frequency follows the audio beat; this tunes per-eye brightness, the 2nd-LED
 // phase, and duty live. Presets are starting points to discover the mapping.
-export default function NovaExplorer({ nova }) {
+export default function NovaExplorer({ nova, showFrequency = false }) {
   const [open, setOpen] = useState(false);
+  const [freq, setFreq] = useState(10);
   const [lBright, setLBright] = useState(100);
   const [rBright, setRBright] = useState(100);
   const [phase, setPhase] = useState(0);
   const [duty, setDuty] = useState(50);
 
   const send = patch => nova && nova.setSyncedValues(patch);
+  const onFreq = v => {
+    setFreq(v);
+    if (nova) nova.setFrequency(v);
+  };
 
   const onLB = v => {
     setLBright(v);
@@ -81,6 +86,12 @@ export default function NovaExplorer({ nova }) {
         ))}
       </View>
 
+      {showFrequency ? (
+        <>
+          <Text style={styles.label}>Flicker frequency · {freq.toFixed(1)} Hz</Text>
+          <Sld min={0.5} max={13} step={0.5} val={freq} on={onFreq} />
+        </>
+      ) : null}
       <Text style={styles.label}>Left brightness · {Math.round(lBright)}%</Text>
       <Sld min={0} max={100} val={lBright} on={onLB} />
       <Text style={styles.label}>Right brightness · {Math.round(rBright)}%</Text>

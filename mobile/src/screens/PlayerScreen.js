@@ -7,6 +7,8 @@ import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
+import { useNova } from '../nova/NovaProvider';
+import NovaExplorer from '../components/NovaExplorer';
 import { setupPlayer } from '../audio/player';
 
 const fmt = s => {
@@ -22,15 +24,17 @@ const playCountKey = id => `@pulseentrain/playcount/${id}`;
 const defaultIntensityFor = dose => Math.min(9, Math.max(1, ((dose && dose.strength) || 4) + 1));
 
 export default function PlayerScreen({ route, navigation }) {
-  const { id, usePulsetto: wantPulsetto } = route.params;
+  const { id, usePulsetto: wantPulsetto, useNova: wantNova } = route.params;
   const dose = doseById(id);
   const pulsetto = usePulsetto();
+  const nova = useNova();
   const { position, duration } = useProgress(500);
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);
 
   const [intensity, setIntensityVal] = useState(defaultIntensityFor(dose));
   const [volume, setVolume] = useState(1);
+  const [lumi, setLumi] = useState(100);
   const intensityRef = useRef(intensity);
   intensityRef.current = intensity;
 
@@ -90,6 +94,9 @@ export default function PlayerScreen({ route, navigation }) {
         await pulsetto.stopSession();
       } catch (e) {}
     }
+    try {
+      nova.stopStrobe();
+    } catch (e) {}
   };
 
   // ---- load + start on mount ----
@@ -118,6 +125,8 @@ export default function PlayerScreen({ route, navigation }) {
         const cur = parseInt((await AsyncStorage.getItem(k)) || '0', 10) || 0;
         await AsyncStorage.setItem(k, String(cur + 1));
       } catch (e) {}
+
+      if (wantNova && nova.connected) nova.startStrobe();
 
       if (wantPulsetto && !pulsetto.connected) {
         promptNotAttached(); // audio waits for the user's choice
@@ -150,6 +159,7 @@ export default function PlayerScreen({ route, navigation }) {
     if (playbackState?.state === State.Ended && !endedRef.current) {
       endedRef.current = true;
       if (pulsetto.sessionActive) pulsetto.stopSession();
+      if (wantNova && nova.connected) nova.stopStrobe();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbackState]);
@@ -158,12 +168,14 @@ export default function PlayerScreen({ route, navigation }) {
   const togglePlay = async () => {
     if (isPlaying) {
       await TrackPlayer.pause();
+      if (wantNova && nova.connected) nova.stopStrobe();
       if (wantPulsetto && pulsetto.sessionActive) {
         pausedForBreakRef.current = true;
         await pulsetto.setIntensity(0); // mute stim while paused
       }
     } else {
       await TrackPlayer.play();
+      if (wantNova && nova.connected) nova.startStrobe();
       if (pausedForBreakRef.current) {
         pausedForBreakRef.current = false;
         await pulsetto.setIntensity(intensityRef.current); // restore to slider value
@@ -178,6 +190,7 @@ export default function PlayerScreen({ route, navigation }) {
     if (wantPulsetto && !pulsetto.sessionActive && pulsetto.connected) {
       await startStim();
     }
+    if (wantNova && nova.connected) nova.startStrobe();
   };
 
   const stopAndBack = async () => {
@@ -196,6 +209,11 @@ export default function PlayerScreen({ route, navigation }) {
   const onVolume = v => {
     setVolume(v);
     TrackPlayer.setVolume(v);
+  };
+
+  const onLumi = v => {
+    setLumi(v);
+    nova.setMasterBrightness(v / 100);
   };
 
   // ---- render ----
@@ -295,6 +313,24 @@ export default function PlayerScreen({ route, navigation }) {
           thumbTintColor="#fff"
         />
       </View>
+
+      {/* Lumi brightness master + in-session pattern explorer (Nova) */}
+      {wantNova && nova.connected ? (
+        <View style={styles.sliderBlock}>
+          <Text style={styles.sliderLabel}>Lumi brightness · {Math.round(lumi)}%</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={100}
+            value={lumi}
+            onValueChange={onLumi}
+            minimumTrackTintColor={COLORS.accentBlueLight}
+            maximumTrackTintColor={COLORS.bgCardLight}
+            thumbTintColor="#fff"
+          />
+          <NovaExplorer nova={nova} showFrequency />
+        </View>
+      ) : null}
     </ScrollView>
   );
 }

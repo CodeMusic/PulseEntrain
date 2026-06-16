@@ -80,6 +80,7 @@ export class NovaController {
     this.strobing = false;
     this.targetBeat = 8;
     this.values = DEFAULT_VALUES(8);
+    this.master = 1; // master brightness multiplier (0..1)
     this.tickTimer = null;
     this._lastHex = null;
     this.telemetryChar = null;
@@ -229,7 +230,7 @@ export class NovaController {
   // Continuously stream the current frame (~every 250ms) — the device needs the
   // frame streamed to keep cycling. Both eyes ramp toward the target beat (§6).
   startStrobe(beatHz) {
-    this.targetBeat = clampStrobe(beatHz);
+    if (beatHz != null) this.targetBeat = clampStrobe(beatHz);
     this.values = { ...this.values, lFreq: Math.min(2, this.targetBeat), rFreq: Math.min(2, this.targetBeat) };
     if (!this.device || !this.strobeChar) return;
     this.strobing = true;
@@ -244,7 +245,7 @@ export class NovaController {
           : cur;
       this.values.lFreq = ramp(this.values.lFreq);
       this.values.rFreq = ramp(this.values.rFreq);
-      const { b64, hex } = buildFrame(this.values);
+      const { b64, hex } = this._frame();
       if (hex !== this._lastHex) {
         this._lastHex = hex;
         console.log('[Nova]', hex);
@@ -261,8 +262,24 @@ export class NovaController {
   // Explorer: merge per-eye pattern params (brightness / phase / duty) live.
   setSyncedValues(patch) {
     this.values = { ...this.values, ...patch };
+    this._pushFrame();
+  }
+
+  // Master brightness (0..1) scales both eyes uniformly.
+  setMasterBrightness(m) {
+    this.master = Math.min(1, Math.max(0, Number(m) || 0));
+    this._pushFrame();
+  }
+
+  _frame() {
+    const m = this.master;
+    const v = { ...this.values, lLevel: this.values.lLevel * m, rLevel: this.values.rLevel * m };
+    return buildFrame(v);
+  }
+
+  _pushFrame() {
     if (this.strobing && this.strobeChar) {
-      this.strobeChar.writeWithoutResponse(buildFrame(this.values).b64).catch(() => {});
+      this.strobeChar.writeWithoutResponse(this._frame().b64).catch(() => {});
     }
   }
 

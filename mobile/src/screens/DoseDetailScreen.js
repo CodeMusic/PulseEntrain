@@ -4,10 +4,14 @@ import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
 import StrengthBadge from '../components/StrengthBadge';
+import NovaExplorer from '../components/NovaExplorer';
+import { useNova } from '../nova/NovaProvider';
+import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 
 export default function DoseDetailScreen({ route, navigation }) {
   const { id } = route.params;
   const dose = doseById(id);
+  const nova = useNova();
   const [usePulsetto, setUsePulsetto] = useState(true);
 
   if (!dose) {
@@ -27,8 +31,35 @@ export default function DoseDetailScreen({ route, navigation }) {
       );
       return;
     }
-    navigation.navigate('Player', { id: dose.id, usePulsetto });
+    navigation.navigate('Player', { id: dose.id, usePulsetto, useNova: nova.connected });
   };
+
+  const toggleNova = val => {
+    if (val) {
+      Alert.alert(
+        '⚠️ Photosensitivity warning',
+        `The Lumenate Nova flashes light. Flashing light can trigger seizures in people with photosensitive epilepsy. The light is capped at ${MAX_NOVA_STROBE_HZ} Hz. Do not use if you (or anyone nearby who can see it) may be photosensitive, and stop immediately if you feel unwell.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'I understand — connect', onPress: () => nova.connect() },
+        ],
+        { cancelable: true },
+      );
+    } else {
+      nova.disconnect();
+    }
+  };
+
+  const novaSub =
+    nova.status === 'scanning'
+      ? 'Searching for Nova…'
+      : nova.status === 'connected'
+      ? 'Connected — light follows the session'
+      : nova.status === 'notfound'
+      ? 'Not found — is it on and nearby?'
+      : nova.status === 'error'
+      ? 'Connection error'
+      : 'Visual light entrainment';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -52,6 +83,20 @@ export default function DoseDetailScreen({ route, navigation }) {
           thumbColor="#fff"
         />
       </View>
+
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.toggleTitle}>Use Lumenate Nova</Text>
+          <Text style={styles.toggleSub}>{novaSub}</Text>
+        </View>
+        <Switch
+          value={nova.connected}
+          onValueChange={toggleNova}
+          trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }}
+          thumbColor="#fff"
+        />
+      </View>
+      {nova.connected ? <NovaExplorer nova={nova} showFrequency /> : null}
 
       <TouchableOpacity style={styles.startBtn} activeOpacity={0.85} onPress={start}>
         <Text style={styles.startTxt}>Start</Text>

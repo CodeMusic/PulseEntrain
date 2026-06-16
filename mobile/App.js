@@ -12,6 +12,7 @@ import PlayerScreen from './src/screens/PlayerScreen';
 import ManualScreen from './src/screens/ManualScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import { PulsettoProvider } from './src/pulsetto/PulsettoProvider';
+import { NovaProvider } from './src/nova/NovaProvider';
 import { MenuProvider, HeaderMenuButton } from './src/components/Menu';
 
 const Stack = createNativeStackNavigator();
@@ -33,6 +34,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <PulsettoProvider>
+        <NovaProvider>
         <StatusBar barStyle="light-content" />
         <NavigationContainer ref={navigationRef} theme={navTheme}>
           <MenuProvider navigationRef={navigationRef}>
@@ -59,6 +61,7 @@ export default function App() {
             </Stack.Navigator>
           </MenuProvider>
         </NavigationContainer>
+        </NovaProvider>
       </PulsettoProvider>
     </SafeAreaProvider>
   );
