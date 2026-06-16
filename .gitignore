@@ -4,3 +4,7 @@ CLAUDE.md
 **/.DS_Store
 /entrainment_assets
 /mobile/dist
+
+mobile/.expo/
+mobile/ios/
+mobile/android/

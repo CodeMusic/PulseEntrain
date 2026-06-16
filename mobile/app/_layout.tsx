@@ -1,5 +1,7 @@
 import { Stack } from 'one';
 import { Platform } from 'react-native';
+// Side-effect: registers the track-player background service on native (no-op on web).
+import '../src/audio/registerPlaybackService';
 import { Providers } from '../src/Providers';
 import { COLORS } from '../src/theme';
 import { HeaderMenuButton } from '../src/components/Menu';

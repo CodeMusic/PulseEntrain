@@ -12,9 +12,12 @@ export default defineConfig({
       web: {
         defaultRenderMode: 'spa',
       },
-      // NOTE: native (iOS/Android) bundler choice is deferred to the native
-      // phase. Re-enable Metro mode here (native: { bundler: 'metro' }) once the
-      // Expo/Metro native config is in place, so `one dev` web isn't gated on it.
+      // iOS/Android use the battle-tested Metro bundler (One's "Metro mode").
+      // One supplies the Metro + Babel config internally, so no metro.config.js
+      // / babel.config.js is needed in the project.
+      native: {
+        bundler: 'metro',
+      },
     }),
   ],
   resolve: {
