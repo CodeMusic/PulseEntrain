@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import TrackPlayer, { useProgress, usePlaybackState, State } from 'react-native-track-player';
+import TrackPlayer, {
+  useProgress,
+  usePlaybackState,
+  useTrackPlayerEvents,
+  Event,
+  State,
+} from 'react-native-track-player';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
@@ -31,6 +37,7 @@ export default function PlayerScreen({ route, navigation }) {
   const { position, duration } = useProgress(500);
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   const [intensity, setIntensityVal] = useState(defaultIntensityFor(dose));
   const [volume, setVolume] = useState(1);
@@ -51,7 +58,9 @@ export default function PlayerScreen({ route, navigation }) {
   const beginAudio = async () => {
     try {
       await TrackPlayer.play();
-    } catch (e) {}
+    } catch (e) {
+      setLoadError(`Couldn't start audio: ${e?.message || e}`);
+    }
   };
 
   const startStim = async () => {
@@ -107,16 +116,23 @@ export default function PlayerScreen({ route, navigation }) {
         setLoading(false);
         return;
       }
-      await setupPlayer();
-      await TrackPlayer.reset();
-      await TrackPlayer.add({
-        id: dose.id,
-        url: audio,
-        title: dose.name,
-        artist: dose.category,
-        artwork: imageSource(dose.image) || undefined,
-      });
-      await TrackPlayer.setVolume(1);
+      try {
+        await setupPlayer();
+        await TrackPlayer.reset();
+        await TrackPlayer.add({
+          id: dose.id,
+          url: audio,
+          title: dose.name,
+          artist: dose.category,
+          artwork: imageSource(dose.image) || undefined,
+        });
+        await TrackPlayer.setVolume(1);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError(`Couldn't load this track: ${e?.message || e}`);
+        setLoading(false);
+        return;
+      }
       if (cancelled) return;
       setLoading(false);
 
@@ -153,6 +169,11 @@ export default function PlayerScreen({ route, navigation }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulsetto.connected]);
+
+  // Async playback errors (bad/unreachable asset, codec issue) surface here.
+  useTrackPlayerEvents([Event.PlaybackError], event => {
+    setLoadError(`Playback error: ${event?.message || event?.code || 'unknown'}`);
+  });
 
   // Natural end → stop the stim.
   useEffect(() => {
@@ -265,6 +286,12 @@ export default function PlayerScreen({ route, navigation }) {
         <Text style={styles.time}>{fmt(duration)}</Text>
       </View>
 
+      {loadError ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTxt}>{loadError}</Text>
+        </View>
+      ) : null}
+
       {loading ? (
         <ActivityIndicator color={COLORS.accentBlue} style={{ marginTop: 28 }} />
       ) : (
@@ -356,6 +383,8 @@ const styles = StyleSheet.create({
   sliderLabel: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 4 },
   slider: { width: '100%', height: 40 },
   notBundled: { color: COLORS.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 16 },
+  errorBox: { marginTop: 20, padding: 14, borderRadius: 12, backgroundColor: 'rgba(255,80,80,0.12)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.4)' },
+  errorTxt: { color: '#ff8a8a', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   secondaryBtn: { marginTop: 24, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 24, backgroundColor: COLORS.bgCard },
   secondaryTxt: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
 });
