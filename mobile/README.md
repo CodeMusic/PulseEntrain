@@ -1,142 +1,71 @@
-# Pulse-Libre Mobile Application
+# PulseEntrain (mobile)
 
-A React Native application to control the [Pulsetto device](https://juraj.bednar.io/pulsetto) via Bluetooth Low Energy (BLE). The app allows you to set the strength of the device, start a timer, and monitor battery and charging status.
+The PulseEntrain **player** — the main, user-facing app. Browse the session catalog, play a
+session, and pair the **Pulsetto** (vagus nerve) and **Lumenate Nova** (light) devices over BLE.
+Built on [One](https://onestack.dev/) so one codebase targets **web + iOS + Android**.
 
-This mobile app is designed for both Android and iOS platforms and mirrors the functionality of the desktop app available [here](https://github.com/jooray/pulse-libre-desktop).
+See the platform overview in the [root README](../README.md), the authoring tool in
+[../desktop/README.md](../desktop/README.md), and the session contract in
+[../docs/SESSION_FORMAT.md](../docs/SESSION_FORMAT.md).
 
-## Screenshot
+## What it does
 
-![Pulse-Libre Mobile Screenshot](images/screenshot.png)
+- **Catalog** — browse 96 sessions by category, with cover art, strength, and description.
+- **Player** — plays both session formats:
+  - **Legacy `.imed`** → streams its bundled MP3 (via `react-native-track-player`).
+  - **`.imedx`** (self-contained) → **synthesized in real time** from the scene timeline
+    (carrier ± beat, interpolated) plus the noise bed, by
+    [`SessionSynth`](src/audio/sessionSynth.js) driving [`BinauralEngine`](src/audio/binauralEngine.js)
+    — the embedded base64 cover renders directly. No MP3 needed.
+- **Manual mode** — dial a beat frequency + noise bed live (same `BinauralEngine`).
+- **Devices (BLE)** — **Pulsetto** intensity tracks the session; **Lumenate Nova** strobes in
+  sync with the live beat (clamped to 13 Hz). Both are optional; binaural-only works on any headphones.
 
-## Installation on Android
+## Architecture
 
-I don't plan on releasing through Play Store nor F-Droid. You can get PulseLibre through any of the following:
+- **One** with file-based routing in `app/`; web is served by Vite, native by **One's Metro mode**
+  (RN 0.83). Native-only modules (BLE, track-player, audio-api) are stubbed for web in
+  `web-stubs/` (the audio stub maps to real Web Audio, so synthesis works in the browser too).
+- **Catalog** is generated from `../entrainment_assets/` by `scripts/sync-catalog.cjs` into
+  `src/catalog/` (`catalog.json` + bundled image/audio maps). A `.imedx` supersedes a same-named
+  legacy `.imed`. Run `npm run sync-catalog` (or it runs via `predev`).
 
-<a href="https://github.com/jooray/PulseLibre"><img src="images/badge_obtainium.png" alt="Get it on Obtainium" height="80"></a>
-<a href="https://zapstore.dev/apps/com.pulselibre"><img src="images/badge_zapstore.png" alt="Get it on Zapstore" height="80"></a>
-<a href="https://github.com/jooray/PulseLibre/releases/latest"><img src="images/badge_download_apk.png" alt="Download APK" height="80"></a>
+## Run
 
-- **Obtainium**: add `https://github.com/jooray/PulseLibre` as a source to get automatic updates from GitHub releases.
-- **Zapstore**: install from [zapstore.dev/apps/com.pulselibre](https://zapstore.dev/apps/com.pulselibre).
-- **Direct APK**: grab the latest `app-release.apk` from the [releases page](https://github.com/jooray/PulseLibre/releases/latest).
-
-## Features
-
-- Scan and connect to [Pulsetto devices](https://pulsetto.myshopify.com/products/meet-pulsetto-v3?sca_ref=6511019.cCZ7LMhOmo) automatically.
-- Set strength levels from 1 to 9.
-- Start and stop a timer (default 4 minutes).
-- Display battery level and charging status.
-- Compatible with Android and iOS devices.
-- Does not require Internet permission. No tracking. It needs location and bluetooth permission - location is because Bluetooth scanning could reveal your location, so scanning does not work otherwise. But since there is no Internet permission, the app can't do anything with the location anyway.
-
-## Protocol
-
-I reverse engineered the protocol of both Pulsetto Lite and Fit devices. There
-is no difference between the different session types in the wave they produce,
-the only difference is recommended length and the small fact that the Sleep
-program starts with the LED dimmed. There are no session type settings in the
-app precisely for this reason - just set the time and intensity and you are
-good to go.
-
-For those interested, the full protocol documentation is
-[here](https://github.com/jooray/pulse-libre-desktop/blob/main/docs/PULSETTO_PROTOCOL.md).
-
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) version 18 or higher.
-- [React Native CLI](https://reactnative.dev/docs/environment-setup) for native build capabilities.
-- Android Studio and/or Xcode for compiling and running the app.
-- A physical or virtual Android/iOS device for testing.
-
-## Installation
-
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/jooray/PulseLibre.git
-   cd PulseLibre
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   npm install
-   ```
-
-3. **Configure your environment**
-   - Follow the [React Native CLI environment setup guide](https://reactnative.dev/docs/environment-setup) to configure your machine for building Android and iOS apps.
-   - For Android, ensure Android Studio is installed and properly configured.
-   - For iOS, ensure Xcode is installed (macOS only).
-
-## Running the Application
-
-### Android
+**Prerequisites:** Node 18+, and for native: Xcode / Android Studio + a device or simulator.
 
 ```bash
-npx react-native run-android   
+npm install
 ```
 
-### iOS (macOS only)
-
-1. **Install CocoaPods dependencies**:
-   ```bash
-   cd ios
-   pod install
-   cd ..
-   ```
-
-3. **Compile and run the app on an iOS simulator/device**:
+**Web:**
 ```bash
-npx react-native run-ios
+npm run dev            # One dev server (Vite) — opens the app in the browser
 ```
 
-## Usage
+**Native (iOS/Android):** the JS bundle **must** be served by One's bundler, not `expo start` /
+`react-native start`. The reliable loop:
 
-- Upon starting, the app will attempt to scan and connect to a Pulsetto device.
-- If a device is not found, a "Scan" button will appear. Press it to scan again.
-- Once connected, battery level and charging status will be displayed.
-- Use the slider to set the desired strength (1-9).
-- Press the "Start" button to begin the timer and activate the device.
-- Press the "Stop" button to stop the device and the timer.
-- While the device is running, you can adjust the strength slider to change the intensity without affecting the timer.
+1. Build & install once (Xcode, or `xcrun devicectl device install app …` — avoids the
+   `@expo/cli` lockdownd issue on recent iOS).
+2. Serve JS: `ONE_METRO_MODE=1 npx one dev`
+3. Launch the app on the device; it loads the bundle over the LAN.
 
-## Why? Backstory
+`npm run ios` / `npm run ios:device` wrap the build+serve, but install can fail on iOS 26.x — fall
+back to the Xcode/devicectl + `one dev` flow above.
 
-I was stranded in a car in a storm. The storm took out all the cell towers. With nothing
-to do, I decided to do some biohacking, chill out, use some Near Infrared Light, and
-do some vagal stimulation to remove the stress of the freaking wind that was shaking my car
-and throwing over reusable bathrooms around me.
+> ⚠️ Serving native JS via `expo start`/`react-native start` produces a broken bundle (One's Babel
+> transform isn't applied). Always use One's bundler.
 
-I turned the device on, but it needed to log in and go to the internet. Which was, of course,
-not working because of the storm.
+## Notes
 
-Why does an electric nerve stimulator need an account and access to the Internet? I sighed.
-A few moments later, I wanted to learn about BLE hacking and reverse engineering. The code
-was written mostly by ChatGPT anyway, but I did some nice reverse engineering of the protocol.
-The result is this micro app. Have fun.
+- **Permissions:** Bluetooth (+ location on Android, required for BLE scanning). No internet
+  permission is needed for playback.
+- **Known follow-up:** the catalog still bundles ~4.2 GB of MP3s for legacy `.imed` sessions;
+  `.imedx` sessions carry no audio. Streaming (or fully moving to `.imedx`) is the path to a
+  shippable build — see the root README roadmap.
 
-## Information about Pulsetto Device
+## Safety
 
-The device's original app has multiple modes (Stress, Pain, Burnout, ...), but
-they are actually all the same, just with different recommendations on how often to do
-them and different program lengths. There is no difference in what the device does.
-
-The only thing that you set on your device is the strength level (1-9), and the
-app starts a timer.
-
-Get your [Pulsetto device](https://juraj.bednar.io/pulsetto).
-
-## Related Projects
-
-For a desktop application with similar functionality, check out the [Pulsetto Desktop App](https://github.com/jooray/pulse-libre-desktop). Compatible with Windows, macOS, and Linux.
-
-Enjoy biohacking and take control of your Pulsetto device on mobile! 🚀
-
-## Note on building the APK
-
-```bash
-cd android
-./gradlew clean assembleRelease
-```
-
-This will generate a release APK at: android/app/build/outputs/apk/release/app-release.apk
+Binaural beats need **stereo headphones**. The Nova uses flickering light — see the platform
+[Safety](../README.md#safety) notes (photosensitivity).

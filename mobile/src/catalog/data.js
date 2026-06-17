@@ -7,8 +7,18 @@ import { audio } from './audio';
 export const CATEGORIES = catalog.categories;
 export const DOSES = catalog.doses;
 
-export const imageSource = name => (name && images[name]) || null;
+// A cover is either a bundled filename (legacy) or a base64 data URI (.imedx,
+// self-contained). Image accepts {uri} or a require() ref interchangeably.
+export const imageSource = name => {
+  if (!name) return null;
+  if (typeof name === 'string' && name.startsWith('data:')) return { uri: name };
+  return images[name] || null;
+};
 export const audioSource = name => (name && audio[name]) || null;
+
+// A dose is self-contained (.imedx) when it carries a programmatic scene
+// timeline instead of a bundled/streamed MP3.
+export const isSynthDose = dose => !!(dose && dose.format === 'imedx' && Array.isArray(dose.scenes));
 
 export const dosesByCategory = cat => DOSES.filter(d => d.category === cat);
 export const doseById = id => DOSES.find(d => d.id === id);

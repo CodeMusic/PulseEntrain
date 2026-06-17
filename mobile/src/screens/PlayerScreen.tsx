@@ -10,12 +10,13 @@ import TrackPlayer, {
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
-import { doseById, imageSource, audioSource } from '../catalog/data';
+import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useNova } from '../nova/NovaProvider';
 import NovaExplorer from '../components/NovaExplorer';
 import { setupPlayer } from '../audio/player';
+import { SessionSynth } from '../audio/sessionSynth';
 
 const fmt = s => {
   if (!s || s < 0) s = 0;
@@ -34,10 +35,18 @@ export default function PlayerScreen({ route, navigation }) {
   const dose = doseById(id);
   const pulsetto = usePulsetto();
   const nova = useNova();
-  const { position, duration } = useProgress(500);
+  const tp = useProgress(500);
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+
+  // Self-contained (.imedx) doses are synthesized from their scene timeline
+  // instead of streamed from an MP3; they keep their own transport state.
+  const isSynth = isSynthDose(dose);
+  const synthRef = useRef(null);
+  const [synthPos, setSynthPos] = useState(0);
+  const [synthDur, setSynthDur] = useState((dose && dose.lengthSeconds) || 0);
+  const [synthPlaying, setSynthPlaying] = useState(false);
 
   const [intensity, setIntensityVal] = useState(defaultIntensityFor(dose));
   const [volume, setVolume] = useState(1);
@@ -51,13 +60,22 @@ export default function PlayerScreen({ route, navigation }) {
   const connectedRef = useRef(pulsetto.connected);
   connectedRef.current = pulsetto.connected;
 
-  const isPlaying = playbackState?.state === State.Playing;
+  const tpPlaying = playbackState?.state === State.Playing;
+  const isPlaying = isSynth ? synthPlaying : tpPlaying;
+  const position = isSynth ? synthPos : tp.position;
+  const duration = isSynth ? synthDur : tp.duration;
   const audio = dose ? audioSource(dose.audio) : null;
+  const playable = isSynth || !!audio; // a synth dose needs no bundled MP3
 
   // ---- helpers ----
   const beginAudio = async () => {
     try {
-      await TrackPlayer.play();
+      if (isSynth) {
+        synthRef.current?.play();
+        setSynthPlaying(true);
+      } else {
+        await TrackPlayer.play();
+      }
     } catch (e) {
       setLoadError(`Couldn't start audio: ${e?.message || e}`);
     }
@@ -95,9 +113,15 @@ export default function PlayerScreen({ route, navigation }) {
 
   const teardown = async () => {
     pendingRetryRef.current = false;
-    try {
-      await TrackPlayer.reset();
-    } catch (e) {}
+    if (isSynth) {
+      try {
+        synthRef.current?.stop();
+      } catch (e) {}
+    } else {
+      try {
+        await TrackPlayer.reset();
+      } catch (e) {}
+    }
     if (pulsetto.sessionActive) {
       try {
         await pulsetto.stopSession();
@@ -112,6 +136,44 @@ export default function PlayerScreen({ route, navigation }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // ---- self-contained (.imedx): synthesize from the scene timeline ----
+      if (isSynth) {
+        const sd = dose as any; // synth-only fields (scenes/carrier/noise) live on .imedx doses
+        const synth = new SessionSynth({
+          scenes: sd.scenes,
+          carrier: sd.carrier,
+          duration: sd.lengthSeconds,
+          noise: sd.noise,
+          volume: 1,
+          onTick: (pos, beat) => {
+            setSynthPos(pos);
+            if (wantNova && nova.connected) nova.setFrequency(beat);
+          },
+          onEnded: () => {
+            setSynthPlaying(false);
+            if (pulsetto.sessionActive) pulsetto.stopSession();
+            if (wantNova && nova.connected) nova.stopStrobe();
+          },
+        });
+        synthRef.current = synth;
+        setSynthDur(synth.duration);
+        if (cancelled) return;
+        setLoading(false);
+        try {
+          const k = playCountKey(dose.id);
+          const cur = parseInt((await AsyncStorage.getItem(k)) || '0', 10) || 0;
+          await AsyncStorage.setItem(k, String(cur + 1));
+        } catch (e) {}
+        if (wantNova && nova.connected) nova.startStrobe(synth.beatNow());
+        if (wantPulsetto && !pulsetto.connected) {
+          promptNotAttached();
+        } else {
+          if (wantPulsetto) await startStim();
+          await beginAudio();
+        }
+        return;
+      }
+
       if (!audio) {
         setLoading(false);
         return;
@@ -188,15 +250,25 @@ export default function PlayerScreen({ route, navigation }) {
   // ---- controls ----
   const togglePlay = async () => {
     if (isPlaying) {
-      await TrackPlayer.pause();
+      if (isSynth) {
+        synthRef.current?.pause();
+        setSynthPlaying(false);
+      } else {
+        await TrackPlayer.pause();
+      }
       if (wantNova && nova.connected) nova.stopStrobe();
       if (wantPulsetto && pulsetto.sessionActive) {
         pausedForBreakRef.current = true;
         await pulsetto.setIntensity(0); // mute stim while paused
       }
     } else {
-      await TrackPlayer.play();
-      if (wantNova && nova.connected) nova.startStrobe();
+      if (isSynth) {
+        synthRef.current?.play();
+        setSynthPlaying(true);
+      } else {
+        await TrackPlayer.play();
+      }
+      if (wantNova && nova.connected) nova.startStrobe(isSynth ? synthRef.current?.beatNow() : undefined);
       if (pausedForBreakRef.current) {
         pausedForBreakRef.current = false;
         await pulsetto.setIntensity(intensityRef.current); // restore to slider value
@@ -206,12 +278,21 @@ export default function PlayerScreen({ route, navigation }) {
 
   const restart = async () => {
     endedRef.current = false;
-    await TrackPlayer.seekTo(0);
-    await TrackPlayer.play();
+    if (isSynth) {
+      synthRef.current?.seek(0);
+      setSynthPos(0);
+      if (!synthRef.current?.playing) {
+        synthRef.current?.play();
+        setSynthPlaying(true);
+      }
+    } else {
+      await TrackPlayer.seekTo(0);
+      await TrackPlayer.play();
+    }
     if (wantPulsetto && !pulsetto.sessionActive && pulsetto.connected) {
       await startStim();
     }
-    if (wantNova && nova.connected) nova.startStrobe();
+    if (wantNova && nova.connected) nova.startStrobe(isSynth ? synthRef.current?.beatNow() : undefined);
   };
 
   const stopAndBack = async () => {
@@ -229,7 +310,8 @@ export default function PlayerScreen({ route, navigation }) {
 
   const onVolume = v => {
     setVolume(v);
-    TrackPlayer.setVolume(v);
+    if (isSynth) synthRef.current?.setVolume(v);
+    else TrackPlayer.setVolume(v);
   };
 
   const onLumi = v => {
@@ -246,7 +328,7 @@ export default function PlayerScreen({ route, navigation }) {
     );
   }
 
-  if (!audio) {
+  if (!playable) {
     return (
       <View style={[styles.container, styles.center]}>
         <Text style={styles.title}>{dose.name}</Text>

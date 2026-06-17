@@ -37,10 +37,13 @@ Generated sessions can be **saved and reused** later.
 | Pulsetto control (intensity, timer, status) | ✅ Available |
 | Binaural-beat audio playback | ✅ Available |
 | Advanced pulse-envelope mode (desktop) | ✅ Available |
-| Program catalog | 🛠️ In progress |
-| Manual mode (frequency + noise + Pulsetto) | 🛠️ In progress |
-| AI-generated sessions (+ optional generated music, saveable) | 🔜 Planned |
+| Program catalog (96 sessions) | ✅ Available (mobile) |
+| Manual mode (frequency + noise + Pulsetto / Nova) | ✅ Available (mobile) |
+| **Admin** authoring app (extract / create / edit sessions) | ✅ Available (desktop) |
+| Self-contained `.imedx` sessions (programmatic beats + embedded art) | ✅ Available |
 | **Lumenate Nova** visual (light) entrainment | ✅ Available (mobile) |
+| AI-generated sessions (n8n + image gen, saveable) | 🔜 Planned |
+| Audio streaming (replace bundled MP3s) | 🔜 Planned |
 
 ---
 
@@ -81,35 +84,23 @@ Rhythmic flickering light can drive a brain-rhythm response of its own (*photic 
 
 ---
 
-## The apps
+## The two apps
 
-- **Desktop** (`main.py`) — a [Kivy](https://kivy.org/) app that controls the Pulsetto over Bluetooth LE: intensity, session timer, battery/charging status, and an **Advanced** pulse-envelope mode for rhythmic stimulation patterns.
-- **Mobile** (`mobile/`) — a React Native app (PulseEntrain) — the primary client as the platform grows. Beyond Pulsetto, the mobile app also drives the **Lumenate Nova** light glasses over BLE, synchronized to the session beat — available in both the program catalog player and Manual mode.
+PulseEntrain is two apps built around one shared **session format**:
 
-The Pulsetto and Lumenate Nova BLE protocols were both reverse-engineered; full details are in [docs/PULSETTO_PROTOCOL.md](docs/PULSETTO_PROTOCOL.md) and [docs/LUMENATE_NOVA_PROTOCOL.md](docs/LUMENATE_NOVA_PROTOCOL.md).
+- **[Admin](desktop/README.md)** — `desktop/` — a [Kivy](https://kivy.org/) desktop app for **authoring content**: extract a rendered binaural MP3 into its components, or create/edit a session on a timeline (beat curve, noise, cover, duration), preview it live, and save a self-contained `.imedx`. It also still includes the original Pulsetto device controller. → **[desktop/README.md](desktop/README.md)**
+- **[Main app](mobile/README.md)** — `mobile/` — the cross-platform **player** (web + iOS + Android via [One](https://onestack.dev/)). Browse the catalog, play sessions, and pair **Pulsetto** (vagus nerve) and **Lumenate Nova** (light) over BLE, plus a Manual mode. → **[mobile/README.md](mobile/README.md)**
 
----
-
-## Running the desktop app
-
-**Prerequisites:** Python 3.11+ and the [Poetry](https://python-poetry.org/docs/#installation) package manager.
-
-```bash
-poetry install
-poetry run python main.py
-```
-
-On launch it scans for a Pulsetto device. Once connected, set the intensity (1–9), choose a duration, and press **Start**. Switch to the **Advanced** tab to shape the stimulation into rhythmic pulse patterns.
+The two BLE protocols were reverse-engineered: [docs/PULSETTO_PROTOCOL.md](docs/PULSETTO_PROTOCOL.md), [docs/LUMENATE_NOVA_PROTOCOL.md](docs/LUMENATE_NOVA_PROTOCOL.md).
 
 ---
 
-## Content library
+## Session format
 
-Entrainment programs live in `entrainment_assets/`, organized by category. Each track ships with:
+Sessions live in `entrainment_assets/` and are described by JSON — one shared contract for the Admin, the apps, and (later) AI generation. Full spec: **[docs/SESSION_FORMAT.md](docs/SESSION_FORMAT.md)** + the JSON Schema in [docs/session.schema.json](docs/session.schema.json).
 
-- the audio file,
-- a cover image, and
-- an `.imed` metadata file (JSON) holding its name, length, description, strength, your personal rating, and play count.
+- **Legacy `.imed`** — flat metadata + a bundled MP3 and cover image.
+- **`.imedx`** *(new, self-contained)* — a programmatic **scene timeline** (beat/carrier over time), a sample-free **noise bed**, and the cover **embedded as base64** — no separate audio/image files. The mobile app synthesizes these in real time; the Admin authors them (and converts legacy `.imed` on open).
 
 ---
 

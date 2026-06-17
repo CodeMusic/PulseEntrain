@@ -43,6 +43,12 @@ const BUNDLE_ALL = process.env.SYNC_AUDIO_SUBSET !== '1';
 const BUNDLE_LIMIT = process.env.SYNC_AUDIO_LIMIT ? parseInt(process.env.SYNC_AUDIO_LIMIT, 10) : null;
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const fmtLen = sec => {
+  if (sec == null) return '';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
 
 function rmrf(dir) {
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
@@ -74,16 +80,58 @@ function main() {
   const imageEntries = []; // [filename]
   const audioEntries = []; // [filename]
   let missingImages = 0;
+  let imedxCount = 0;
 
   for (const category of categories) {
     const catDir = path.join(ASSETS_DIR, category);
-    const imeds = fs.readdirSync(catDir).filter(f => f.endsWith('.imed')).sort();
+    // Group by base name; a self-contained .imedx supersedes a legacy .imed.
+    const byBase = {};
+    for (const f of fs.readdirSync(catDir)) {
+      if (f.endsWith('.imedx')) {
+        const b = path.basename(f, '.imedx');
+        (byBase[b] = byBase[b] || {}).imedx = f;
+      } else if (f.endsWith('.imed')) {
+        const b = path.basename(f, '.imed');
+        (byBase[b] = byBase[b] || {}).imed = f;
+      }
+    }
 
-    for (const imedFile of imeds) {
-      const meta = JSON.parse(fs.readFileSync(path.join(catDir, imedFile), 'utf8'));
-      const base = path.basename(imedFile, '.imed');
+    for (const base of Object.keys(byBase).sort()) {
+      const entry = byBase[base];
       const key = `${category}/${base}`;
       const id = slug(key); // safe filename base — no spaces/+/& (Metro-friendly)
+
+      // ---- self-contained .imedx: programmatic beats + embedded base64 image ----
+      if (entry.imedx) {
+        const j = JSON.parse(fs.readFileSync(path.join(catDir, entry.imedx), 'utf8'));
+        const meta = j.meta || {};
+        const beds = (j.audio && j.audio.beds) || [];
+        const noiseBed = beds.find(b => b.source === 'noise');
+        const binaural = (j.audio && j.audio.binaural) || {};
+        catalog.push({
+          id,
+          category,
+          name: meta.name || base,
+          strength: meta.strength ?? null,
+          strengthLabel: meta.strengthLabel || '',
+          lengthSeconds: meta.durationSec ?? null,
+          lengthDisplay: fmtLen(meta.durationSec),
+          description: meta.description || '',
+          image: meta.image || null, // base64 data URI (self-contained) or null
+          audio: null,
+          bundledAudio: false,
+          format: 'imedx',
+          scenes: (j.entrainment && j.entrainment.scenes) || [],
+          carrier: binaural.carrierHz ?? 200,
+          noise: noiseBed ? noiseBed.type : 'none',
+          noiseLevel: noiseBed ? noiseBed.level ?? 0.25 : 0,
+        });
+        imedxCount++;
+        continue;
+      }
+
+      // ---- legacy .imed: bundled mp3 + jpg references ----
+      const meta = JSON.parse(fs.readFileSync(path.join(catDir, entry.imed), 'utf8'));
 
       // image (always bundled if present)
       const imgSrc = path.join(catDir, `${base}.jpg`);
@@ -123,6 +171,7 @@ function main() {
         image, // key into images.js (or null)
         audio, // key into audio.js (or null)
         bundledAudio,
+        format: 'legacy',
       });
     }
   }
@@ -158,6 +207,7 @@ function main() {
   const mode = BUNDLE_ALL ? 'all' : BUNDLE_LIMIT != null ? `limit ${BUNDLE_LIMIT}` : 'curated subset';
   const list = audioEntries.length <= 12 ? ` -> ${audioEntries.join(', ')}` : '';
   console.log(`Audio bundled (${mode}): ${audioEntries.length}${list}`);
+  if (imedxCount) console.log(`Self-contained .imedx doses: ${imedxCount}`);
 }
 
 function rmrf_outputs() {
