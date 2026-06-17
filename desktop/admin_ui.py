@@ -36,6 +36,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import FadeTransition, Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
+from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex as hexcolor
@@ -48,6 +49,11 @@ COLORS = {
 }
 NOISE_CAP_HZ = 13.0
 BEAT_MAX = 45.0
+NOISE_OPTIONS = ["none", "white", "pink", "brown", "blue", "violet", "grey"]
+
+
+def slugify(name):
+    return "".join(ch if ch.isalnum() else "_" for ch in str(name).lower()).strip("_") or "session"
 
 
 def C(key):
@@ -182,8 +188,8 @@ def save_file(on_save, default_name="session.imed", title="Save .imed"):
         s = chooser.selection[0] if chooser.selection else chooser.path
         target = os.path.dirname(s) if os.path.isfile(s) else s
         name = name_ti.text.strip() or default_name
-        if not name.endswith(".imed"):
-            name += ".imed"
+        if not name.endswith((".imed", ".imedx")):
+            name += ".imedx"
         popup.dismiss()
         on_save(os.path.join(target, name))
     save.bind(on_release=do)
@@ -470,6 +476,34 @@ def blank_imed():
     }
 
 
+def legacy_to_imed(legacy):
+    """Map a legacy schema_version:1 .imed (mp3/image references + metadata) into
+    the v2 model. Scenes/noise are filled later by analyzing the referenced MP3;
+    the referenced image is embedded by the caller."""
+    u = legacy.get("user", {}) or {}
+    return {
+        "formatVersion": 2,
+        "id": slugify(legacy.get("name", "session")),
+        "meta": {
+            "name": legacy.get("name", "Untitled"),
+            "description": legacy.get("description"),
+            "category": legacy.get("category"),
+            "strength": legacy.get("strength"),
+            "strengthLabel": legacy.get("strength_label"),
+            "durationSec": legacy.get("length_seconds", 0) or 0,
+            "image": None,
+            "rating": u.get("rating"),
+            "playCount": u.get("play_count", 0),
+        },
+        "generation": {"source": "binaural_decompose", "legacy": True,
+                       "createdAt": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+        "entrainment": {"ramp": "linear", "scenes": []},
+        "audio": {"binaural": {"carrierHz": 200, "follow": "beat"}, "beds": [], "masterVolume": 1.0},
+        "nova": {"mode": "follow", "maxHz": 13, "brightness": 1.0},
+        "pulsetto": {"enabled": False, "follow": "scenes", "intensityClamp": [1, 9]},
+    }
+
+
 class DoseScreen(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -511,6 +545,18 @@ class DoseScreen(Screen):
 
         dbox, self.f_desc = labelled_field("Description", multiline=True)
         root.add_widget(dbox)
+
+        # --- noise bed (structured, not stored in the description) ---
+        nrow = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
+        nrow.add_widget(Label(text="Noise", color=C("text_secondary"), font_size=sp(12),
+                             size_hint_x=None, width=dp(64), halign="left", valign="middle"))
+        self.noise_spin = Spinner(text="none", values=NOISE_OPTIONS, size_hint_x=None, width=dp(160),
+                                  background_normal="", background_color=C("bg_card_light"),
+                                  color=C("text_primary"), font_size=sp(14))
+        self.noise_spin.bind(text=lambda _, v: self._set_noise(v))
+        nrow.add_widget(self.noise_spin)
+        nrow.add_widget(Widget())
+        root.add_widget(nrow)
 
         # --- graph + edit controls ---
         gtop = BoxLayout(size_hint_y=None, height=dp(30), spacing=dp(10))
@@ -587,10 +633,23 @@ class DoseScreen(Screen):
         self.f_slabel.text = m.get("strengthLabel") or ""
         self.s_slider.value = m.get("strength") or 4
         self.cover.texture = texture_from_image(m.get("image"))
+        beds = imed.setdefault("audio", {}).setdefault("beds", [])
+        ntype = next((b.get("type") for b in beds if b.get("source") == "noise"), "none")
+        self.noise_spin.text = ntype or "none"
         scenes = imed.setdefault("entrainment", {}).setdefault("scenes", [])
         self.graph.load(scenes, m.get("durationSec"))
         self._set_edit(False)
         self.status.text = status
+
+    def _set_noise(self, t):
+        if self.imed is None:
+            return
+        beds = self.imed.setdefault("audio", {}).setdefault("beds", [])
+        existing = next((b for b in beds if b.get("source") == "noise"), None)
+        level = existing.get("level", 0.25) if existing else 0.25
+        beds[:] = [b for b in beds if b.get("source") != "noise"]
+        if t and t != "none":
+            beds.append({"source": "noise", "type": t, "level": level})
 
     def load_blank(self):
         self.load_imed(blank_imed(), status="New session — Edit the graph, then Save.")
@@ -669,9 +728,9 @@ class DoseScreen(Screen):
         if not self.imed:
             return
         imed = self._collect()
-        slug = "".join(ch if ch.isalnum() else "_" for ch in imed["meta"]["name"].lower()).strip("_") or "session"
+        slug = slugify(imed["meta"]["name"])
         imed["id"] = slug
-        save_file(self._write, default_name=f"{slug}.imed")
+        save_file(self._write, default_name=f"{slug}.imedx")
 
     def _write(self, path):
         try:
@@ -738,16 +797,62 @@ class AdminRoot(BoxLayout):
         self.dose.load_blank()
         self._to_dose()
 
+    @staticmethod
+    def _is_legacy(data):
+        return data.get("schema_version") == 1 or ("files" in data and "entrainment" not in data)
+
     def _open(self):
         def picked(path):
             try:
                 with open(path) as fh:
-                    imed = json.load(fh)
-                self.dose.load_imed(imed, status=f"Opened {os.path.basename(path)}")
-                self._to_dose()
+                    data = json.load(fh)
             except Exception as e:
-                self.dose.load_imed(self.dose.imed or blank_imed(), status=f"[!] open: {e}")
-        choose_file(picked, filters=["*.imed", "*.json"], title="Open a .imed session")
+                self.dose.status.text = f"[!] open: {e}"
+                return
+            self._to_dose()
+            if self._is_legacy(data):
+                self._open_legacy(data, os.path.dirname(path), os.path.basename(path))
+            else:
+                self.dose.load_imed(data, status=f"Opened {os.path.basename(path)}")
+        choose_file(picked, filters=["*.imedx", "*.imed", "*.json"],
+                    title="Open a session (.imedx / legacy .imed)")
+
+    def _open_legacy(self, legacy, base, fname):
+        imed = legacy_to_imed(legacy)
+        files = legacy.get("files") or {}
+        img = files.get("image")
+        if img and os.path.isfile(os.path.join(base, img)):
+            try:
+                imed["meta"]["image"] = encode_image_data_uri(os.path.join(base, img))
+            except Exception:
+                pass
+        audio = files.get("audio")
+        mp3 = os.path.join(base, audio) if audio else None
+        if mp3 and os.path.isfile(mp3):
+            self.dose.show_loading(f"Analyzing {os.path.basename(mp3)}…")
+
+            def work():
+                try:
+                    from engine.binaural_decompose import analyze, spec_to_dict_v2
+                    spec = analyze(mp3, name=imed["meta"]["name"])
+                    self._legacy_done(imed, spec_to_dict_v2(spec), None)
+                except Exception as e:
+                    self._legacy_done(imed, None, f"{type(e).__name__}: {e}")
+            threading.Thread(target=work, daemon=True).start()
+        else:
+            self.dose.load_imed(imed, status=f"Legacy {fname} — no audio found; add beats via Edit.")
+
+    @mainthread
+    def _legacy_done(self, imed, analyzed, err):
+        self.dose.hide_loading()
+        if analyzed:
+            imed["entrainment"] = analyzed["entrainment"]
+            imed["audio"]["beds"] = analyzed["audio"]["beds"]
+            imed["audio"]["binaural"] = analyzed["audio"]["binaural"]
+            status = "Converted legacy .imed → audio analyzed. Save as .imedx."
+        else:
+            status = f"Legacy converted, but audio analysis failed: {err}"
+        self.dose.load_imed(imed, status=status)
 
     def _extract(self):
         def picked(path):

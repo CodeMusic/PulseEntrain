@@ -364,8 +364,7 @@ def spec_to_dict_v2(spec):
             "description": (
                 f"Decomposed from audio: {len(scenes)} scene(s), "
                 f"beat {min(beats):.2f}-{max(beats):.2f} Hz"
-                + (f", carrier ~{carrier_med:.0f} Hz" if carrier_med else "")
-                + f", {gn['color']} noise."
+                + (f", carrier ~{carrier_med:.0f} Hz." if carrier_med else ".")
             ),
             "category": None,     # not derivable from audio
             "strength": None,     # author/n8n decides (1-7)

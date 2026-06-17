@@ -140,3 +140,16 @@ the Admin dropdowns, and the n8n prompt all read from.
 - **Studio Create** authors all axes on the timeline canvas.
 - **n8n** emits `meta` + a `scenes` timeline + bed selections as structured output that
   must validate against the schema.
+
+## File extensions & legacy
+
+- **`.imedx`** — a self-contained v2 session (programmatic beats + base64 image). This
+  is what the Admin "Save" writes and what new content uses.
+- **`.imed`** — same v2 JSON (the extension is interchangeable for new files), **and**
+  the **legacy** format: `schema_version: 1` with `files.audio` / `files.image`
+  references and flat metadata (`length_seconds`, `strength_label`, `user.rating`, …).
+  The Admin auto-converts a legacy `.imed` on open: it maps the metadata, embeds the
+  referenced image as base64, and analyzes the referenced MP3 to recover the `scenes`
+  and noise bed — then you Save it as `.imedx`.
+- **Noise is structured** (`audio.beds`), never inferred from the description text.
+- Apps must read **both** `.imedx`/new `.imed` and legacy `.imed` (backward compatible).
