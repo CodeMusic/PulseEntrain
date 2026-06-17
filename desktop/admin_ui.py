@@ -22,7 +22,8 @@ from pathlib import Path
 
 from kivy.clock import Clock, mainthread
 from kivy.core.image import Image as CoreImage
-from kivy.graphics import Color, Line, PopMatrix, PushMatrix, RoundedRectangle, Rotate
+from kivy.core.text import Label as CoreLabel
+from kivy.graphics import Color, Line, PopMatrix, PushMatrix, Rectangle, RoundedRectangle, Rotate
 from kivy.metrics import dp, sp
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.boxlayout import BoxLayout
@@ -243,18 +244,16 @@ class BeatGraph(Widget):
         self._nodes = []             # (x, y, scene)
         self._geom = None
         self._tip = None
-        self._freq_lbls = [self._tick("right") for _ in range(5)]
-        self._time_lbls = [self._tick("center") for _ in range(5)]
-        for l in self._freq_lbls + self._time_lbls:
-            self.add_widget(l)
         self.bind(pos=self._redraw, size=self._redraw)
         from kivy.core.window import Window
         Window.bind(mouse_pos=self._on_mouse_pos)
 
-    def _tick(self, halign):
-        return Label(text="", font_size=sp(10), color=C("text_muted"),
-                     size_hint=(None, None), size=(dp(46), dp(16)),
-                     halign=halign, valign="middle")
+    def _label_tex(self, text):
+        # Axis labels are drawn on the canvas (not child widgets) so they always
+        # render and never intercept touches on nearby nodes.
+        cl = CoreLabel(text=text, font_size=sp(11), color=C("text_muted"))
+        cl.refresh()
+        return cl.texture
 
     # ---- data ----
     def load(self, scenes, duration):
@@ -272,9 +271,9 @@ class BeatGraph(Widget):
     # ---- geometry / mapping ----
     def _compute_geom(self):
         beats = [s["beatHz"] for s in self.scenes] or [0.0]
-        bmax = max(beats + [NOISE_CAP_HZ, 1.0])
-        bmin = min(beats + [0.0])
-        pad_l, pad_b, pad_t, pad_r = dp(54), dp(28), dp(12), dp(16)
+        bmax = max(beats + [1.0])   # top of the axis = the upper frequency actually used
+        bmin = 0.0
+        pad_l, pad_b, pad_t, pad_r = dp(70), dp(28), dp(14), dp(20)
         x0, y0 = self.x + pad_l, self.y + pad_b
         w, h = self.width - pad_l - pad_r, self.height - pad_b - pad_t
         self._geom = (x0, y0, w, h, bmin, bmax, max(self.duration, 1.0), (bmax - bmin) or 1.0)
@@ -297,8 +296,6 @@ class BeatGraph(Widget):
     # ---- draw ----
     def _redraw(self, *a):
         self.canvas.clear()
-        for l in self._freq_lbls + self._time_lbls:
-            l.text = ""
         self._nodes = []
         if self.width < 80 or self.height < 80:
             return
@@ -314,9 +311,10 @@ class BeatGraph(Widget):
             Color(rgba=C("divider"))
             Line(points=[x0, y0, x0 + w, y0], width=1)
             Line(points=[x0, y0, x0, y0 + h], width=1)
-            Color(rgba=C("accent_red"))
-            cy = self._Y(min(NOISE_CAP_HZ, bmax))
-            Line(points=[x0, cy, x0 + w, cy], width=1, dash_offset=4, dash_length=6)
+            if NOISE_CAP_HZ <= bmax:                       # cap line only when it's on-scale
+                Color(rgba=C("accent_red"))
+                cy = self._Y(NOISE_CAP_HZ)
+                Line(points=[x0, cy, x0 + w, cy], width=1, dash_offset=4, dash_length=6)
             if len(pts) >= 4:
                 Color(rgba=C("accent_blue"))
                 Line(points=pts, width=1.6)
@@ -329,17 +327,15 @@ class BeatGraph(Widget):
                     Color(rgba=C("accent_green") if self.editable else C("accent_blue"))
                     Line(circle=(nx, ny, dp(4)), width=1.6)
                 self._nodes.append((nx, ny, s))
-        # axis ticks
-        for i, l in enumerate(self._freq_lbls):
-            f = i / (len(self._freq_lbls) - 1)
-            l.text = f"{bmin + f * (bmax - bmin):.1f} Hz"
-            l.text_size = l.size
-            l.pos = (x0 - l.width - dp(6), (y0 + f * h) - l.height / 2)
-        for i, l in enumerate(self._time_lbls):
-            f = i / (len(self._time_lbls) - 1)
-            l.text = fmt_time(f * dur)
-            l.text_size = l.size
-            l.pos = ((x0 + f * w) - l.width / 2, y0 - l.height - dp(6))
+            # axis bounds drawn on the canvas: "0" at origin, max beat top-left,
+            # duration bottom-right (always visible, never intercept node touches)
+            Color(1, 1, 1, 1)
+            t0 = self._label_tex("0")
+            Rectangle(texture=t0, size=t0.size, pos=(x0 - t0.width - dp(6), y0 - t0.height / 2))
+            tm = self._label_tex(f"{bmax:.1f} Hz")
+            Rectangle(texture=tm, size=tm.size, pos=(x0 - tm.width - dp(6), (y0 + h) - tm.height / 2))
+            td = self._label_tex(fmt_time(dur))
+            Rectangle(texture=td, size=td.size, pos=(x0 + w - td.width, y0 - td.height - dp(6)))
 
     # ---- hover tooltip (read-only) ----
     def _on_mouse_pos(self, window, pos):
@@ -375,10 +371,12 @@ class BeatGraph(Widget):
 
     # ---- editing (touch) ----
     def _hit(self, pos):
+        best, best_d = None, dp(14)
         for (nx, ny, s) in self._nodes:
-            if abs(nx - pos[0]) <= dp(12) and abs(ny - pos[1]) <= dp(12):
-                return s
-        return None
+            d = ((nx - pos[0]) ** 2 + (ny - pos[1]) ** 2) ** 0.5
+            if d <= best_d:
+                best, best_d = s, d
+        return best
 
     def on_touch_down(self, touch):
         if not self.editable or not self.collide_point(*touch.pos):
@@ -508,11 +506,33 @@ class DoseScreen(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.imed = None
-        root = BoxLayout(orientation="vertical", padding=dp(18), spacing=dp(12), size_hint_y=None)
+        self._preview = None
+        root = BoxLayout(orientation="vertical", padding=dp(18), spacing=dp(10), size_hint_y=None)
         root.bind(minimum_height=root.setter("height"))
 
-        # --- header: cover + metadata fields ---
-        header = BoxLayout(size_hint_y=None, height=dp(190), spacing=dp(16))
+        def cap(text, w, ha="left"):
+            l = Label(text=text, color=C("text_secondary"), font_size=sp(12),
+                      halign=ha, valign="middle", size_hint_x=None, width=w)
+            l.bind(size=lambda x, *_: setattr(x, "text_size", x.size))
+            return l
+
+        def vcap(text):
+            l = Label(text=text, color=C("text_secondary"), font_size=sp(12), halign="left",
+                      valign="middle", size_hint_y=None, height=dp(18))
+            l.bind(size=lambda x, *_: setattr(x, "text_size", x.size))
+            return l
+
+        def tinput(hint="", flex=True, w=None, fs=14, big=False):
+            ti = TextInput(hint_text=hint, multiline=False, background_color=C("bg_card_light"),
+                           foreground_color=C("text_primary"), cursor_color=C("accent_blue"),
+                           padding=[dp(10), dp(12) if big else dp(10)], font_size=sp(fs))
+            if not flex:
+                ti.size_hint_x = None
+                ti.width = w
+            return ti
+
+        # --- header: cover (left) + title/strength row + category row ---
+        header = BoxLayout(size_hint_y=None, height=dp(150), spacing=dp(16))
         left = BoxLayout(orientation="vertical", size_hint_x=None, width=dp(130), spacing=dp(8))
         self.cover = KivyImage(size_hint_y=None, height=dp(110))
         img_btn = PillButton(text="Image…", color_key="button_bg", height=dp(32))
@@ -522,50 +542,65 @@ class DoseScreen(Screen):
         left.add_widget(img_btn)
         header.add_widget(left)
 
-        meta = BoxLayout(orientation="vertical", spacing=dp(8))
-        tbox, self.f_title = labelled_field("Title")
-        meta.add_widget(tbox)
-        srow = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
-        srow.add_widget(Label(text="Strength", color=C("text_secondary"), font_size=sp(12),
-                              size_hint_x=None, width=dp(64), halign="left", valign="middle"))
-        self.s_slider = Slider(min=1, max=7, step=1, value=4)
-        self.s_val = Label(text="4", color=C("text_primary"), bold=True, size_hint_x=None, width=dp(26))
+        meta = BoxLayout(orientation="vertical", spacing=dp(12))
+        # row 1: title + strength slider + value + strength label, all on one line
+        row1 = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(10))
+        self.f_title = tinput("Title", fs=16, big=True)
+        self.s_slider = Slider(min=1, max=7, step=1, value=4, size_hint_x=None, width=dp(170))
+        self.s_val = Label(text="4", color=C("text_primary"), bold=True, size_hint_x=None, width=dp(22))
         self.s_slider.bind(value=lambda _, v: setattr(self.s_val, "text", str(int(v))))
-        self.f_slabel = TextInput(hint_text="label", multiline=False, size_hint_x=None, width=dp(150),
-                                  background_color=C("bg_card_light"), foreground_color=C("text_primary"),
-                                  cursor_color=C("accent_blue"), padding=[dp(8), dp(10)])
-        srow.add_widget(self.s_slider)
-        srow.add_widget(self.s_val)
-        srow.add_widget(self.f_slabel)
-        meta.add_widget(srow)
-        cbox, self.f_cat = labelled_field("Category")
-        meta.add_widget(cbox)
+        self.f_slabel = tinput("strength label", flex=False, w=dp(150))
+        row1.add_widget(self.f_title)
+        row1.add_widget(cap("Strength", dp(58), "right"))
+        row1.add_widget(self.s_slider)
+        row1.add_widget(self.s_val)
+        row1.add_widget(self.f_slabel)
+        meta.add_widget(row1)
+        # row 2: category label + value adjacent
+        row2 = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
+        self.f_cat = tinput("category")
+        row2.add_widget(cap("Category", dp(72)))
+        row2.add_widget(self.f_cat)
+        meta.add_widget(row2)
+        meta.add_widget(Widget())  # take up remaining height so rows sit at the top
         header.add_widget(meta)
         root.add_widget(header)
 
-        dbox, self.f_desc = labelled_field("Description", multiline=True)
-        root.add_widget(dbox)
-
-        # --- noise bed (structured, not stored in the description) ---
-        nrow = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
-        nrow.add_widget(Label(text="Noise", color=C("text_secondary"), font_size=sp(12),
-                             size_hint_x=None, width=dp(64), halign="left", valign="middle"))
-        self.noise_spin = Spinner(text="none", values=NOISE_OPTIONS, size_hint_x=None, width=dp(160),
+        # --- description with the noise control to its right ---
+        drow = BoxLayout(size_hint_y=None, height=dp(96), spacing=dp(14))
+        dcol = BoxLayout(orientation="vertical", spacing=dp(4))
+        dcol.add_widget(vcap("Description"))
+        self.f_desc = TextInput(multiline=True, background_color=C("bg_card_light"),
+                                foreground_color=C("text_primary"), cursor_color=C("accent_blue"),
+                                padding=[dp(10), dp(10)])
+        dcol.add_widget(self.f_desc)
+        drow.add_widget(dcol)
+        ncol = BoxLayout(orientation="vertical", size_hint_x=None, width=dp(170), spacing=dp(4))
+        ncol.add_widget(vcap("Noise"))
+        self.noise_spin = Spinner(text="none", values=NOISE_OPTIONS, size_hint_y=None, height=dp(40),
                                   background_normal="", background_color=C("bg_card_light"),
                                   color=C("text_primary"), font_size=sp(14))
         self.noise_spin.bind(text=lambda _, v: self._set_noise(v))
-        nrow.add_widget(self.noise_spin)
-        nrow.add_widget(Widget())
-        root.add_widget(nrow)
+        ncol.add_widget(self.noise_spin)
+        ncol.add_widget(Widget())
+        drow.add_widget(ncol)
+        root.add_widget(drow)
 
-        # --- graph + edit controls ---
-        gtop = BoxLayout(size_hint_y=None, height=dp(30), spacing=dp(10))
-        gtop.add_widget(Label(text="Beat over time", color=C("text_muted"), font_size=sp(12),
-                             halign="left", valign="middle"))
-        gtop.children[0].bind(size=lambda w, *_: setattr(w, "text_size", w.size))
-        self.edit_btn = PillButton(text="Edit", color_key="accent_blue", height=dp(30))
-        self.edit_btn.size_hint_x = None
-        self.edit_btn.width = dp(90)
+        # --- graph header: title + duration editor + Edit ---
+        gtop = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(10))
+        beat_lbl = Label(text="Beat over time", color=C("text_muted"), font_size=sp(12),
+                         halign="left", valign="middle")
+        beat_lbl.bind(size=lambda w, *_: setattr(w, "text_size", w.size))
+        gtop.add_widget(beat_lbl)
+        gtop.add_widget(cap("Duration", dp(64), "right"))
+        self.dur_field = tinput("m:ss", flex=False, w=dp(96))
+        self.dur_field.halign = "center"
+        self.dur_field.size_hint_y = None
+        self.dur_field.height = dp(30)
+        self.dur_field.bind(on_text_validate=self._on_duration)
+        gtop.add_widget(self.dur_field)
+        self.edit_btn = PillButton(text="Edit", color_key="accent_blue", height=dp(30),
+                                   size_hint_x=None, width=dp(90))
         self.edit_btn.bind(on_release=self._toggle_edit)
         gtop.add_widget(self.edit_btn)
         root.add_widget(gtop)
@@ -615,9 +650,15 @@ class DoseScreen(Screen):
         self.status.bind(size=lambda w, *_: setattr(w, "text_size", w.size))
         root.add_widget(self.status)
 
-        save = PillButton(text="Save .imed…", color_key="accent_green")
+        bottom = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(12))
+        self.preview_btn = PillButton(text="Preview", color_key="accent_blue",
+                                      size_hint_x=None, width=dp(170))
+        self.preview_btn.bind(on_release=self._toggle_preview)
+        save = PillButton(text="Save .imedx…", color_key="accent_green")
         save.bind(on_release=self._on_save)
-        root.add_widget(save)
+        bottom.add_widget(self.preview_btn)
+        bottom.add_widget(save)
+        root.add_widget(bottom)
 
         sv = ScrollView()
         sv.add_widget(root)
@@ -638,8 +679,18 @@ class DoseScreen(Screen):
         self.noise_spin.text = ntype or "none"
         scenes = imed.setdefault("entrainment", {}).setdefault("scenes", [])
         self.graph.load(scenes, m.get("durationSec"))
+        self.dur_field.text = fmt_time(self.graph.duration)
         self._set_edit(False)
         self.status.text = status
+
+    def _on_duration(self, *a):
+        txt = self.dur_field.text.strip()
+        try:
+            secs = (int(txt.split(":")[0]) * 60 + int(txt.split(":")[1])) if ":" in txt else float(txt)
+            self.graph.duration = max(1.0, secs)
+            self.graph._redraw()
+        except (ValueError, IndexError):
+            pass
 
     def _set_noise(self, t):
         if self.imed is None:
@@ -708,6 +759,30 @@ class DoseScreen(Screen):
         except ValueError:
             self.status.text = "[!] enter numbers for time / beat"
 
+    # ---- preview (render + play, matching the mobile engine) ----
+    def _toggle_preview(self, *a):
+        if self._preview is not None:
+            self._stop_preview()
+            return
+        try:
+            from engine.synth import BinauralPreview
+            self._preview = BinauralPreview(self._collect())
+            self._preview.on_finish = lambda: Clock.schedule_once(lambda *_: self._stop_preview(), 0)
+            self._preview.start()
+            self.preview_btn.text = "Stop"
+            self.preview_btn.set_color("accent_red")
+            self.status.text = "Previewing… (binaural + noise, as the mobile app will render it)"
+        except Exception as e:
+            self._preview = None
+            self.status.text = f"[!] preview needs the audio engine: {e}"
+
+    def _stop_preview(self, *a):
+        if self._preview is not None:
+            self._preview.stop()
+            self._preview = None
+        self.preview_btn.text = "Preview"
+        self.preview_btn.set_color("accent_blue")
+
     def _sync_status(self):
         scenes = self.graph.scenes
         if scenes:
@@ -722,6 +797,7 @@ class DoseScreen(Screen):
         m["category"] = self.f_cat.text.strip() or None
         m["strengthLabel"] = self.f_slabel.text.strip() or None
         m["strength"] = int(self.s_slider.value)
+        m["durationSec"] = round(self.graph.duration)
         return self.imed
 
     def _on_save(self, *a):

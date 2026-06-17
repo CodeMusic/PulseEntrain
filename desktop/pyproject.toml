@@ -17,6 +17,7 @@ scipy = "^1.13"
 librosa = "^0.10"
 pillow = "^10.4"
 jsonschema = "^4.23"
+sounddevice = "^0.5"   # real-time binaural preview playback
 
 # Optional: HTTP sidecar (engine/server.py) so the MOBILE app could call
 # extraction remotely later. Not needed by the desktop app itself.
