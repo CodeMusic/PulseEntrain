@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulseentrain.app/schema/session.v2.json",
+  "title": "PulseEntrain Session (.imed) v2",
+  "description": "One contract for n8n, binaural_decompose.py, the Admin app, and playback. See SESSION_FORMAT.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "id", "meta", "entrainment", "audio", "nova", "pulsetto"],
+
+  "allOf": [
+    {
+      "comment": "Resolvable-carrier invariant: a base carrier OR every scene carries its own.",
+      "anyOf": [
+        { "properties": { "audio": { "properties": { "binaural": { "required": ["carrierHz"] } } } } },
+        { "properties": { "entrainment": { "properties": { "scenes": { "items": { "required": ["carrierHz"] } } } } } }
+      ]
+    }
+  ],
+
+  "properties": {
+    "formatVersion": { "const": 2 },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "durationSec"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": ["string", "null"] },
+        "category": { "type": ["string", "null"] },
+        "strength": { "type": ["integer", "null"], "minimum": 1, "maximum": 7 },
+        "strengthLabel": { "type": ["string", "null"] },
+        "durationSec": { "type": "number", "minimum": 0 },
+        "image": {
+          "type": ["string", "null"],
+          "description": "catalog filename OR a base64 data URI (self-contained .imed)"
+        },
+        "rating": { "type": ["number", "null"], "minimum": 0, "maximum": 5 },
+        "playCount": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+
+    "generation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source": { "enum": ["n8n", "binaural_decompose", "studio", "manual"] },
+        "tool": { "type": "string" },
+        "prompt": { "type": "string" },
+        "model": { "type": "string" },
+        "input": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "analyzedAt": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "entrainment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenes"],
+      "properties": {
+        "ramp": { "enum": ["linear", "step"], "default": "linear" },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/scene" }
+        }
+      }
+    },
+
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binaural"],
+      "properties": {
+        "binaural": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "carrierHz": { "type": "number", "minimum": 20, "maximum": 2000 },
+            "follow": { "const": "beat" }
+          }
+        },
+        "beds": { "type": "array", "items": { "$ref": "#/$defs/bed" } },
+        "masterVolume": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
+      }
+    },
+
+    "nova": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["follow", "custom"] },
+        "maxHz": { "type": "number", "minimum": 0.5, "maximum": 13, "default": 13 },
+        "brightness": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 },
+        "custom": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "left": { "$ref": "#/$defs/eye" },
+            "right": { "$ref": "#/$defs/eye" }
+          }
+        },
+        "pattern": { "type": "array", "description": "reserved: keyframed per-eye animation" }
+      },
+      "if": { "properties": { "mode": { "const": "custom" } } },
+      "then": { "required": ["custom"] }
+    },
+
+    "pulsetto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "follow": { "enum": ["scenes", "phase", "none"], "default": "scenes" },
+        "intensity": { "type": "integer", "minimum": 1, "maximum": 9 },
+        "envelope": { "type": "string" },
+        "pattern": { "type": "string" },
+        "intensityClamp": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1, "maximum": 9 },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [1, 9]
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atSec", "beatHz"],
+      "properties": {
+        "atSec": { "type": "number", "minimum": 0 },
+        "label": { "type": "string" },
+        "beatHz": { "type": "number", "minimum": 0, "maximum": 45 },
+        "carrierHz": { "type": "number", "minimum": 20, "maximum": 2000 },
+        "intensity": { "type": "integer", "minimum": 1, "maximum": 9 },
+        "brightness": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+
+    "bed": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source", "level"],
+      "properties": {
+        "source": { "enum": ["noise", "texture", "file"] },
+        "type": { "type": "string" },
+        "file": { "type": "string" },
+        "level": { "type": "number", "minimum": 0, "maximum": 1 },
+        "params": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "noise" } } },
+          "then": { "properties": { "type": { "enum": ["white", "pink", "brown", "blue", "violet", "grey"] } }, "required": ["type"] }
+        },
+        {
+          "if": { "properties": { "source": { "const": "texture" } } },
+          "then": { "properties": { "type": { "enum": ["rain", "wind"] } }, "required": ["type"] }
+        },
+        {
+          "if": { "properties": { "source": { "const": "file" } } },
+          "then": { "required": ["file"] }
+        }
+      ]
+    },
+
+    "eye": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duty": { "type": "number", "minimum": 0, "maximum": 1 },
+        "level": { "type": "number", "minimum": 0, "maximum": 1 },
+        "phaseHz": { "type": "number" }
+      }
+    }
+  }
+}

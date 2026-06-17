@@ -1310,14 +1310,18 @@ class AsyncioLoopThread:
 
 class PulseLibreApp(App):
     def build(self):
-        self.title = "Pulse Libre"
+        self.title = "PulseEntrain Admin"
         # Set window background color
         from kivy.core.window import Window
 
         Window.clearcolor = get_color_from_hex(COLORS["bg_dark"])
 
+        # The existing Pulsetto device UI becomes one mode inside the Admin shell
+        # (Extract / Open / Create / Pulsetto).
         self.main_screen = MainScreen()
-        return self.main_screen
+        from admin_ui import make_admin_root
+
+        return make_admin_root(self.main_screen)
 
     def on_stop(self):
         self.main_screen.on_stop()

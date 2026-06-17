@@ -10,6 +10,24 @@ package-mode = false
 python = ">=3.11,<3.14"
 bleak = "^0.22.3"
 kivy = "^2.3.0"
+# Admin content engine (Extract mode): MP3 -> .imed decomposition, image
+# scaling/embedding, and schema validation. Core to the desktop app.
+numpy = "^1.26"
+scipy = "^1.13"
+librosa = "^0.10"
+pillow = "^10.4"
+jsonschema = "^4.23"
+
+# Optional: HTTP sidecar (engine/server.py) so the MOBILE app could call
+# extraction remotely later. Not needed by the desktop app itself.
+# Install with: poetry install --with server
+[tool.poetry.group.server]
+optional = true
+
+[tool.poetry.group.server.dependencies]
+fastapi = "^0.115"
+uvicorn = { extras = ["standard"], version = "^0.32" }
+python-multipart = "^0.0.12"
 
 
 [build-system]
