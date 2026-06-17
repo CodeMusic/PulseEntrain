@@ -1315,6 +1315,13 @@ class PulseLibreApp(App):
         from kivy.core.window import Window
 
         Window.clearcolor = get_color_from_hex(COLORS["bg_dark"])
+        # Open large enough to show the whole dose screen (graph + Save) without
+        # scrolling, with a floor so it can't be shrunk into uselessness.
+        Window.size = (1200, 860)
+        try:
+            Window.minimum_width, Window.minimum_height = 960, 720
+        except Exception:
+            pass
 
         # The existing Pulsetto device UI becomes one mode inside the Admin shell
         # (Extract / Open / Create / Pulsetto).
