@@ -3,7 +3,7 @@
 // seekTo / setVolume) plus the useProgress / usePlaybackState hooks and State
 // enum. Catalog MP3s play in the browser via this; on native the real library
 // is used instead.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const State = {
   None: 'none',
@@ -14,7 +14,11 @@ export const State = {
   Ended: 'ended',
   Buffering: 'buffering',
 };
-export const Event = {};
+export const Event = {
+  PlaybackState: 'playback-state',
+  PlaybackError: 'playback-error',
+  PlaybackActiveTrackChanged: 'playback-active-track-changed',
+};
 export const Capability = {};
 export const AppKilledPlaybackBehavior = {};
 
@@ -132,4 +136,23 @@ export const usePlaybackState = () => {
     return () => listeners.delete(update);
   }, []);
   return s;
+};
+
+// Minimal useTrackPlayerEvents: only Event.PlaybackError is meaningful here —
+// it maps the HTMLAudioElement 'error' to the handler so web surfaces load/
+// decode failures just like native does.
+const MEDIA_ERR = { 1: 'aborted', 2: 'network error', 3: 'decode error', 4: 'source not supported' };
+export const useTrackPlayerEvents = (events, handler) => {
+  const cb = useRef(handler);
+  cb.current = handler;
+  useEffect(() => {
+    if (!el || !Array.isArray(events) || !events.includes(Event.PlaybackError)) return undefined;
+    const onError = () => {
+      const code = el.error?.code;
+      cb.current?.({ type: Event.PlaybackError, code, message: MEDIA_ERR[code] || 'media error' });
+    };
+    el.addEventListener('error', onError);
+    return () => el.removeEventListener('error', onError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 };
