@@ -1,0 +1,11 @@
+diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/core/utils/Constants.h b/node_modules/react-native-audio-api/common/cpp/audioapi/core/utils/Constants.h
+index a70b2b3..640f331 100644
+--- a/node_modules/react-native-audio-api/common/cpp/audioapi/core/utils/Constants.h
++++ b/node_modules/react-native-audio-api/common/cpp/audioapi/core/utils/Constants.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <cstddef>
+ #include <cmath>
+ #include <limits>
+ #include <new>

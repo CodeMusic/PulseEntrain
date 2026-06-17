@@ -3,3 +3,12 @@ CLAUDE.md
 .DS_Store
 **/.DS_Store
 /entrainment_assets
+/mobile/dist
+
+mobile/.expo/
+mobile/ios/
+mobile/android/
+
+mobile/.expo/
+mobile/ios/
+mobile/android/

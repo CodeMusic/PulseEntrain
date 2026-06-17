@@ -1,4 +1,38 @@
 {
-  "name": "PulseEntrain",
-  "displayName": "PulseEntrain"
+  "expo": {
+    "name": "PulseEntrain",
+    "slug": "pulseentrain",
+    "scheme": "pulseentrain",
+    "platforms": ["ios", "android", "web"],
+    "orientation": "portrait",
+    "plugins": [
+      "one/expo-plugin",
+      [
+        "react-native-permissions",
+        {
+          "iosPermissions": ["Bluetooth", "LocationWhenInUse"]
+        }
+      ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.codemusic.PulseEntrain",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio", "bluetooth-central"],
+        "NSBluetoothAlwaysUsageDescription": "Need Bluetooth access to communicate with the device.",
+        "NSBluetoothPeripheralUsageDescription": "Need Bluetooth access to communicate with the device.",
+        "NSLocationWhenInUseUsageDescription": "Need location access to scan for Bluetooth devices."
+      }
+    },
+    "android": {
+      "package": "com.codemusic.PulseEntrain",
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK"
+      ]
+    }
+  }
 }

@@ -1,84 +1,168 @@
-# Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
+require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+# @generated begin require - expo prebuild (DO NOT MODIFY) sync-0b3d11245f758d271ec25750612913aa85ad0f45
+require File.join(File.dirname(`node --print "require.resolve('react-native-permissions/package.json')"`), "scripts/setup")
+# @generated end require
 
-platform :ios, min_ios_version_supported
-prepare_react_native_project!
+require 'json'
+podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
-# react-native-permissions: compile in the iOS permission handlers the app uses.
-# Without this, check()/request() throw "No permission handler detected".
-require_relative '../node_modules/react-native-permissions/scripts/setup'
-setup_permissions(['Bluetooth'])
+def ccache_enabled?(podfile_properties)
+  # Environment variable takes precedence
+  return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
+  # Fall back to Podfile properties
+  podfile_properties['apple.ccacheEnabled'] == 'true'
 end
 
+ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
+ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
+ENV['RCT_HERMES_V1_ENABLED'] ||= '1' if podfile_properties['expo.useHermesV1'] == 'true'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+
+prepare_react_native_project!
+# @generated begin setup - expo prebuild (DO NOT MODIFY) sync-50360b8e326d7dc6885aaaa21d1e91569c46bcab
+setup_permissions([
+  'Bluetooth',
+  'LocationWhenInUse',
+])
+# @generated end setup
+
 target 'PulseEntrain' do
-  config = use_native_modules!
+  use_expo_modules!
+
+  if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
+    config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
+  else
+    config_command = [
+      'node',
+      '--no-warnings',
+      '--eval',
+      'require(\'expo/bin/autolinking\')',
+      'expo-modules-autolinking',
+      'react-native-config',
+      '--json',
+      '--platform',
+      'ios'
+    ]
+  end
+
+  config = use_native_modules!(config_command)
+
+  use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
+  use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']
 
   use_react_native!(
     :path => config[:reactNativePath],
+    :hermes_enabled => podfile_properties['expo.jsEngine'] == nil || podfile_properties['expo.jsEngine'] == 'hermes',
     # An absolute path to your application root.
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
   )
 
-  target 'PulseEntrainTests' do
-    inherit! :complete
-    # Pods for testing
-  end
-
   post_install do |installer|
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
+
+    # [vxrn/one] workaround: expo-modules-core 55.x requires Swift 6 mode with isolated
+    # conformances (SE-0470) for @MainActor in protocol conformance syntax.
+    # SWIFT_STRICT_CONCURRENCY=minimal suppresses concurrency warnings/errors.
+    # tracking: expo/expo#43199, expo/expo#42525
+    installer.pods_project.targets.each do |target|
+      if target.name == 'ExpoModulesCore'
+        target.build_configurations.each do |build_config|
+          build_config.build_settings['SWIFT_VERSION'] = '6'
+          build_config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+          flags = build_config.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+          unless flags.include?('IsolatedConformances')
+            build_config.build_settings['OTHER_SWIFT_FLAGS'] = "#{flags} -enable-upcoming-feature IsolatedConformances"
+          end
+        end
+      end
+      # workaround: ContextMenuAuxiliaryPreview uses deprecated transform: .default
+      # which is an error in Xcode 26 / Swift 6.2 strict mode.
+      if target.name == 'ContextMenuAuxiliaryPreview'
+        target.build_configurations.each do |build_config|
+          build_config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+          build_config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        end
+      end
+    end
+
+
+    # [vxrn/one] minify iOS Hermes Release bundle input
+    # hermesc can OOM/crash on large unminified bundles on EAS standard
+    # workers. Pre-minify so hermesc only does bytecode conversion. Only
+    # applies in Release.
+    installer.aggregate_targets.each do |aggregate_target|
+      project = aggregate_target.user_project
+      next unless project
+
+      changed = false
+      project.targets.each do |target|
+        target.shell_script_build_phases.each do |phase|
+          next unless phase.name.to_s.include?('Bundle React Native code and images')
+          next if phase.shell_script.to_s.include?('# [vxrn/one] minify iOS Hermes Release bundle input')
+
+          original_script = phase.shell_script
+          phase.shell_script = <<~SCRIPT
+            # [vxrn/one] minify iOS Hermes Release bundle input
+            if [ "$CONFIGURATION" = "Release" ]; then
+              export EXTRA_PACKAGER_ARGS="${EXTRA_PACKAGER_ARGS:-} --minify true"
+            fi
+
+            #{original_script}
+          SCRIPT
+          changed = true
+        end
+      end
+
+      project.save if changed
+    end
+
+
+    # [vxrn/one] skip expo-updates Expo Metro for embedded manifest
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'EXUpdates'
+
+      target.shell_script_build_phases.each do |phase|
+        next unless phase.name.to_s.include?('Generate updates resources for expo-updates')
+        next if phase.shell_script.to_s.include?('# [vxrn/one] skip expo-updates Expo Metro for embedded manifest')
+
+        original_script = phase.shell_script
+        phase.shell_script = <<~SCRIPT
+          # [vxrn/one] skip expo-updates Expo Metro for embedded manifest
+          set -eo pipefail
+
+          RESOURCE_BUNDLE_NAME="EXUpdates.bundle"
+          DEST="$CONFIGURATION_BUILD_DIR"
+
+          if [ "$BUNDLE_FORMAT" = "shallow" ]; then
+            RESOURCE_DEST="$DEST/$RESOURCE_BUNDLE_NAME"
+          elif [ "$BUNDLE_FORMAT" = "deep" ]; then
+            RESOURCE_DEST="$DEST/$RESOURCE_BUNDLE_NAME/Contents/Resources"
+          else
+            echo "[vxrn/one] expo-updates patch: unsupported BUNDLE_FORMAT='$BUNDLE_FORMAT'" >&2
+            exit 1
+          fi
+
+          mkdir -p "$RESOURCE_DEST"
+
+          # generate a real EXUpdates manifest. requires the app's Metro
+          # config to pin server.unstable_serverRoot to the project root
+          # for release-shaped native bundles; otherwise asset paths in
+          # the manifest won't match what vxrn writes into the .app.
+          export EXPO_NO_METRO_WORKSPACE_ROOT=1
+
+          #{original_script}
+        SCRIPT
+      end
+    end
+
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      # :ccache_enabled => true
+      :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    # Workaround: Xcode 26 / Apple Clang regressed C++20 consteval, breaking the
-    # {fmt} library bundled with React Native. fmt's base.h only disables consteval
-    # for OLD Apple Clang (< 14000029L); patch it to disable for ALL Apple Clang.
-    # Remove once RN ships a newer fmt that builds clean on Xcode 26.
-    fmt_base = File.join(installer.sandbox.root.to_s, 'fmt', 'include', 'fmt', 'base.h')
-    if File.exist?(fmt_base)
-      original = File.read(fmt_base)
-      patched = original.gsub(
-        '#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L',
-        '#elif defined(__apple_build_version__)  // patched: consteval broken on Xcode 26 clang'
-      )
-      unless patched == original
-        File.chmod(0644, fmt_base)        # CocoaPods leaves fmt sources read-only
-        File.write(fmt_base, patched)
-      end
-    end
-
-    # Workaround: react-native-audio-api 0.8.0's Constants.h uses bare `size_t`
-    # without including <cstddef>, which fails on Xcode 26 clang. Add the include
-    # and qualify the type. Remove once the library ships a fix.
-    audio_const = File.join(
-      installer.sandbox.root.to_s, '..', '..',
-      'node_modules', 'react-native-audio-api', 'common', 'cpp', 'audioapi', 'core', 'Constants.h'
-    )
-    if File.exist?(audio_const)
-      original = File.read(audio_const)
-      patched = original.gsub(
-        'static constexpr size_t MAX_FFT_SIZE',
-        'static constexpr std::size_t MAX_FFT_SIZE'
-      )
-      unless patched.include?('#include <cstddef>')
-        patched = patched.sub('#include <limits>', "#include <cstddef>\n#include <limits>")
-      end
-      unless patched == original
-        File.chmod(0644, audio_const) rescue nil
-        File.write(audio_const, patched)
-      end
-    end
   end
 end
