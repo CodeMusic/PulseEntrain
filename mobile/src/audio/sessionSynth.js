@@ -18,7 +18,8 @@ export class SessionSynth {
   /**
    * @param {{ scenes?: Array<{atSec:number,beatHz:number,carrierHz?:number}>, carrier?: number,
    *           duration?: number, noise?: string, volume?: number,
-   *           onTick?: (pos:number, beat:number)=>void, onEnded?: ()=>void }} [opts]
+   *           onTick?: (pos:number, beat:number, ctx:{intensity?:number, flash?:string, flashHz?:number})=>void,
+   *           onEnded?: ()=>void }} [opts]
    */
   constructor(opts = {}) {
     const { scenes, carrier = 200, duration, noise = 'none', volume = 1, onTick, onEnded } = opts;
@@ -36,6 +37,30 @@ export class SessionSynth {
     this._offset = 0;
     this._t0 = 0;
     this._timer = null;
+    this._curNoise = null;
+  }
+
+  // Hold-forward value: the last scene at/before t that sets `field`, else base.
+  _hold(field, t, base) {
+    let v = base;
+    for (const s of this.scenes) {
+      if (s.atSec > t) break;
+      if (s[field] != null) v = s[field];
+    }
+    return v;
+  }
+
+  // Everything active at time t: beat/carrier interpolate; noise/intensity/flash hold forward.
+  _activeAt(t) {
+    const cb = this._at(t);
+    return {
+      carrier: cb.carrier,
+      beat: cb.beat,
+      noise: this._hold('noise', t, this.noise),
+      intensity: this._hold('intensity', t, null),
+      flash: this._hold('flash', t, 'sync'),
+      flashHz: this._hold('flashHz', t, null), // Nova blink rate override (else = beat)
+    };
   }
 
   // Linear interpolation of carrier+beat at time t across the scene keyframes.
@@ -61,8 +86,9 @@ export class SessionSynth {
 
   play() {
     if (this.playing) return;
-    const { carrier, beat } = this._at(this.position);
-    this.engine.start({ carrier, beat, volume: this.volume, background: this.noise });
+    const a = this._activeAt(this.position);
+    this._curNoise = normalizeNoise(a.noise);
+    this.engine.start({ carrier: a.carrier, beat: a.beat, volume: this.volume, background: this._curNoise });
     this._t0 = Date.now();
     this.playing = true;
     this._timer = setInterval(() => this._tick(), 200);
@@ -77,10 +103,17 @@ export class SessionSynth {
       if (this.onEnded) this.onEnded();
       return;
     }
-    const { carrier, beat } = this._at(this.position);
-    this.engine.setCarrier(carrier);
-    this.engine.setBeat(beat);
-    if (this.onTick) this.onTick(this.position, beat);
+    const a = this._activeAt(this.position);
+    this.engine.setCarrier(a.carrier);
+    this.engine.setBeat(a.beat);
+    const wantNoise = normalizeNoise(a.noise);
+    if (wantNoise !== this._curNoise) {
+      this._curNoise = wantNoise; // hold-forward noise change — crossfade, no click
+      this.engine.crossfadeNoise(wantNoise);
+    }
+    if (this.onTick) {
+      this.onTick(this.position, a.beat, { intensity: a.intensity, flash: a.flash, flashHz: a.flashHz });
+    }
   }
 
   pause() {

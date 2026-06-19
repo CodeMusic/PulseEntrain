@@ -19,7 +19,7 @@ See the platform overview in the [root README](../README.md), the authoring tool
     — the embedded base64 cover renders directly. No MP3 needed.
 - **Manual mode** — dial a beat frequency + noise bed live (same `BinauralEngine`).
 - **Devices (BLE)** — **Pulsetto** intensity tracks the session; **Lumenate Nova** strobes in
-  sync with the live beat (clamped to 13 Hz). Both are optional; binaural-only works on any headphones.
+  sync with the live beat (clamped to `nova.maxHz`, default 60 Hz — delta→gamma). Both are optional; binaural-only works on any headphones.
 
 ## Architecture
 

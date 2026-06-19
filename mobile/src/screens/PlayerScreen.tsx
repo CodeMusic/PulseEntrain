@@ -27,8 +27,18 @@ const fmt = s => {
   return `${m}:${sec}`;
 };
 const playCountKey = id => `@pulseentrain/playcount/${id}`;
-// Track strength (1-7) → default Pulsetto intensity (1-9): strength + 1, clamped.
+// Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
 const defaultIntensityFor = dose => Math.min(9, Math.max(1, ((dose && dose.strength) || 4) + 1));
+
+// A per-node stim is an absolute int 0–9 OR a base-relative token. The slider is
+// the base (the value of "="); tokens resolve ±steps against it. null → the base.
+const STIM_OFFSETS = { '=': 0, '=-': -1, '=+': 1 };
+const resolveStim = (val, base) => {
+  if (val == null) return base;
+  if (typeof val === 'number') return Math.max(0, Math.min(9, val));
+  const off = STIM_OFFSETS[val];
+  return off == null ? base : Math.max(0, Math.min(9, base + off));
+};
 
 export default function PlayerScreen({ route, navigation }) {
   const { id, usePulsetto: wantPulsetto, useNova: wantNova } = route.params;
@@ -59,6 +69,10 @@ export default function PlayerScreen({ route, navigation }) {
   const pendingRetryRef = useRef(false);
   const connectedRef = useRef(pulsetto.connected);
   connectedRef.current = pulsetto.connected;
+  const lastFlashRef = useRef(null); // last Nova flash pattern applied (.imedx hold-forward)
+  const lastStimRef = useRef(null); // last raw per-node stim seen (token/int/null)
+  const activeStimRef = useRef(null); // current per-node stim; resolves against the base slider
+  const lastSentRef = useRef(null); // last resolved value actually written to Pulsetto (dedup)
 
   const tpPlaying = playbackState?.state === State.Playing;
   const isPlaying = isSynth ? synthPlaying : tpPlaying;
@@ -85,6 +99,41 @@ export default function PlayerScreen({ route, navigation }) {
     try {
       await pulsetto.startSession(intensityRef.current);
     } catch (e) {}
+  };
+
+  // ---- per-node (.imedx hold-forward) appliers, driven by the synth tick ----
+  const applyFlash = f => {
+    const flash = f || 'sync';
+    if (flash === lastFlashRef.current) return;
+    lastFlashRef.current = flash;
+    // sync = both eyes, left/right = one eye on (the beat drives the rate via setFrequency)
+    const eyes =
+      flash === 'left'
+        ? { lLevel: 1, rLevel: 0 }
+        : flash === 'right'
+        ? { lLevel: 0, rLevel: 1 }
+        : { lLevel: 1, rLevel: 1 };
+    try {
+      nova.setSyncedValues(eyes);
+    } catch (e) {}
+  };
+
+  // Send the active stim (per-node, resolved against the base) to Pulsetto. With
+  // no per-node stim, this sends the base itself — i.e. the slider drives it.
+  const pushStim = () => {
+    const resolved = resolveStim(activeStimRef.current, intensityRef.current);
+    if (resolved === lastSentRef.current) return; // dedup: no redundant BLE writes
+    if (wantPulsetto && pulsetto.connected && pulsetto.sessionActive && !pausedForBreakRef.current) {
+      lastSentRef.current = resolved;
+      pulsetto.setIntensity(resolved);
+    }
+  };
+
+  const applyStim = stim => {
+    if (stim === lastStimRef.current) return; // hold-forward: only on change
+    lastStimRef.current = stim;
+    activeStimRef.current = stim; // token or absolute; the slider stays the base
+    pushStim();
   };
 
   const promptNotAttached = () => {
@@ -145,9 +194,13 @@ export default function PlayerScreen({ route, navigation }) {
           duration: sd.lengthSeconds,
           noise: sd.noise,
           volume: 1,
-          onTick: (pos, beat) => {
+          onTick: (pos, beat, ctx) => {
             setSynthPos(pos);
-            if (wantNova && nova.connected) nova.setFrequency(beat);
+            if (wantNova && nova.connected) {
+              nova.setFrequency(ctx && ctx.flashHz != null ? ctx.flashHz : beat);
+              applyFlash(ctx && ctx.flash);
+            }
+            applyStim(ctx && ctx.intensity);
           },
           onEnded: () => {
             setSynthPlaying(false);
@@ -260,6 +313,7 @@ export default function PlayerScreen({ route, navigation }) {
       if (wantPulsetto && pulsetto.sessionActive) {
         pausedForBreakRef.current = true;
         await pulsetto.setIntensity(0); // mute stim while paused
+        lastSentRef.current = 0; // so resume re-sends the resolved level
       }
     } else {
       if (isSynth) {
@@ -271,7 +325,7 @@ export default function PlayerScreen({ route, navigation }) {
       if (wantNova && nova.connected) nova.startStrobe(isSynth ? synthRef.current?.beatNow() : undefined);
       if (pausedForBreakRef.current) {
         pausedForBreakRef.current = false;
-        await pulsetto.setIntensity(intensityRef.current); // restore to slider value
+        pushStim(); // restore stim (resolved against base) after a break
       }
     }
   };
@@ -303,9 +357,9 @@ export default function PlayerScreen({ route, navigation }) {
   const onIntensity = v => {
     const val = Math.round(v);
     setIntensityVal(val);
-    intensityRef.current = val;
+    intensityRef.current = val; // the base (the value of "="); per-node stim resolves against it
     // don't un-mute a paused session; the new value applies on resume
-    if (!pausedForBreakRef.current) pulsetto.setIntensity(val);
+    if (!pausedForBreakRef.current) pushStim();
   };
 
   const onVolume = v => {

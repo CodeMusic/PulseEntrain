@@ -7,11 +7,12 @@ const CH_STREAM = 'abcdef01-2345-6789-abcd-ef0123456789'; // stream-rate control
 const CH_STROBE = 'f2c51a4e-2a46-4bef-b18f-cb00c716cfa6'; // strobe timing stream (LE uint32 array)
 const CH_TELEMETRY = '12345678-9abc-4def-8012-3456789abcde'; // accelerometer notify (engine wants a subscriber)
 
-// ⚠️ SAFETY (protocol §6): the device enforces NO frequency limit. Stroboscopic
-// light 3–60 Hz can provoke photosensitive seizures (15–25 Hz peak risk). We cap
-// the strobe in the calm delta/theta/alpha range, below that band. The audio beat
-// can go higher; the light will not follow past this ceiling.
-export const MAX_NOVA_STROBE_HZ = 13;
+// ⚠️ SAFETY (protocol §6): the device enforces NO frequency limit. We cap the
+// strobe at 60 Hz so it can traverse delta→gamma the way the Lumenate app does
+// (it modulates from ~3 Hz up into the gamma range). NOTE this span now includes
+// the 15–25 Hz band where stroboscopic light most readily provokes photosensitive
+// seizures — see the photosensitivity warnings. Not for users with epilepsy.
+export const MAX_NOVA_STROBE_HZ = 60;
 const MIN_NOVA_STROBE_HZ = 0.5;
 export const clampStrobe = hz => {
   const v = Number(hz);

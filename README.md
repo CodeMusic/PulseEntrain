@@ -80,7 +80,7 @@ The **vagus nerve** is the main nerve of the parasympathetic ("rest and digest")
 ### What is visual (stroboscopic) entrainment?
 Rhythmic flickering light can drive a brain-rhythm response of its own (*photic driving* / the steady-state visual evoked response) — the visual cortex tends to follow a light pulsing at a steady rate. The **[Lumenate Nova](https://lumenate.co/lumenate-nova/)** is a pair of LED glasses that PulseEntrain drives over Bluetooth, strobing **in sync with the session's beat frequency** (independently per eye, with brightness control) so the light, the beats, and the stimulation all share one rhythm.
 
-> ⚠️ **Photosensitivity.** Flickering light in the ~15–25 Hz range can provoke seizures in people with photosensitive epilepsy. PulseEntrain caps the Nova strobe at **13 Hz** (the delta/theta/alpha range, below that risk band) and ramps it gently — the audio beat may go higher, but the light will not follow past the cap.
+> ⚠️ **Photosensitivity.** Flickering light in the ~15–25 Hz range can provoke seizures in people with photosensitive epilepsy. Like the Lumenate app, PulseEntrain lets the Nova strobe vary across **delta→gamma (up to 60 Hz)** — which **includes** that risk band. The per-session `nova.maxHz` bounds it, but **do not use the visual mode if you have photosensitive epilepsy or any seizure history.**
 
 ---
 
@@ -109,7 +109,7 @@ Sessions live in `entrainment_assets/` and are described by JSON — one shared 
 - PulseEntrain is a **wellness / entertainment** tool, not a medical device, and is not a substitute for professional care.
 - Follow Pulsetto's own guidance for placement, intensity, and session length. Do not exceed documented limits.
 - Vagus nerve stimulation and brainwave entrainment have **contraindications** — if you are pregnant, have a heart condition, epilepsy/seizure history, or an implanted electronic device (e.g. a pacemaker), consult a qualified professional before use.
-- The **Lumenate Nova** uses flickering light. If you have **photosensitive epilepsy** or any seizure history, do not use the visual mode. PulseEntrain caps the strobe below the highest-risk band (≤ 13 Hz), but this reduces — it does not eliminate — the risk.
+- The **Lumenate Nova** uses flickering light that can vary into the **gamma range (up to 60 Hz)**, including the highest-risk ~15–25 Hz band. **If you have photosensitive epilepsy or any seizure history, do not use the visual mode.**
 - Stop immediately if anything feels uncomfortable.
 
 ---

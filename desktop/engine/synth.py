@@ -127,12 +127,15 @@ class BinauralPreview:
         outdata[:] = np.clip(out, -1.0, 1.0).astype(np.float32)
         self._frame += frames
 
-    def start(self):
+    def position(self):
+        return self._frame / SR
+
+    def start(self, at=0):
         import sounddevice as sd
         self._sd = sd
         if self.noise_kind:
             self._noise = _make_noise(self.noise_kind, SR * NOISE_SECONDS)
-        self._frame = 0
+        self._frame = int(max(0, at) * SR)  # preview can begin at the playhead
         self._phaseL = self._phaseR = 0.0
         self._noise_pos = 0
         self._stream = sd.OutputStream(samplerate=SR, channels=2, dtype="float32",

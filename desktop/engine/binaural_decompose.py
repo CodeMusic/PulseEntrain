@@ -403,7 +403,7 @@ def spec_to_dict_v2(spec):
             "masterVolume": 1.0,
         },
         # Audio-only source can't observe the glasses -> mirror the beat (the base option).
-        "nova": {"mode": "follow", "maxHz": 13, "brightness": 1.0},
+        "nova": {"mode": "follow", "maxHz": 60, "brightness": 1.0},
         # No stim information in an MP3 -> disabled; author intensity per scene later.
         "pulsetto": {"enabled": False, "follow": "scenes", "intensityClamp": [1, 9]},
     }

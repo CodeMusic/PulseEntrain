@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ScrollView, View, Text, Switch, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { ScrollView, View, Text, Switch, TouchableOpacity, Pressable, StyleSheet, Alert } from 'react-native';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
+import BeatPeek from '../components/BeatPeek';
 import StrengthBadge from '../components/StrengthBadge';
 import NovaExplorer from '../components/NovaExplorer';
 import { useNova } from '../nova/NovaProvider';
@@ -14,6 +15,7 @@ export default function DoseDetailScreen({ route, navigation }) {
   const dose = doseById(id);
   const nova = useNova();
   const [usePulsetto, setUsePulsetto] = useState(!IS_WEB);
+  const [peek, setPeek] = useState(false);
 
   const onPulsetto = v => {
     if (IS_WEB) return nativeOnlyNotice('Pulsetto');
@@ -70,7 +72,10 @@ export default function DoseDetailScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ArtImage source={img} height={220} radius={18} hpad={16} />
+      <Pressable onLongPress={() => setPeek(true)} delayLongPress={300}>
+        <ArtImage source={img} height={220} radius={18} hpad={16} />
+      </Pressable>
+      <BeatPeek visible={peek} onClose={() => setPeek(false)} dose={dose} image={img} />
       <Text style={styles.title}>{dose.name}</Text>
       <View style={styles.metaRow}>
         <StrengthBadge strength={dose.strength} label={dose.strengthLabel} />

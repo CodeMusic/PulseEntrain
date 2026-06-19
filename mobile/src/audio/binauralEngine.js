@@ -98,6 +98,25 @@ export class BinauralEngine {
     this.running = true;
   }
 
+  // Build a looping noise source (gain 0, caller ramps it). Returns {src, g}.
+  _makeNoise(type) {
+    const fill = NOISE_FILL[type];
+    if (!fill || !this.ctx || !this.master) return null;
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * NOISE_SECONDS);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    fill(buf.getChannelData(0));
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    src.connect(g);
+    g.connect(this.master);
+    src.start();
+    return { src, g };
+  }
+
   _startNoise(type) {
     if (this.noiseSrc) {
       try {
@@ -111,25 +130,59 @@ export class BinauralEngine {
       } catch (e) {}
       this.noiseGain = null;
     }
-    if (type === 'none' || !this.ctx || !this.master) return;
-    const fill = NOISE_FILL[type];
-    if (!fill) return;
+    if (type === 'none') return;
+    const made = this._makeNoise(type);
+    if (!made) return;
+    made.g.gain.value = 0.25; // noise sits under the tones
+    this.noiseSrc = made.src;
+    this.noiseGain = made.g;
+  }
 
-    const ctx = this.ctx;
-    const len = Math.floor(ctx.sampleRate * NOISE_SECONDS);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    fill(buf.getChannelData(0));
-
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const g = ctx.createGain();
-    g.gain.value = 0.25; // noise sits under the tones
-    src.connect(g);
-    g.connect(this.master);
-    src.start();
-    this.noiseSrc = src;
-    this.noiseGain = g;
+  // Crossfade to a new noise bed over `seconds` (used by the .imedx timeline) —
+  // overlaps the old and new beds with gain ramps so there's no click.
+  crossfadeNoise(type, seconds = 1.2) {
+    if (type === this.background) return;
+    this.background = type;
+    if (!this.ctx) {
+      this._startNoise(type);
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const oldSrc = this.noiseSrc;
+    const oldGain = this.noiseGain;
+    if (oldGain) {
+      try {
+        oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+        oldGain.gain.linearRampToValueAtTime(0, now + seconds);
+      } catch (e) {}
+      setTimeout(() => {
+        try {
+          oldSrc && oldSrc.stop();
+        } catch (e) {}
+        try {
+          oldGain.disconnect();
+        } catch (e) {}
+      }, seconds * 1000 + 150);
+    }
+    if (type === 'none') {
+      this.noiseSrc = null;
+      this.noiseGain = null;
+      return;
+    }
+    const made = this._makeNoise(type);
+    if (!made) {
+      this.noiseSrc = null;
+      this.noiseGain = null;
+      return;
+    }
+    try {
+      made.g.gain.setValueAtTime(0, now);
+      made.g.gain.linearRampToValueAtTime(0.25, now + seconds);
+    } catch (e) {
+      made.g.gain.value = 0.25;
+    }
+    this.noiseSrc = made.src;
+    this.noiseGain = made.g;
   }
 
   setBeat(beat) {

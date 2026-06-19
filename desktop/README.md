@@ -68,6 +68,7 @@ Not needed by the desktop app. See [engine/README.md](engine/README.md).
 
 ## Safety
 
-This is an authoring tool, but the sessions it produces drive real devices. The Nova strobe is
-capped at **13 Hz** (below the photosensitive-seizure risk band) and that cap travels inside the
-`.imedx`. See the platform [Safety](../README.md#safety) notes.
+This is an authoring tool, but the sessions it produces drive real devices. The Nova strobe can
+vary into the **gamma range (up to 60 Hz)**, matching the Lumenate app; the per-session `nova.maxHz`
+cap travels inside the `.imedx`. This span **includes** the photosensitive-seizure risk band —
+see the platform [Safety](../README.md#safety) notes.

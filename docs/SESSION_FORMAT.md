@@ -19,7 +19,7 @@ scenes per `entrainment.ramp`. Each modality reads the axes it cares about:
 | Modality | Reads | Notes |
 |---|---|---|
 | **Audio** (binaural) | `carrierHz` + `beatHz` | L = carrier, R = carrier + beat. Both sweepable. |
-| **Nova** (light) | `beatHz` | Strobe = beat, **clamped to `nova.maxHz` (13 Hz)**, phase-aligned. Light has no pitch of its own. |
+| **Nova** (light) | `beatHz` | Strobe = beat, **clamped to `nova.maxHz` (default 60 Hz, delta→gamma)**, phase-aligned. Light has no pitch of its own. |
 | **Pulsetto** (stim) | `intensity` | Stim level 1–9, traversed scene to scene. Not driven at the Hz beat. |
 | **Nova brightness** | `brightness` | Optional master-brightness automation. |
 
@@ -28,11 +28,22 @@ scenes per `entrainment.ramp`. Each modality reads the axes it cares about:
 
 ### Axis rules
 - **`beatHz` is required** on every scene (it's the entrainment value).
-- **`carrierHz`, `intensity`, `brightness` are optional per scene**, each falling back
-  to a base default when omitted:
-  - carrier → `audio.binaural.carrierHz`
-  - intensity → no stim unless `pulsetto.enabled` + a value resolves
-  - brightness → `nova.brightness`
+- **Interpolated axes** — `beatHz` and `carrierHz` ramp linearly between scenes (per
+  `entrainment.ramp`). `carrierHz` is optional per scene, falling back to
+  `audio.binaural.carrierHz`.
+- **Pulsetto stim is base-relative.** A scene's `intensity` is either an **absolute**
+  `0–9` (`0` = off) **or** a **relative token** resolved against the user's base (the
+  value of `=`, set by the in-session intensity slider; `pulsetto.intensity` is the file
+  default, 4 if unset): `=` (base), `=-` (base −1), `=+` (base +1), clamped 0–9.
+  So a track can say "one below the user's comfort" without hard-coding a level.
+- **Hold-forward axes** — `intensity`, `noise` (the bed color, or
+  `"none"`), and `flash` (Nova pattern: `sync` / `left` / `right`) are **step** values:
+  set on a scene, they apply from that scene **forward** until a later scene changes
+  them. A scene that omits one inherits the previous value (and `noise` crossfades in/out
+  at a change). Example: stim `4` on scene 1 holds until scene 5 sets `2`, which then holds
+  on from scene 5.
+- `brightness` is optional per scene, falling back to `nova.brightness`.
+- The Admin's per-node editor (Edit mode) sets all of these on the selected keyframe.
 - **Resolvable-carrier invariant:** every scene must resolve a carrier — either
   `audio.binaural.carrierHz` is set, **or** every scene carries its own `carrierHz`.
 - Scenes are sorted by `atSec`; the first should be `atSec: 0`.
@@ -66,8 +77,9 @@ the Admin dropdowns, and the n8n prompt all read from.
   directly onto the device frame encoder (`novaController` `setSyncedValues`).
 - `pattern` *(reserved)*: keyframed per-eye animation for richer choreography later.
 
-> ⚠️ The 13 Hz cap travels **with the file** so a session can never describe an unsafe
-> flash. 3–60 Hz light (15–25 Hz peak) can provoke photosensitive seizures.
+> ⚠️ `nova.maxHz` (default 60 Hz) travels **with the file** and bounds the flash rate. The light
+> can traverse delta→gamma like the Lumenate app — which **includes** the 15–25 Hz band where
+> stroboscopic light most readily provokes photosensitive seizures. Not for users with epilepsy.
 
 ### `pulsetto`
 - `enabled`: bool.
