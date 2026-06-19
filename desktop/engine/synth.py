@@ -16,7 +16,7 @@ import numpy as np
 SR = 44100
 MASTER = 0.8
 NOISE_SECONDS = 3
-FADE_SECONDS = {"none": 0.0, "slow": 2.0, "medium": 1.0, "fast": 0.5}
+FADE_SECONDS = {"none": 0.0, "short": 1.0, "medium": 2.0, "long": 3.0}
 
 
 # ---- noise generators (match binauralEngine.js) ----
@@ -88,7 +88,7 @@ class BinauralPreview:
         self.noise_kind = nb.get("type") if nb else None
         self.noise_level = float(nb.get("level", 0.25)) if nb else 0.0
         self.master = MASTER * float(au.get("masterVolume", 1.0) or 1.0)
-        self.fade = FADE_SECONDS.get(au.get("transitionFade", "medium"), 1.0)
+        self.fade = FADE_SECONDS.get(au.get("transitionFade", "medium"), 2.0)
         self.on_finish = None
         self._phaseL = self._phaseR = 0.0
         self._frame = 0

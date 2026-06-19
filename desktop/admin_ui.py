@@ -59,8 +59,8 @@ FLASH_OPTIONS = ["sync", "left", "right"]  # Nova flash pattern from this node f
 STIM_OPTIONS = ["inherit", "=", "=-", "=+", "off", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 STIM_OFFSETS = {"=": 0, "=-": -1, "=+": 1}
 # Start fade-in / end fade-out length (session-level).
-FADE_OPTIONS = ["none", "slow", "medium", "fast"]
-FADE_SECONDS = {"none": 0.0, "slow": 2.0, "medium": 1.0, "fast": 0.5}
+FADE_OPTIONS = ["none", "short", "medium", "long"]
+FADE_SECONDS = {"none": 0.0, "short": 1.0, "medium": 2.0, "long": 3.0}
 
 
 def resolve_stim(val, base=4):
