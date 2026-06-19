@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, Pressable, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, {
   useProgress,
   usePlaybackState,
@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
+import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useNova } from '../nova/NovaProvider';
 import NovaExplorer from '../components/NovaExplorer';
@@ -28,7 +29,7 @@ const fmt = s => {
 };
 const playCountKey = id => `@pulseentrain/playcount/${id}`;
 // Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
-const defaultIntensityFor = dose => Math.min(9, Math.max(1, ((dose && dose.strength) || 4) + 1));
+const defaultIntensityFor = strength => Math.min(9, Math.max(1, ((strength ?? 4) + 1)));
 
 // A per-node stim is an absolute int 0–9 OR a base-relative token. The slider is
 // the base (the value of "="); tokens resolve ±steps against it. null → the base.
@@ -41,7 +42,7 @@ const resolveStim = (val, base) => {
 };
 
 export default function PlayerScreen({ route, navigation }) {
-  const { id, usePulsetto: wantPulsetto, useNova: wantNova } = route.params;
+  const { id, usePulsetto: wantPulsetto, useNova: wantNova, strength: chosenStrength } = route.params;
   const dose = doseById(id);
   const pulsetto = usePulsetto();
   const nova = useNova();
@@ -57,8 +58,13 @@ export default function PlayerScreen({ route, navigation }) {
   const [synthPos, setSynthPos] = useState(0);
   const [synthDur, setSynthDur] = useState((dose && dose.lengthSeconds) || 0);
   const [synthPlaying, setSynthPlaying] = useState(false);
+  const [graphMode, setGraphMode] = useState(false); // double-tap the cover → live beat map
+  const lastTapRef = useRef(0);
+  const novaOverrideRef = useRef(false); // Developer Tools took manual control of the flicker
 
-  const [intensity, setIntensityVal] = useState(defaultIntensityFor(dose));
+  const [intensity, setIntensityVal] = useState(
+    defaultIntensityFor(chosenStrength != null ? chosenStrength : dose && dose.strength),
+  );
   const [volume, setVolume] = useState(1);
   const [lumi, setLumi] = useState(100);
   const intensityRef = useRef(intensity);
@@ -197,7 +203,7 @@ export default function PlayerScreen({ route, navigation }) {
           volume: 1,
           onTick: (pos, beat, ctx) => {
             setSynthPos(pos);
-            if (wantNova && nova.connected) {
+            if (wantNova && nova.connected && !novaOverrideRef.current) {
               nova.setFrequency(ctx && ctx.flashHz != null ? ctx.flashHz : beat);
               applyFlash(ctx && ctx.flash);
             }
@@ -399,6 +405,13 @@ export default function PlayerScreen({ route, navigation }) {
   }
 
   const pct = duration > 0 ? Math.min(1, position / duration) : 0;
+  const onCoverTap = () => {
+    if (!isSynth) return; // only synth (.imedx) doses have a beat map
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) setGraphMode(g => !g);
+    lastTapRef.current = now;
+  };
+  const cur = graphMode && isSynth && synthRef.current ? synthRef.current.current() : null;
   const pulseLabel = wantPulsetto
     ? pulsetto.connected
       ? ' · Pulsetto on'
@@ -408,12 +421,32 @@ export default function PlayerScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ArtImage source={imageSource(dose.image)} height={260} radius={20} hpad={24} />
+      <Pressable onPress={onCoverTap}>
+        {graphMode && isSynth ? (
+          <View style={styles.graphBox}>
+            <BeatChart
+              scenes={(dose as any).scenes}
+              duration={duration}
+              baseCarrier={(dose as any).carrier}
+              height={244}
+              progress={duration > 0 ? position / duration : 0}
+            />
+          </View>
+        ) : (
+          <ArtImage source={imageSource(dose.image)} height={260} radius={20} hpad={24} />
+        )}
+      </Pressable>
       <Text style={styles.title}>{dose.name}</Text>
-      <Text style={styles.sub}>
-        {dose.category}
-        {pulseLabel}
-      </Text>
+      {cur ? (
+        <Text style={[styles.sub, { color: carrierColor(cur.carrier) }]}>
+          {bandFor(cur.beat)} · {cur.beat.toFixed(1)} Hz · carrier {Math.round(cur.carrier)} Hz
+        </Text>
+      ) : (
+        <Text style={styles.sub}>
+          {dose.category}
+          {pulseLabel}
+        </Text>
+      )}
 
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${pct * 100}%` }]} />
@@ -492,7 +525,13 @@ export default function PlayerScreen({ route, navigation }) {
             maximumTrackTintColor={COLORS.bgCardLight}
             thumbTintColor="#fff"
           />
-          <NovaExplorer nova={nova} showFrequency />
+          <NovaExplorer
+            nova={nova}
+            showFrequency
+            onOverride={v => {
+              novaOverrideRef.current = v;
+            }}
+          />
         </View>
       ) : null}
     </ScrollView>
@@ -505,6 +544,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { color: COLORS.textMuted },
   art: { width: '100%', height: 260, borderRadius: 20, backgroundColor: COLORS.bgCardLight },
+  graphBox: { height: 260, marginHorizontal: 24, borderRadius: 20, backgroundColor: COLORS.bgCard, paddingTop: 14, paddingHorizontal: 8 },
   title: { color: COLORS.textPrimary, fontSize: 26, fontWeight: '800', marginTop: 22, textAlign: 'center' },
   sub: { color: COLORS.textSecondary, fontSize: 14, marginTop: 6, textAlign: 'center' },
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: COLORS.bgCardLight, marginTop: 24, overflow: 'hidden' },

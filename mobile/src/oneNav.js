@@ -21,6 +21,7 @@ export function pathFor(screen, params = {}) {
       const q = new URLSearchParams();
       if (params.usePulsetto != null) q.set('usePulsetto', params.usePulsetto ? '1' : '0');
       if (params.useNova != null) q.set('useNova', params.useNova ? '1' : '0');
+      if (params.strength != null) q.set('strength', String(params.strength)); // chosen base strength
       const qs = q.toString();
       return `/player/${encodeURIComponent(params.id)}${qs ? `?${qs}` : ''}`;
     }

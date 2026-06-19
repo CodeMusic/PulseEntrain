@@ -3,66 +3,73 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
 
-// Experimental: drive the Nova's 4 LEDs (2 per eye) for custom patterns.
-// Frequency follows the audio beat; this tunes per-eye brightness, the 2nd-LED
-// phase, and duty live. Presets are starting points to discover the mapping.
-export default function NovaExplorer({ nova, showFrequency = false }) {
+// Developer Tools: drive the Nova for testing and authoring tracks. Two controls
+// for now — a flicker-rate override (0 Hz/no flash up through gamma, so you can
+// time and refine the rate), and a flicker style. During track playback the
+// timeline normally drives the flicker; "Override track flicker" hands manual
+// control to this panel (onOverride lets the player suspend its per-tick writes).
+const FREQ_MAX = 40; // covers delta→gamma (30 Hz+); device cap is 60 Hz
+
+// Per-eye brightness presets. "Standard" (both LEDs dark) is the harder default
+// flicker; "Enlightened" lights both; Left/Right are single-eye pulses.
+const STYLE_LEVELS = {
+  standard: { lLevel: 0, rLevel: 0 }, // both LEDs dark — the harder/default flicker
+  enlightened: { lLevel: 1, rLevel: 1 }, // both LEDs lit
+  left: { lLevel: 1, rLevel: 0 },
+  right: { lLevel: 0, rLevel: 1 },
+};
+const STYLE_BUTTONS = [
+  ['standard', 'Standard'],
+  ['enlightened', 'Enlightened'],
+  ['left', 'Left'],
+  ['right', 'Right'],
+];
+
+export default function NovaExplorer({ nova, showFrequency = false, onOverride = null }) {
   const [open, setOpen] = useState(false);
+  const [override, setOverride] = useState(false);
   const [freq, setFreq] = useState(10);
-  const [lBright, setLBright] = useState(100);
-  const [rBright, setRBright] = useState(100);
-  const [phase, setPhase] = useState(0);
-  const [duty, setDuty] = useState(50);
+  const [style, setStyle] = useState('standard');
 
   const send = patch => nova && nova.setSyncedValues(patch);
+  const applyStyle = name => send(STYLE_LEVELS[name]);
+
   const onFreq = v => {
     setFreq(v);
-    if (nova) nova.setFrequency(v);
+    if (!nova) return;
+    if (v <= 0) {
+      send({ lLevel: 0, rLevel: 0 }); // 0 Hz = no flash (LEDs dark)
+      return;
+    }
+    nova.setFrequency(v);
+    applyStyle(style);
   };
 
-  const onLB = v => {
-    setLBright(v);
-    send({ lLevel: v / 100 });
-  };
-  const onRB = v => {
-    setRBright(v);
-    send({ rLevel: v / 100 });
-  };
-  const onPhase = v => {
-    setPhase(v);
-    send({ lPhase: v, rPhase: v });
-  };
-  const onDuty = v => {
-    setDuty(v);
-    send({ lDuty: v / 100, rDuty: v / 100 });
+  const pickStyle = name => {
+    setStyle(name);
+    if (freq > 0) applyStyle(name);
   };
 
-  const preset = name => {
-    if (name === 'sync') {
-      setPhase(0);
-      setLBright(100);
-      setRBright(100);
-      send({ lPhase: 0, rPhase: 0, lLevel: 1, rLevel: 1 });
-    } else if (name === 'all4') {
-      setPhase(2);
-      setLBright(100);
-      setRBright(100);
-      send({ lPhase: 2, rPhase: 2, lLevel: 1, rLevel: 1 }); // offset → drive the primed LEDs
-    } else if (name === 'left') {
-      setLBright(100);
-      setRBright(0);
-      send({ lLevel: 1, rLevel: 0 });
-    } else if (name === 'right') {
-      setLBright(0);
-      setRBright(100);
-      send({ lLevel: 0, rLevel: 1 });
+  // Hand frequency/flash control to the explorer (player stops its per-tick
+  // writes). Re-assert the current rate + style when turning on.
+  const toggleOverride = () => {
+    const next = !override;
+    setOverride(next);
+    onOverride && onOverride(next);
+    if (next && nova) {
+      if (freq > 0) {
+        nova.setFrequency(freq);
+        applyStyle(style);
+      } else {
+        send({ lLevel: 0, rLevel: 0 });
+      }
     }
   };
 
   if (!open) {
     return (
       <TouchableOpacity style={styles.openBtn} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={styles.openTxt}>⚙ Pattern explorer (experimental) ▾</Text>
+        <Text style={styles.openTxt}>🛠 Developer Tools ▾</Text>
       </TouchableOpacity>
     );
   }
@@ -70,39 +77,41 @@ export default function NovaExplorer({ nova, showFrequency = false }) {
   return (
     <View style={styles.box}>
       <TouchableOpacity onPress={() => setOpen(false)} activeOpacity={0.8}>
-        <Text style={styles.header}>⚙ Pattern explorer ▴</Text>
+        <Text style={styles.header}>🛠 Developer Tools ▴</Text>
       </TouchableOpacity>
 
-      <View style={styles.presetRow}>
-        {[
-          ['sync', 'Sync'],
-          ['all4', 'All 4'],
-          ['left', 'Left'],
-          ['right', 'Right'],
-        ].map(([k, l]) => (
-          <TouchableOpacity key={k} style={styles.preset} onPress={() => preset(k)} activeOpacity={0.8}>
-            <Text style={styles.presetTxt}>{l}</Text>
+      {showFrequency ? (
+        <Check label="Override track flicker" on={override} onToggle={toggleOverride} />
+      ) : null}
+      <Text style={styles.label}>
+        Flicker frequency · {freq <= 0 ? 'off (0 Hz)' : `${freq.toFixed(1)} Hz`}
+      </Text>
+      <Sld min={0} max={FREQ_MAX} step={0.5} val={freq} on={onFreq} />
+
+      <Text style={styles.label}>Flicker style</Text>
+      <View style={styles.styleGrid}>
+        {STYLE_BUTTONS.map(([k, l]) => (
+          <TouchableOpacity
+            key={k}
+            style={[styles.styleBtn, style === k && styles.styleBtnActive]}
+            onPress={() => pickStyle(k)}
+            activeOpacity={0.8}>
+            <Text style={[styles.styleTxt, style === k && styles.styleTxtActive]}>{l}</Text>
           </TouchableOpacity>
         ))}
       </View>
-
-      {showFrequency ? (
-        <>
-          <Text style={styles.label}>Flicker frequency · {freq.toFixed(1)} Hz</Text>
-          <Sld min={0.5} max={13} step={0.5} val={freq} on={onFreq} />
-        </>
-      ) : null}
-      <Text style={styles.label}>Left brightness · {Math.round(lBright)}%</Text>
-      <Sld min={0} max={100} val={lBright} on={onLB} />
-      <Text style={styles.label}>Right brightness · {Math.round(rBright)}%</Text>
-      <Sld min={0} max={100} val={rBright} on={onRB} />
-      <Text style={styles.label}>Phase / 2nd LED · {phase.toFixed(1)} Hz</Text>
-      <Sld min={0} max={6} step={0.5} val={phase} on={onPhase} />
-      <Text style={styles.label}>Duty · {Math.round(duty)}%</Text>
-      <Sld min={10} max={90} val={duty} on={onDuty} />
     </View>
   );
 }
+
+const Check = ({ label, on, onToggle }) => (
+  <TouchableOpacity style={styles.checkRow} onPress={onToggle} activeOpacity={0.8}>
+    <View style={[styles.checkBox, on && styles.checkBoxOn]}>
+      {on ? <Text style={styles.checkMark}>✓</Text> : null}
+    </View>
+    <Text style={styles.checkLabel}>{label}</Text>
+  </TouchableOpacity>
+);
 
 const Sld = ({ min, max, step = 1, val, on }) => (
   <Slider
@@ -122,10 +131,31 @@ const styles = StyleSheet.create({
   openBtn: { paddingVertical: 12, marginTop: 10, alignItems: 'center' },
   openTxt: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600' },
   box: { backgroundColor: COLORS.bgCard, borderRadius: 14, padding: 14, marginTop: 12 },
-  header: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  presetRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
-  preset: { flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: COLORS.bgCardLight, alignItems: 'center' },
-  presetTxt: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600' },
+  header: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '700', marginBottom: 4 },
   label: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600', marginTop: 12 },
   slider: { width: '100%', height: 36 },
+  styleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  styleBtn: {
+    width: '48%',
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: COLORS.bgCardLight,
+    alignItems: 'center',
+  },
+  styleBtnActive: { backgroundColor: COLORS.accentBlue },
+  styleTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
+  styleTxtActive: { color: '#fff' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, gap: 10 },
+  checkBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBoxOn: { backgroundColor: COLORS.accentBlueLight, borderColor: COLORS.accentBlueLight },
+  checkMark: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  checkLabel: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', flex: 1 },
 });

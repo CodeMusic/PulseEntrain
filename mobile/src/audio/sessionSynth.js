@@ -154,6 +154,12 @@ export class SessionSynth {
     return this._at(this.position).beat;
   }
 
+  // Current carrier + beat (for the live graph subtitle).
+  current() {
+    const a = this._activeAt(this.position);
+    return { beat: a.beat, carrier: a.carrier };
+  }
+
   setVolume(v) {
     this.volume = v;
     this.engine.setVolume(v);
