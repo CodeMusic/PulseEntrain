@@ -107,8 +107,8 @@ def C(key):
 
 
 def default_dir():
-    """File dialogs open in the repo's entrainment_assets/ (fallback: home)."""
-    d = Path(__file__).resolve().parents[1] / "entrainment_assets"
+    """File dialogs open in the repo's imedsAssets/ (fallback: home)."""
+    d = Path(__file__).resolve().parents[1] / "imedsAssets"
     return str(d) if d.is_dir() else os.path.expanduser("~")
 
 

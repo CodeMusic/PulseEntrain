@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, View, Text, Switch, TouchableOpacity, Pressable, StyleSheet, Alert } from 'react-native';
 import { COLORS } from '../theme';
-import { doseById, imageSource, audioSource } from '../catalog/data';
+import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
 import BeatPeek from '../components/BeatPeek';
 import StrengthBadge from '../components/StrengthBadge';
@@ -32,7 +32,8 @@ export default function DoseDetailScreen({ route, navigation }) {
   const img = imageSource(dose.image);
 
   const start = () => {
-    if (!audioSource(dose.audio)) {
+    // synth (.imedx) doses need no bundled MP3 — only legacy doses can be "not in this build"
+    if (!isSynthDose(dose) && !audioSource(dose.audio)) {
       Alert.alert(
         'Not in this build',
         `"${dose.name}" isn't bundled in this local build yet. A few demo tracks ship in the app for now — streaming comes later.`,

@@ -26,7 +26,7 @@ See the platform overview in the [root README](../README.md), the authoring tool
 - **One** with file-based routing in `app/`; web is served by Vite, native by **One's Metro mode**
   (RN 0.83). Native-only modules (BLE, track-player, audio-api) are stubbed for web in
   `web-stubs/` (the audio stub maps to real Web Audio, so synthesis works in the browser too).
-- **Catalog** is generated from `../entrainment_assets/` by `scripts/sync-catalog.cjs` into
+- **Catalog** is generated from `../imedsAssets/` by `scripts/sync-catalog.cjs` into
   `src/catalog/` (`catalog.json` + bundled image/audio maps). A `.imedx` supersedes a same-named
   legacy `.imed`. Run `npm run sync-catalog` (or it runs via `predev`).
 

@@ -97,7 +97,7 @@ The two BLE protocols were reverse-engineered: [docs/PULSETTO_PROTOCOL.md](docs/
 
 ## Session format
 
-Sessions live in `entrainment_assets/` and are described by JSON — one shared contract for the Admin, the apps, and (later) AI generation. Full spec: **[docs/SESSION_FORMAT.md](docs/SESSION_FORMAT.md)** + the JSON Schema in [docs/session.schema.json](docs/session.schema.json).
+Sessions live in `imedsAssets/` and are described by JSON — one shared contract for the Admin, the apps, and (later) AI generation. Full spec: **[docs/SESSION_FORMAT.md](docs/SESSION_FORMAT.md)** + the JSON Schema in [docs/session.schema.json](docs/session.schema.json).
 
 - **Legacy `.imed`** — flat metadata + a bundled MP3 and cover image.
 - **`.imedx`** *(new, self-contained)* — a programmatic **scene timeline** (beat/carrier over time), a sample-free **noise bed**, and the cover **embedded as base64** — no separate audio/image files. The mobile app synthesizes these in real time; the Admin authors them (and converts legacy `.imed` on open).

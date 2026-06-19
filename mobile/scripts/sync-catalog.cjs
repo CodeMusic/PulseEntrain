@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * sync-catalog.js — builds the mobile app's catalog from the shared
- * entrainment_assets/ folder at the repo root.
+ * imedsAssets/ folder at the repo root.
  *
  * Outputs (under mobile/src/catalog/):
  *   catalog.json            metadata for every dose (read-only catalog)
@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const MOBILE_DIR = path.resolve(__dirname, '..');
-const ASSETS_DIR = path.resolve(MOBILE_DIR, '..', 'entrainment_assets');
+const ASSETS_DIR = path.resolve(MOBILE_DIR, '..', 'imedsAssets');
 const OUT_DIR = path.join(MOBILE_DIR, 'src', 'catalog');
 const OUT_IMAGES = path.join(OUT_DIR, 'assets', 'images');
 const OUT_AUDIO = path.join(OUT_DIR, 'assets', 'audio');
@@ -64,7 +64,7 @@ function copyIfNeeded(src, dest) {
 
 function main() {
   if (!fs.existsSync(ASSETS_DIR)) {
-    console.error(`entrainment_assets not found at ${ASSETS_DIR}`);
+    console.error(`imedsAssets not found at ${ASSETS_DIR}`);
     process.exit(1);
   }
   ensure(OUT_IMAGES);
@@ -180,7 +180,7 @@ function main() {
   // catalog.json
   fs.writeFileSync(
     path.join(OUT_DIR, 'catalog.json'),
-    JSON.stringify({ generatedFrom: 'entrainment_assets', categories, doses: catalog }, null, 2) + '\n',
+    JSON.stringify({ generatedFrom: 'imedsAssets', categories, doses: catalog }, null, 2) + '\n',
   );
 
   // images.js — static require map

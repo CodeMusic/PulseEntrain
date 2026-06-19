@@ -53,7 +53,7 @@ poetry run python main.py
 ```
 
 The window opens on the dose editor (a blank **Create** session). Use **Menu → Extract / Open /
-Create**, edit on the graph, **Preview**, then **Save .imedx…** (defaults to `../entrainment_assets/`).
+Create**, edit on the graph, **Preview**, then **Save .imedx…** (defaults to `../imedsAssets/`).
 Saved files are picked up by the mobile catalog via `npm run sync-catalog`.
 
 ### CLI extraction (batch / scripting)
