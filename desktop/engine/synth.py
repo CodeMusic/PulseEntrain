@@ -16,6 +16,7 @@ import numpy as np
 SR = 44100
 MASTER = 0.8
 NOISE_SECONDS = 3
+FADE_SECONDS = {"none": 0.0, "slow": 2.0, "medium": 1.0, "fast": 0.5}
 
 
 # ---- noise generators (match binauralEngine.js) ----
@@ -87,6 +88,7 @@ class BinauralPreview:
         self.noise_kind = nb.get("type") if nb else None
         self.noise_level = float(nb.get("level", 0.25)) if nb else 0.0
         self.master = MASTER * float(au.get("masterVolume", 1.0) or 1.0)
+        self.fade = FADE_SECONDS.get(au.get("transitionFade", "medium"), 1.0)
         self.on_finish = None
         self._phaseL = self._phaseR = 0.0
         self._frame = 0
@@ -98,6 +100,13 @@ class BinauralPreview:
     def _at(self, tsec):
         return (float(np.interp(tsec, self.t, self.carr)),
                 float(np.interp(tsec, self.t, self.beat)))
+
+    def _fade_gain(self, tsec):
+        if self.fade <= 0:
+            return 1.0
+        fin = tsec / self.fade
+        fout = (self.duration - tsec) / self.fade
+        return max(0.0, min(1.0, fin, fout))
 
     def _next_noise(self, n):
         buf = self._noise
@@ -123,7 +132,7 @@ class BinauralPreview:
             ns = self.noise_level * self._next_noise(frames)
             left = left + ns
             right = right + ns
-        out = self.master * np.column_stack([left, right])
+        out = self.master * self._fade_gain(t0) * np.column_stack([left, right])
         outdata[:] = np.clip(out, -1.0, 1.0).astype(np.float32)
         self._frame += frames
 

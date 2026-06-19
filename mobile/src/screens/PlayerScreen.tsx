@@ -193,6 +193,7 @@ export default function PlayerScreen({ route, navigation }) {
           carrier: sd.carrier,
           duration: sd.lengthSeconds,
           noise: sd.noise,
+          transitionFade: sd.fade,
           volume: 1,
           onTick: (pos, beat, ctx) => {
             setSynthPos(pos);

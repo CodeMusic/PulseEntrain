@@ -125,6 +125,7 @@ function main() {
           carrier: binaural.carrierHz ?? 200,
           noise: noiseBed ? noiseBed.type : 'none',
           noiseLevel: noiseBed ? noiseBed.level ?? 0.25 : 0,
+          fade: (j.audio && j.audio.transitionFade) || 'medium',
         });
         imedxCount++;
         continue;

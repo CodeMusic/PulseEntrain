@@ -401,6 +401,7 @@ def spec_to_dict_v2(spec):
                 # Studio; a file bed is deferred until streaming replaces bundled MP3s.
             ],
             "masterVolume": 1.0,
+            "transitionFade": "medium",
         },
         # Audio-only source can't observe the glasses -> mirror the beat (the base option).
         "nova": {"mode": "follow", "maxHz": 60, "brightness": 1.0},

@@ -6,6 +6,7 @@ import { BinauralEngine } from './binauralEngine';
 // uses for bundled MP3s. Same engine the Manual mode uses, so a previewed/saved
 // session sounds the same here as in the desktop Admin.
 const ENGINE_NOISE = new Set(['white', 'pink', 'brown']); // others fall back to closest
+const FADE_SECONDS = { none: 0, slow: 2.0, medium: 1.0, fast: 0.5 }; // start/end transition
 
 function normalizeNoise(type) {
   if (!type || type === 'none') return 'none';
@@ -17,12 +18,15 @@ function normalizeNoise(type) {
 export class SessionSynth {
   /**
    * @param {{ scenes?: Array<{atSec:number,beatHz:number,carrierHz?:number}>, carrier?: number,
-   *           duration?: number, noise?: string, volume?: number,
+   *           duration?: number, noise?: string, volume?: number, transitionFade?: string,
    *           onTick?: (pos:number, beat:number, ctx:{intensity?:number, flash?:string, flashHz?:number})=>void,
    *           onEnded?: ()=>void }} [opts]
    */
   constructor(opts = {}) {
-    const { scenes, carrier = 200, duration, noise = 'none', volume = 1, onTick, onEnded } = opts;
+    const { scenes, carrier = 200, duration, noise = 'none', volume = 1,
+            transitionFade = 'medium', onTick, onEnded } = opts;
+    this.fadeSeconds = FADE_SECONDS[transitionFade] != null ? FADE_SECONDS[transitionFade] : 1.0;
+    this._faded = false;
     this.scenes = (scenes || []).slice().sort((a, b) => a.atSec - b.atSec);
     this.baseCarrier = carrier || 200;
     this.duration =
@@ -89,6 +93,8 @@ export class SessionSynth {
     const a = this._activeAt(this.position);
     this._curNoise = normalizeNoise(a.noise);
     this.engine.start({ carrier: a.carrier, beat: a.beat, volume: this.volume, background: this._curNoise });
+    if (this.fadeSeconds > 0) this.engine.fadeIn(this.fadeSeconds);
+    this._faded = false;
     this._t0 = Date.now();
     this.playing = true;
     this._timer = setInterval(() => this._tick(), 200);
@@ -96,6 +102,10 @@ export class SessionSynth {
 
   _tick() {
     this.position = this._offset + (Date.now() - this._t0) / 1000;
+    if (this.fadeSeconds > 0 && !this._faded && this.position >= this.duration - this.fadeSeconds) {
+      this._faded = true; // end fade-out
+      this.engine.fadeOut(Math.max(0.05, this.duration - this.position));
+    }
     if (this.position >= this.duration) {
       this.position = this.duration;
       this.pause();

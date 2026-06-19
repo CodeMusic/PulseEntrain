@@ -198,6 +198,30 @@ export class BinauralEngine {
     this.volume = v;
     if (this.master) this.master.gain.value = v;
   }
+
+  // Ramp the master gain 0 → volume (start) over `seconds`.
+  fadeIn(seconds) {
+    if (!this.master || !this.ctx || seconds <= 0) return;
+    const g = this.master.gain;
+    const now = this.ctx.currentTime;
+    try {
+      g.setValueAtTime(0, now);
+      g.linearRampToValueAtTime(this.volume, now + seconds);
+    } catch (e) {
+      g.value = this.volume;
+    }
+  }
+
+  // Ramp the master gain → 0 (end) over `seconds`.
+  fadeOut(seconds) {
+    if (!this.master || !this.ctx || seconds <= 0) return;
+    const g = this.master.gain;
+    const now = this.ctx.currentTime;
+    try {
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + seconds);
+    } catch (e) {}
+  }
   setBackground(type) {
     this.background = type;
     if (this.running) this._startNoise(type);

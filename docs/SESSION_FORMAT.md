@@ -65,6 +65,10 @@ scenes per `entrainment.ramp`. Each modality reads the axes it cares about:
 Each bed has a `level` (0–1). The generator registry here is the same list the engine,
 the Admin dropdowns, and the n8n prompt all read from.
 
+`audio.transitionFade` sets the session's **start fade-in and end fade-out** length:
+`none` | `slow` (~2 s) | `medium` (~1 s, default) | `fast` (~0.5 s). Edited in the Admin
+(a dropdown); applied by playback and the Admin preview.
+
 ---
 
 ## Modalities

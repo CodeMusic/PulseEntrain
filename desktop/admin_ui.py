@@ -58,6 +58,9 @@ FLASH_OPTIONS = ["sync", "left", "right"]  # Nova flash pattern from this node f
 # "=" is the user's base (default 4); "=-"/"=+" are base ∓1. "off" = 0.
 STIM_OPTIONS = ["inherit", "=", "=-", "=+", "off", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 STIM_OFFSETS = {"=": 0, "=-": -1, "=+": 1}
+# Start fade-in / end fade-out length (session-level).
+FADE_OPTIONS = ["none", "slow", "medium", "fast"]
+FADE_SECONDS = {"none": 0.0, "slow": 2.0, "medium": 1.0, "fast": 0.5}
 
 
 def resolve_stim(val, base=4):
@@ -595,7 +598,8 @@ def blank_imed():
                        "createdAt": datetime.now(timezone.utc).isoformat(timespec="seconds")},
         "entrainment": {"ramp": "linear",
                         "scenes": [{"atSec": 0, "beatHz": 10}, {"atSec": 600, "beatHz": 6}]},
-        "audio": {"binaural": {"carrierHz": 200, "follow": "beat"}, "beds": [], "masterVolume": 1.0},
+        "audio": {"binaural": {"carrierHz": 200, "follow": "beat"}, "beds": [],
+                  "masterVolume": 1.0, "transitionFade": "medium"},
         "nova": {"mode": "follow", "maxHz": 60, "brightness": 1.0},
         "pulsetto": {"enabled": False, "follow": "scenes", "intensityClamp": [1, 9]},
     }
@@ -623,7 +627,8 @@ def legacy_to_imed(legacy):
         "generation": {"source": "binaural_decompose", "legacy": True,
                        "createdAt": datetime.now(timezone.utc).isoformat(timespec="seconds")},
         "entrainment": {"ramp": "linear", "scenes": []},
-        "audio": {"binaural": {"carrierHz": 200, "follow": "beat"}, "beds": [], "masterVolume": 1.0},
+        "audio": {"binaural": {"carrierHz": 200, "follow": "beat"}, "beds": [],
+                  "masterVolume": 1.0, "transitionFade": "medium"},
         "nova": {"mode": "follow", "maxHz": 60, "brightness": 1.0},
         "pulsetto": {"enabled": False, "follow": "scenes", "intensityClamp": [1, 9]},
     }
@@ -636,7 +641,10 @@ class DoseScreen(Screen):
         self._preview = None
         self._preview_ev = None
         self._populating = False  # guard so populating node fields doesn't fire setters
-        root = BoxLayout(orientation="vertical", padding=dp(18), spacing=dp(10), size_hint_y=None)
+        # Upper content scrolls; the transport (slider/readout/editbar/Save) lives in a
+        # fixed footer below, so grabbing the slider never pulls the scrollable page.
+        root = BoxLayout(orientation="vertical", padding=[dp(18), dp(18), dp(18), dp(8)],
+                         spacing=dp(10), size_hint_y=None)
         root.bind(minimum_height=root.setter("height"))
 
         def cap(text, w, ha="left"):
@@ -690,8 +698,8 @@ class DoseScreen(Screen):
         header.add_widget(meta)
         root.add_widget(header)
 
-        # --- description (left) with Noise + Duration stacked on the right ---
-        drow = BoxLayout(size_hint_y=None, height=dp(150), spacing=dp(14))
+        # --- description (left) with Noise + Duration + Fade stacked on the right ---
+        drow = BoxLayout(size_hint_y=None, height=dp(190), spacing=dp(14))
         dcol = BoxLayout(orientation="vertical", spacing=dp(4))
         dcol.add_widget(vcap("Description"))
         self.f_desc = TextInput(multiline=True, background_color=C("bg_card_light"),
@@ -713,6 +721,12 @@ class DoseScreen(Screen):
         self.dur_field.height = dp(40)
         self.dur_field.bind(on_text_validate=self._on_duration)
         ncol.add_widget(self.dur_field)
+        ncol.add_widget(vcap("Transition fade"))
+        self.fade_spin = Spinner(text="medium", values=FADE_OPTIONS, size_hint_y=None, height=dp(40),
+                                 background_normal="", background_color=C("bg_card_light"),
+                                 color=C("text_primary"), font_size=sp(14))
+        self.fade_spin.bind(text=lambda _, v: self._on_fade(v))
+        ncol.add_widget(self.fade_spin)
         ncol.add_widget(Widget())
         drow.add_widget(ncol)
         root.add_widget(drow)
@@ -758,16 +772,21 @@ class DoseScreen(Screen):
         self.graph_wrap.add_widget(self.loading)
         root.add_widget(self.graph_wrap)
 
+        # --- fixed footer (does not scroll): scrub + readout + editbar + status + buttons ---
+        footer = BoxLayout(orientation="vertical", size_hint_y=None,
+                           padding=[dp(18), 0, dp(18), dp(12)], spacing=dp(8))
+        footer.bind(minimum_height=footer.setter("height"))
+
         # scrub playhead + live readout of the values at the cursor
         self.scrub = Slider(min=0, max=600, value=0, size_hint_y=None, height=dp(28),
                             cursor_size=(dp(24), dp(24)))
         self.scrub.bind(value=lambda _, v: self._on_scrub(v))
         self.graph.on_scrub = lambda t: setattr(self.scrub, "value", t)  # drag the track to scrub
-        root.add_widget(self.scrub)
+        footer.add_widget(self.scrub)
         self.readout = Label(text="", color=C("text_secondary"), font_size=sp(12),
                              size_hint_y=None, height=dp(22), halign="right", valign="middle")
         self.readout.bind(size=lambda w, *_: setattr(w, "text_size", w.size))
-        root.add_widget(self.readout)
+        footer.add_widget(self.readout)
 
         # per-node editor (hidden until Edit). Row 1 = time/beat/carrier/stim (Set
         # applies); row 2 = noise/flash dropdowns (apply on change) + Add/Delete.
@@ -820,12 +839,12 @@ class DoseScreen(Screen):
         r2.add_widget(del_btn)
         self.editbar.add_widget(r1)
         self.editbar.add_widget(r2)
-        root.add_widget(self.editbar)
+        footer.add_widget(self.editbar)
 
         self.status = Label(text="", color=C("text_secondary"), font_size=sp(12),
                            size_hint_y=None, height=dp(22), halign="left", valign="middle")
         self.status.bind(size=lambda w, *_: setattr(w, "text_size", w.size))
-        root.add_widget(self.status)
+        footer.add_widget(self.status)
 
         bottom = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(12))
         self.preview_btn = PillButton(text="Preview", color_key="accent_blue",
@@ -835,11 +854,14 @@ class DoseScreen(Screen):
         save.bind(on_release=self._on_save)
         bottom.add_widget(self.preview_btn)
         bottom.add_widget(save)
-        root.add_widget(bottom)
+        footer.add_widget(bottom)
 
-        sv = ScrollView(do_scroll_x=False)  # vertical only — don't steal the slider's horizontal drag
+        outer = BoxLayout(orientation="vertical")
+        sv = ScrollView(do_scroll_x=False)
         sv.add_widget(root)
-        self.add_widget(sv)
+        outer.add_widget(sv)       # scrolls
+        outer.add_widget(footer)   # fixed
+        self.add_widget(outer)
 
     # ---- load entry points ----
     def load_imed(self, imed, status=""):
@@ -851,9 +873,11 @@ class DoseScreen(Screen):
         self.f_slabel.text = m.get("strengthLabel") or ""
         self.s_slider.value = m.get("strength") or 4
         self.cover.set_texture(texture_from_image(m.get("image")))
-        beds = imed.setdefault("audio", {}).setdefault("beds", [])
+        audio = imed.setdefault("audio", {})
+        beds = audio.setdefault("beds", [])
         ntype = next((b.get("type") for b in beds if b.get("source") == "noise"), "none")
         self.noise_spin.text = ntype or "none"
+        self.fade_spin.text = audio.get("transitionFade") or "medium"
         scenes = imed.setdefault("entrainment", {}).setdefault("scenes", [])
         base_carrier = ((imed.get("audio", {}) or {}).get("binaural") or {}).get("carrierHz", 200) or 200
         self.graph.load(scenes, m.get("durationSec"), base_carrier)
@@ -937,6 +961,10 @@ class DoseScreen(Screen):
     def _on_scrub(self, t):
         self.graph.set_playhead(t)
         self._update_readout(t)
+
+    def _on_fade(self, v):
+        if self.imed is not None:
+            self.imed.setdefault("audio", {})["transitionFade"] = v
 
     def _set_noise(self, t):
         if self.imed is None:
