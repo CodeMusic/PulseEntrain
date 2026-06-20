@@ -106,8 +106,21 @@ def C(key):
     return hexcolor(COLORS[key])
 
 
+_LAST_DIR = None  # directory of the last session opened/saved — reused by file dialogs
+
+
+def set_last_dir(path):
+    """Remember the folder a session was opened from / saved to."""
+    global _LAST_DIR
+    d = os.path.dirname(path) if os.path.isfile(path) else path
+    if d and os.path.isdir(d):
+        _LAST_DIR = d
+
+
 def default_dir():
-    """File dialogs open in the repo's imedsAssets/ (fallback: home)."""
+    """File dialogs open in the last-used folder, else the repo's imedsAssets/ (fallback: home)."""
+    if _LAST_DIR and os.path.isdir(_LAST_DIR):
+        return _LAST_DIR
     d = Path(__file__).resolve().parents[1] / "imedsAssets"
     return str(d) if d.is_dir() else os.path.expanduser("~")
 
@@ -666,6 +679,7 @@ class DoseScreen(Screen):
         super().__init__(**kw)
         self.imed = None
         self.current_path = None  # set once saved/opened as .imedx → plain Save overwrites it
+        self.on_open = None       # set by AdminRoot → Ctrl/Cmd+O opens a session
         self._preview = None
         self._preview_ev = None
         self._populating = False  # guard so populating node fields doesn't fire setters
@@ -900,9 +914,14 @@ class DoseScreen(Screen):
         if self.manager is not None and self.manager.current != self.name:
             return False
         mods = modifiers or []
-        # Ctrl/Cmd+S → Save (works regardless of edit mode or field focus)
-        if codepoint in ("s", "S") and ("ctrl" in mods or "meta" in mods):
+        cmd = "ctrl" in mods or "meta" in mods
+        # Ctrl/Cmd+S → Save, Ctrl/Cmd+O → Open (work regardless of edit mode / field focus)
+        if cmd and codepoint in ("s", "S"):
             self._on_save()
+            return True
+        if cmd and codepoint in ("o", "O"):
+            if self.on_open:
+                self.on_open()
             return True
         if key not in (127, 8):  # forward-delete / backspace (mac "delete")
             return False
@@ -1250,6 +1269,7 @@ class DoseScreen(Screen):
             with open(path, "w") as fh:
                 json.dump(self.imed, fh, indent=2)
             self.current_path = path  # now "saved" → plain Save overwrites here
+            set_last_dir(path)        # next dialog opens here
             self.status.text = f"Saved → {path}"
         except Exception as e:
             self.status.text = f"[!] save: {e}"
@@ -1274,6 +1294,7 @@ class AdminRoot(BoxLayout):
         super().__init__(orientation="vertical", **kw)
         self.sm = ScreenManager(transition=FadeTransition(duration=0.12))
         self.dose = DoseScreen(name="dose")
+        self.dose.on_open = self._open  # Ctrl/Cmd+O from the dose screen
         pulse = Screen(name="pulsetto")
         pulse.add_widget(pulsetto_screen)
         self.sm.add_widget(self.dose)
@@ -1286,7 +1307,7 @@ class AdminRoot(BoxLayout):
         menu_btn = PillButton(text="Menu", color_key="bg_card_light",
                               size_hint_x=None, width=dp(120), height=dp(40))
         dd = DropDown(auto_width=False, width=dp(200))
-        items = [("Extract from MP3…", self._extract), ("Open .imed…", self._open),
+        items = [("Extract from MP3…", self._extract), ("Open…  (⌘/Ctrl+O)", self._open),
                  ("Create new", self._create),
                  ("Save  (⌘/Ctrl+S)", lambda: self.dose._on_save()),
                  ("Save As…", lambda: self.dose._save_as()),
@@ -1326,6 +1347,7 @@ class AdminRoot(BoxLayout):
                 self.dose.status.text = f"[!] open: {e}"
                 return
             self._to_dose()
+            set_last_dir(path)  # next dialog opens in this folder
             if self._is_legacy(data):
                 self._open_legacy(data, os.path.dirname(path), os.path.basename(path))
             else:
