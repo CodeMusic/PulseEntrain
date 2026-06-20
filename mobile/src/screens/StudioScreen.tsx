@@ -3,7 +3,7 @@ import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert 
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
-import BeatChart from '../components/BeatChart';
+import EditableBeatGraph from '../components/EditableBeatGraph';
 import { SessionSynth } from '../audio/sessionSynth';
 import { pickImedxFile } from '../catalog/pickImedx';
 import { registerImportedDose } from '../catalog/importDose';
@@ -37,6 +37,7 @@ export default function StudioScreen({ navigation }) {
   const [s, setS] = useState<any>(blankSession);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
+  const [sel, setSel] = useState(-1); // selected node index
   const synthRef = useRef(null);
 
   useEffect(() => () => { try { synthRef.current?.stop(); } catch (e) {} }, []);
@@ -167,7 +168,16 @@ export default function StudioScreen({ navigation }) {
       </View>
 
       <View style={styles.graphCard}>
-        <BeatChart scenes={sortedScenes()} duration={s.durationSec} baseCarrier={s.carrier} height={240} progress={playing ? progress : null} />
+        <EditableBeatGraph
+          scenes={s.scenes}
+          duration={s.durationSec}
+          baseCarrier={s.carrier}
+          height={260}
+          selected={sel}
+          onSelect={setSel}
+          onChange={scenes => set({ scenes })}
+          progress={playing ? progress : null}
+        />
       </View>
 
       <Field label="Title">
@@ -203,29 +213,35 @@ export default function StudioScreen({ navigation }) {
         <Chips options={FADES} value={s.fade} onPick={v => set({ fade: v })} />
       </Field>
 
-      <Text style={styles.section}>Nodes (beat / carrier over time)</Text>
-      <View style={styles.nodeHead}>
-        <Text style={[styles.nodeCol, styles.nodeColLbl]}>time (s)</Text>
-        <Text style={[styles.nodeCol, styles.nodeColLbl]}>beat (Hz)</Text>
-        <Text style={[styles.nodeCol, styles.nodeColLbl]}>carrier (Hz)</Text>
-        <View style={{ width: 36 }} />
-      </View>
-      {s.scenes.map((sc, i) => (
-        <View key={i} style={styles.nodeRow}>
-          <TextInput style={[styles.input, styles.nodeCol]} keyboardType="numeric" value={String(sc.atSec)}
-            onChangeText={t => setScene(i, { atSec: Math.max(0, parseFloat(t) || 0) })} />
-          <TextInput style={[styles.input, styles.nodeCol]} keyboardType="numeric" value={String(sc.beatHz)}
-            onChangeText={t => setScene(i, { beatHz: Math.max(0, parseFloat(t) || 0) })} />
-          <TextInput style={[styles.input, styles.nodeCol]} keyboardType="numeric"
-            value={sc.carrierHz == null ? '' : String(sc.carrierHz)} placeholder="(base)" placeholderTextColor={COLORS.textMuted}
-            onChangeText={t => setScene(i, { carrierHz: t.trim() === '' ? undefined : (parseFloat(t) || 0) })} />
-          <TouchableOpacity style={styles.del} onPress={() => delNode(i)}>
+      <Text style={styles.section}>Selected node</Text>
+      {sel >= 0 && s.scenes[sel] ? (
+        <View style={styles.nodeRow}>
+          <Field label="time (s)" flex>
+            <TextInput style={styles.input} keyboardType="numeric" value={String(s.scenes[sel].atSec)}
+              onChangeText={t => setScene(sel, { atSec: Math.max(0, parseFloat(t) || 0) })} />
+          </Field>
+          <View style={{ width: 10 }} />
+          <Field label="beat (Hz)" flex>
+            <TextInput style={styles.input} keyboardType="numeric" value={String(s.scenes[sel].beatHz)}
+              onChangeText={t => setScene(sel, { beatHz: Math.max(0, parseFloat(t) || 0) })} />
+          </Field>
+          <View style={{ width: 10 }} />
+          <Field label="carrier (Hz)" flex>
+            <TextInput style={styles.input} keyboardType="numeric"
+              value={s.scenes[sel].carrierHz == null ? '' : String(s.scenes[sel].carrierHz)}
+              placeholder="(base)" placeholderTextColor={COLORS.textMuted}
+              onChangeText={t => setScene(sel, { carrierHz: t.trim() === '' ? undefined : (parseFloat(t) || 0) })} />
+          </Field>
+          <View style={{ width: 10 }} />
+          <TouchableOpacity style={styles.delBig} onPress={() => { delNode(sel); setSel(-1); }}>
             <Text style={styles.delTxt}>✕</Text>
           </TouchableOpacity>
         </View>
-      ))}
-      <TouchableOpacity style={styles.addBtn} onPress={addNode}>
-        <Text style={styles.addTxt}>+ Add node</Text>
+      ) : (
+        <Text style={styles.mutedSmall}>Tap a node on the graph to edit its time / beat / carrier — or tap empty space to add one.</Text>
+      )}
+      <TouchableOpacity style={styles.addBtn} onPress={() => { addNode(); setSel(s.scenes.length); }}>
+        <Text style={styles.addTxt}>+ Add node (midpoint)</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -273,11 +289,8 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: COLORS.accentBlue },
   chipTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
   chipTxtOn: { color: '#fff' },
-  nodeHead: { flexDirection: 'row', gap: 8, paddingHorizontal: 2 },
-  nodeColLbl: { color: COLORS.textMuted, fontSize: 11, backgroundColor: 'transparent', paddingVertical: 0 },
-  nodeRow: { flexDirection: 'row', gap: 8, marginTop: 6, alignItems: 'center' },
-  nodeCol: { flex: 1 },
-  del: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bgCard },
+  nodeRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  delBig: { width: 44, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bgCard },
   delTxt: { color: COLORS.accentRed, fontSize: 16, fontWeight: '800' },
   addBtn: { marginTop: 12, paddingVertical: 12, borderRadius: 10, backgroundColor: COLORS.bgCard, alignItems: 'center' },
   addTxt: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '700' },
