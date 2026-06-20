@@ -53,6 +53,7 @@ export function PulsettoProvider({ children }) {
   const statusPollRef = useRef(null);
   const disconnectSubRef = useRef(null);
   const isReconnectingRef = useRef(false);
+  const userDisconnectedRef = useRef(false); // user toggled off → don't auto-reconnect
   const sessionActiveRef = useRef(false);
   const activeStrengthRef = useRef(5);
 
@@ -182,6 +183,10 @@ export function PulsettoProvider({ children }) {
       statusPollRef.current = null;
     }
     // keep sessionActive as-is so we resume on reconnect
+    if (userDisconnectedRef.current) {
+      userDisconnectedRef.current = false; // user-initiated → don't auto-reconnect
+      return;
+    }
     if (!isReconnectingRef.current) {
       isReconnectingRef.current = true;
       setTimeout(() => {
@@ -224,6 +229,7 @@ export function PulsettoProvider({ children }) {
 
   const scanForDevices = () => {
     if (scanningRef.current || connectedRef.current) return;
+    userDisconnectedRef.current = false; // re-enabling clears the no-reconnect flag
     setScan(true);
     manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
@@ -330,6 +336,19 @@ export function PulsettoProvider({ children }) {
     }
   };
 
+  // User-initiated disconnect (toggle off). Ends any session and drops the BLE
+  // link without auto-reconnecting (handleDisconnection honours the flag).
+  const disconnect = async () => {
+    userDisconnectedRef.current = true;
+    const device = connectedRef.current;
+    if (sessionActiveRef.current) { try { await stopSession(); } catch (e) {} }
+    manager.stopDeviceScan();
+    if (device) { try { await manager.cancelDeviceConnection(device.id); } catch (e) {} }
+    setConnected(null);
+    setBattery(null);
+    setCharging(null);
+  };
+
   // ---- lifecycle: permissions + auto-scan on mount, refresh on foreground ----
   useEffect(() => {
     requestBluetoothPermissions();
@@ -355,6 +374,7 @@ export function PulsettoProvider({ children }) {
     scanning,
     sessionActive,
     scanForDevices,
+    disconnect,
     startSession,
     stopSession,
     setIntensity,

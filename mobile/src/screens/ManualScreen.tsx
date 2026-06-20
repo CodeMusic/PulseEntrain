@@ -115,6 +115,15 @@ export default function ManualScreen() {
   const onIntensity = v => { setIntensity(v); if (running && pulsetto.connected) pulsetto.setIntensity(v); };
   const onLumi = v => { setLumi(v); nova.setMasterBrightness(v / 100); };
 
+  const togglePulsetto = val => {
+    if (val && IS_WEB) return nativeOnlyNotice('Pulsetto');
+    if (val) {
+      if (!pulsetto.connected && !pulsetto.scanning) pulsetto.scanForDevices();
+    } else {
+      pulsetto.disconnect();
+    }
+  };
+
   const toggleNova = val => {
     if (val && IS_WEB) return nativeOnlyNotice('Lumenate Nova');
     if (val) {
@@ -206,15 +215,8 @@ export default function ManualScreen() {
               {!IS_WEB && pulsetto.connected && pulsetto.battery != null ? ` · ${pulsetto.battery}%` : ''}
             </Text>
           </View>
-          {IS_WEB ? (
-            <Switch value={false} disabled trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
-          ) : pulsetto.connected ? (
-            <View style={[styles.dot, styles.dotOn]} />
-          ) : (
-            <TouchableOpacity style={styles.scanBtn} onPress={() => pulsetto.scanForDevices()} disabled={pulsetto.scanning}>
-              <Text style={styles.scanTxt}>{pulsetto.scanning ? 'Scanning…' : 'Connect'}</Text>
-            </TouchableOpacity>
-          )}
+          <Switch value={pulsetto.connected} disabled={IS_WEB} onValueChange={togglePulsetto}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
         </View>
         {!IS_WEB && pulsetto.connected ? (
           <>
@@ -269,10 +271,6 @@ const styles = StyleSheet.create({
   deviceRow: { flexDirection: 'row', alignItems: 'center' },
   deviceTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '700' },
   deviceSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
-  dot: { width: 12, height: 12, borderRadius: 6 },
-  dotOn: { backgroundColor: COLORS.accentGreen },
-  scanBtn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: COLORS.accentBlue },
-  scanTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 6 },
   timerBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.bgCardLight, alignItems: 'center', justifyContent: 'center' },
   timerBtnTxt: { color: COLORS.textPrimary, fontSize: 30, fontWeight: '300' },
