@@ -237,6 +237,13 @@ export default function DoseDetailScreen({ route, navigation }) {
       <TouchableOpacity style={styles.startBtn} activeOpacity={0.85} onPress={start}>
         <Text style={styles.startTxt}>Start</Text>
       </TouchableOpacity>
+
+      {IS_WEB && isSynthDose(dose) ? (
+        <TouchableOpacity style={styles.studioBtn} activeOpacity={0.85}
+          onPress={() => navigation.navigate('Studio', { load: dose.id })}>
+          <Text style={styles.studioTxt}>Open in Studio</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }
@@ -273,4 +280,6 @@ const styles = StyleSheet.create({
   toggleSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
   startBtn: { backgroundColor: COLORS.accentGreen, borderRadius: 30, paddingVertical: 18, alignItems: 'center', marginTop: 24 },
   startTxt: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  studioBtn: { borderRadius: 30, paddingVertical: 14, alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: COLORS.divider },
+  studioTxt: { color: COLORS.textSecondary, fontSize: 15, fontWeight: '700' },
 });

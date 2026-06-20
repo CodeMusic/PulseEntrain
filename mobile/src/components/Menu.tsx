@@ -79,6 +79,7 @@ function Flyout({ isOpen, close, go }) {
         <Text style={styles.brand}>PulseEntrain</Text>
         <Item label="Home" onPress={() => go('Springboard')} />
         <Item label="Open a file" onPress={openFile} />
+        {IS_WEB ? <Item label="Studio (web)" onPress={() => go('Studio')} /> : null}
         <Item label="About" onPress={() => go('About')} />
         <Text style={styles.section}>Programs</Text>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -91,7 +92,7 @@ function Flyout({ isOpen, close, go }) {
   );
 }
 
-const Item = ({ label, onPress, small }) => (
+const Item = ({ label, onPress, small }: any) => (
   <TouchableOpacity onPress={onPress} style={styles.item} activeOpacity={0.7}>
     <Text style={[styles.itemTxt, small && styles.itemSmall]}>{label}</Text>
   </TouchableOpacity>
