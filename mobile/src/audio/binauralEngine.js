@@ -4,7 +4,7 @@ import { AudioContext } from 'react-native-audio-api';
 import { NOISE_SECONDS, NOISE_LEVEL, NOISE_FILL } from '../shared/synthCoefficients';
 import { bandFor } from '../shared/entrainment';
 
-export { bandFor }; // re-export so existing importers (BinauralPanel) keep their path
+export { bandFor }; // re-export so importers (ManualScreen) keep their path
 
 // A live binaural-beat synth: two hard-panned sine oscillators a `beat` Hz
 // apart, plus an optional noise bed. Real-time setters drive the manual sliders;

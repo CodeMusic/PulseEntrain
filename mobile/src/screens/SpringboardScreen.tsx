@@ -3,11 +3,13 @@ import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { categoryCards } from '../catalog/data';
 import SpringboardCard from '../components/SpringboardCard';
+import WeeklyTracker from '../components/WeeklyTracker';
 
 export default function SpringboardScreen({ navigation }) {
   const cats = categoryCards();
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <WeeklyTracker />
       <Text style={styles.h2}>Modes</Text>
       <View style={styles.row}>
         <SpringboardCard
