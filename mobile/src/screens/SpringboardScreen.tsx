@@ -1,26 +1,11 @@
 import React from 'react';
-import { ScrollView, View, Text, Alert, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { categoryCards } from '../catalog/data';
-import { registerImportedDose } from '../catalog/importDose';
-import { pickImedxFile } from '../catalog/pickImedx';
 import SpringboardCard from '../components/SpringboardCard';
 
 export default function SpringboardScreen({ navigation }) {
   const cats = categoryCards();
-
-  // Open a saved .imedx and play it (your own creation, or one shared with you).
-  const openFile = async () => {
-    try {
-      const picked = await pickImedxFile();
-      if (!picked) return; // cancelled
-      const dose = registerImportedDose(picked.json);
-      navigation.navigate('Player', { id: dose.id, usePulsetto: false, useNova: false });
-    } catch (e) {
-      Alert.alert("Couldn't open that file", (e && e.message) || 'Unknown error.');
-    }
-  };
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.h2}>Modes</Text>
@@ -33,16 +18,6 @@ export default function SpringboardScreen({ navigation }) {
         />
         <View style={{ width: 12 }} />
         <SpringboardCard title="AI Session" subtitle="Prompt → program" disabled />
-      </View>
-      <View style={styles.row}>
-        <SpringboardCard
-          title="Open a file"
-          subtitle="Play a saved .imedx"
-          accent={COLORS.accentGreen}
-          onPress={openFile}
-        />
-        <View style={{ width: 12 }} />
-        <View style={{ flex: 1 }} />
       </View>
 
       <Text style={styles.h2}>Programs</Text>

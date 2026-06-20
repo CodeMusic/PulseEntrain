@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, View, Text, TouchableOpacity, Pressable, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, {
   useProgress,
   usePlaybackState,
@@ -18,6 +18,7 @@ import { useNova } from '../nova/NovaProvider';
 import NovaExplorer from '../components/NovaExplorer';
 import { setupPlayer } from '../audio/player';
 import { SessionSynth } from '../audio/sessionSynth';
+import { IS_WEB } from '../nativeOnly';
 
 const fmt = s => {
   if (!s || s < 0) s = 0;
@@ -511,6 +512,33 @@ export default function PlayerScreen({ route, navigation }) {
         />
       </View>
 
+      {/* Web preview: device modalities are native-only — show them disabled so
+          it's clear the iOS / Android app does more (Bluetooth devices). */}
+      {IS_WEB ? (
+        <View style={styles.deviceCard}>
+          {[
+            ['Use Pulsetto', 'Vagus nerve stimulation'],
+            ['Use Lumenate Nova', 'Light entrainment'],
+          ].map(([title, sub]) => (
+            <View key={title} style={styles.deviceRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deviceTitle}>{title}</Text>
+                <Text style={styles.deviceSub}>{sub}</Text>
+              </View>
+              <Switch
+                value={false}
+                disabled
+                trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }}
+                thumbColor="#fff"
+              />
+            </View>
+          ))}
+          <Text style={styles.deviceHint}>
+            Bluetooth devices (Pulsetto · Nova) work in the iOS / Android app.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Lumi brightness master + in-session pattern explorer (Nova) */}
       {wantNova && nova.connected ? (
         <View style={styles.sliderBlock}>
@@ -558,6 +586,11 @@ const styles = StyleSheet.create({
   ctrlSecondaryTxt: { color: COLORS.textPrimary, fontSize: 20 },
   sliderBlock: { marginTop: 22 },
   sliderLabel: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  deviceCard: { marginTop: 24, backgroundColor: COLORS.bgCard, borderRadius: 14, padding: 14 },
+  deviceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  deviceTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
+  deviceSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  deviceHint: { color: COLORS.textMuted, fontSize: 12, marginTop: 8 },
   slider: { width: '100%', height: 40 },
   notBundled: { color: COLORS.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 16 },
   errorBox: { marginTop: 20, padding: 14, borderRadius: 12, backgroundColor: 'rgba(255,80,80,0.12)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.4)' },
