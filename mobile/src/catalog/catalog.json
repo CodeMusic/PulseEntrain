@@ -4,7 +4,7 @@
     "Experimental",
     "Focus and Energy",
     "Dream Chill",
-    "Sex and Intemancy",
+    "Sex and Intimacy",
     "Medications",
     "Spirituality",
     "Pure"
@@ -1897,8 +1897,8 @@
       "fade": "medium"
     },
     {
-      "id": "4_sex_and_intemancy_afterglow",
-      "category": "Sex and Intemancy",
+      "id": "4_sex_and_intimacy_afterglow",
+      "category": "Sex and Intimacy",
       "name": "Afterglow",
       "strength": 1,
       "strengthLabel": "Moderate",
@@ -1957,8 +1957,8 @@
       "fade": "medium"
     },
     {
-      "id": "4_sex_and_intemancy_ecstasy",
-      "category": "Sex and Intemancy",
+      "id": "4_sex_and_intimacy_ecstasy",
+      "category": "Sex and Intimacy",
       "name": "Ecstasy",
       "strength": 3,
       "strengthLabel": "Very Strong",
@@ -2023,8 +2023,8 @@
       "fade": "medium"
     },
     {
-      "id": "4_sex_and_intemancy_extend",
-      "category": "Sex and Intemancy",
+      "id": "4_sex_and_intimacy_extend",
+      "category": "Sex and Intimacy",
       "name": "Extend",
       "strength": 1,
       "strengthLabel": "Moderate",
@@ -2083,8 +2083,8 @@
       "fade": "medium"
     },
     {
-      "id": "4_sex_and_intemancy_first_love",
-      "category": "Sex and Intemancy",
+      "id": "4_sex_and_intimacy_first_love",
+      "category": "Sex and Intimacy",
       "name": "First Love",
       "strength": 3,
       "strengthLabel": "Very Strong",
@@ -2143,8 +2143,8 @@
       "fade": "medium"
     },
     {
-      "id": "4_sex_and_intemancy_multipleo",
-      "category": "Sex and Intemancy",
+      "id": "4_sex_and_intimacy_multipleo",
+      "category": "Sex and Intimacy",
       "name": "MultipleO",
       "strength": 3,
       "strengthLabel": "Very Strong",
@@ -2218,8 +2218,8 @@
       "fade": "medium"
     },
     {
-      "id": "4_sex_and_intemancy_wet_dream",
-      "category": "Sex and Intemancy",
+      "id": "4_sex_and_intimacy_wet_dream",
+      "category": "Sex and Intimacy",
       "name": "Wet Dream",
       "strength": 4,
       "strengthLabel": "Extreme",
