@@ -8,10 +8,13 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
+  Alert,
   Platform,
 } from 'react-native';
 import { COLORS } from '../theme';
 import { CATEGORIES } from '../catalog/data';
+import { registerImportedDose } from '../catalog/importDose';
+import { pickImedxFile } from '../catalog/pickImedx';
 import { useNav } from '../oneNav';
 
 const PANEL_WIDTH = 290;
@@ -40,6 +43,20 @@ const IS_WEB = Platform.OS === 'web';
 
 function Flyout({ isOpen, close, go }) {
   const slide = useRef(new Animated.Value(-PANEL_WIDTH)).current;
+
+  // Open a saved .imedx and play it. pickImedxFile() clicks the file input
+  // synchronously (within the tap gesture), so the dialog is allowed on web.
+  const openFile = async () => {
+    try {
+      const picked = await pickImedxFile();
+      if (!picked) return close();
+      const dose = registerImportedDose(picked.json);
+      go('Player', { id: dose.id, usePulsetto: false, useNova: false });
+    } catch (e) {
+      close();
+      Alert.alert("Couldn't open that file", (e && e.message) || 'Unknown error.');
+    }
+  };
   useEffect(() => {
     // Native: slide the panel in. Web: RNW's JS-driven Animated transform is
     // unreliable here, so the panel renders statically (the Modal's fade covers
@@ -61,6 +78,7 @@ function Flyout({ isOpen, close, go }) {
       <Animated.View style={[styles.panel, { transform: [{ translateX: IS_WEB ? 0 : slide }] }]}>
         <Text style={styles.brand}>PulseEntrain</Text>
         <Item label="Home" onPress={() => go('Springboard')} />
+        <Item label="Open a file" onPress={openFile} />
         <Item label="About" onPress={() => go('About')} />
         <Text style={styles.section}>Programs</Text>
         <ScrollView showsVerticalScrollIndicator={false}>

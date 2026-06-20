@@ -3,6 +3,7 @@
 import catalog from './catalog.json';
 import { images } from './images';
 import { audio } from './audio';
+import { getImportedDose } from './importDose';
 
 export const CATEGORIES = catalog.categories;
 export const DOSES = catalog.doses;
@@ -21,7 +22,8 @@ export const audioSource = name => (name && audio[name]) || null;
 export const isSynthDose = dose => !!(dose && dose.format === 'imedx' && Array.isArray(dose.scenes));
 
 export const dosesByCategory = cat => DOSES.filter(d => d.category === cat);
-export const doseById = id => DOSES.find(d => d.id === id);
+// Falls back to runtime-imported .imedx doses (user-opened files, not bundled).
+export const doseById = id => DOSES.find(d => d.id === id) || getImportedDose(id);
 
 // One descriptor per category for the springboard (with a representative image).
 export const categoryCards = () =>
