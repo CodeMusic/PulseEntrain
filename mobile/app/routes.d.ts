@@ -12,6 +12,7 @@ declare module 'one' {
         | `/about`
         | `/manual`
         | `/springboard`
+        | `/studio`
       DynamicRoutes:
         | `/category/${OneRouter.SingleRoutePart<T>}`
         | `/dose/${OneRouter.SingleRoutePart<T>}`

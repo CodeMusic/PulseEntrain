@@ -89,7 +89,7 @@ Rhythmic flickering light can drive a brain-rhythm response of its own (*photic 
 PulseEntrain is two apps built around one shared **session format**:
 
 - **[Admin](desktop/README.md)** — `desktop/` — a [Kivy](https://kivy.org/) desktop app for **authoring content**: extract a rendered binaural MP3 into its components, or create/edit a session on a timeline (beat curve, noise, cover, duration), preview it live, and save a self-contained `.imedx`. It also still includes the original Pulsetto device controller. → **[desktop/README.md](desktop/README.md)**
-- **[Main app](mobile/README.md)** — `mobile/` — the cross-platform **player** (web + iOS + Android via [One](https://onestack.dev/)). Browse the catalog, play sessions, and pair **Pulsetto** (vagus nerve) and **Lumenate Nova** (light) over BLE, plus a Manual mode. → **[mobile/README.md](mobile/README.md)**
+- **[Main app](mobile/README.md)** — `mobile/` — the cross-platform **player** (web + iOS + Android via [One](https://onestack.dev/)). Browse the catalog, play sessions, open a saved `.imedx`, and pair **Pulsetto** (vagus nerve) and **Lumenate Nova** (light) over BLE, plus a Manual mode. On the **web** it also hosts **Studio** — a browser `.imedx` editor (interactive beat graph, live preview, undo/redo, save) that reuses the player's own synth, so the site doubles as authoring + a preview that funnels to the native apps. → **[mobile/README.md](mobile/README.md)**
 
 The two BLE protocols were reverse-engineered: [docs/PULSETTO_PROTOCOL.md](docs/PULSETTO_PROTOCOL.md), [docs/LUMENATE_NOVA_PROTOCOL.md](docs/LUMENATE_NOVA_PROTOCOL.md).
 
