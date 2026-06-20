@@ -1,49 +1,10 @@
 import { AudioContext } from 'react-native-audio-api';
+// Coefficients + noise generators are platform-agnostic and shared with the other
+// synths (and the desktop Python preview); band helper lives in shared/entrainment.
+import { NOISE_SECONDS, NOISE_LEVEL, NOISE_FILL } from '../shared/synthCoefficients';
+import { bandFor } from '../shared/entrainment';
 
-// How long a noise loop buffer is (seconds). Longer = less obvious looping.
-const NOISE_SECONDS = 3;
-
-// Noise bed loudness — the easy knob if it sits too loud/quiet under the beat.
-// Absolute gain on a 0–1 scale: 1.0 ≈ as loud as the tones, so this is the
-// fraction of "full". 0.1 = noise at 10% of full (turned down 90%).
-const NOISE_LEVEL = 0.1;
-
-// ---- noise generators (fill a Float32Array in place) ----
-function fillWhite(data) {
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-}
-function fillPink(data) {
-  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-  for (let i = 0; i < data.length; i++) {
-    const w = Math.random() * 2 - 1;
-    b0 = 0.99886 * b0 + w * 0.0555179;
-    b1 = 0.99332 * b1 + w * 0.0750759;
-    b2 = 0.969 * b2 + w * 0.153852;
-    b3 = 0.8665 * b3 + w * 0.3104856;
-    b4 = 0.55 * b4 + w * 0.5329522;
-    b5 = -0.7616 * b5 - w * 0.016898;
-    data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
-    b6 = w * 0.115926;
-  }
-}
-function fillBrown(data) {
-  let last = 0;
-  for (let i = 0; i < data.length; i++) {
-    const w = Math.random() * 2 - 1;
-    last = (last + 0.02 * w) / 1.02;
-    data[i] = last * 3.5;
-  }
-}
-const NOISE_FILL = { white: fillWhite, pink: fillPink, brown: fillBrown };
-
-// Map an entrainment (beat) frequency to its brainwave band name.
-export const bandFor = beat => {
-  if (beat < 4) return 'Delta';
-  if (beat < 8) return 'Theta';
-  if (beat < 13) return 'Alpha';
-  if (beat < 30) return 'Beta';
-  return 'Gamma';
-};
+export { bandFor }; // re-export so existing importers (BinauralPanel) keep their path
 
 // A live binaural-beat synth: two hard-panned sine oscillators a `beat` Hz
 // apart, plus an optional noise bed. Real-time setters drive the manual sliders;

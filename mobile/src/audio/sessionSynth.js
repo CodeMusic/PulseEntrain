@@ -1,4 +1,5 @@
 import { BinauralEngine } from './binauralEngine';
+import { FADE_SECONDS } from '../shared/synthCoefficients'; // shared transition fade lengths
 
 // Plays a self-contained (.imedx) session: drives BinauralEngine through the
 // scene timeline (carrier/beat interpolated per scene) plus the noise bed, while
@@ -6,7 +7,6 @@ import { BinauralEngine } from './binauralEngine';
 // uses for bundled MP3s. Same engine the Manual mode uses, so a previewed/saved
 // session sounds the same here as in the desktop Admin.
 const ENGINE_NOISE = new Set(['white', 'pink', 'brown']); // others fall back to closest
-const FADE_SECONDS = { none: 0, short: 1.0, medium: 2.0, long: 3.0 }; // start/end transition
 
 function normalizeNoise(type) {
   if (!type || type === 'none') return 'none';
