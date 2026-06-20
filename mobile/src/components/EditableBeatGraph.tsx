@@ -10,7 +10,6 @@ import { carrierColor } from '../shared/entrainment';
 // handles on top. The vertical axis is fixed (0..AXIS_MAX) so dragging maps
 // predictably.
 const N = 90; // curve sample count
-const AXIS_MAX = 40; // Hz — covers delta→gamma; fixed so vertical drag is stable
 const LEFT = 44;
 const TOP = 10;
 const BOTTOM = 20;
@@ -38,6 +37,11 @@ export default function EditableBeatGraph({
   const dur = duration || 1;
 
   const sorted = [...scenes].sort((a, b) => a.atSec - b.atSec);
+  // Dynamic vertical axis (like the desktop): fit the data, with a little headroom
+  // so the top node isn't glued to the edge and can still be dragged higher. The
+  // dragged node is in `scenes`, so the axis grows with it.
+  const maxBeat = Math.max(1, ...scenes.map(sc => sc.beatHz || 0));
+  const axisMax = Math.max(8, Math.ceil(maxBeat * 1.1));
   const beatAt = t => {
     if (!sorted.length) return 0;
     if (t <= sorted[0].atSec) return sorted[0].beatHz;
@@ -62,16 +66,16 @@ export default function EditableBeatGraph({
 
   const bars = Array.from({ length: N }, (_, i) => {
     const t = (i / (N - 1)) * dur;
-    return { h: Math.min(1, beatAt(t) / AXIS_MAX), color: carrierColor(carrAt(t)) };
+    return { h: Math.min(1, beatAt(t) / axisMax), color: carrierColor(carrAt(t)) };
   });
 
   // screen <-> data
   const toData = (locX, locY) => ({
     atSec: Math.max(0, Math.min(dur, ((locX - LEFT) / plotW) * dur)),
-    beatHz: Math.max(0, Math.min(AXIS_MAX, (1 - (locY - TOP) / plotH) * AXIS_MAX)),
+    beatHz: Math.max(0, Math.min(axisMax, (1 - (locY - TOP) / plotH) * axisMax)),
   });
   const nodeX = sc => LEFT + (sc.atSec / dur) * plotW;
-  const nodeY = sc => TOP + (1 - Math.min(AXIS_MAX, sc.beatHz) / AXIS_MAX) * plotH;
+  const nodeY = sc => TOP + (1 - Math.min(axisMax, sc.beatHz) / axisMax) * plotH;
 
   // index into the *original* scenes array nearest to a touch (within HIT px)
   const hitNode = (locX, locY) => {
@@ -119,7 +123,7 @@ export default function EditableBeatGraph({
 
   return (
     <View style={[styles.wrap, { height }]} onLayout={e => setW(e.nativeEvent.layout.width)}>
-      <Text style={styles.yTop}>{AXIS_MAX} Hz</Text>
+      <Text style={styles.yTop}>{axisMax} Hz</Text>
       <Text style={styles.yBot}>0</Text>
       <View
         style={styles.surface}

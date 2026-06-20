@@ -159,6 +159,16 @@ export default function StudioScreen({ navigation, route }) {
     setPlaying(false);
   };
 
+  // Start a fresh blank session.
+  const newSession = () => {
+    stopPreview();
+    setS(blankSession());
+    histRef.current = { undo: [], redo: [] };
+    setSel(-1);
+    setScrub(0);
+    bump();
+  };
+
   // Load a catalog/imported dose into the editor (Library picker).
   const loadDose = dose => {
     stopPreview();
@@ -270,6 +280,7 @@ export default function StudioScreen({ navigation, route }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.toolbar}>
+        <Pill label="New" onPress={newSession} />
         <Pill label="Library" onPress={() => { setLibCat(null); setLibOpen(true); }} />
         <Pill label="Open…" onPress={openFile} />
         <Pill label={playing ? '■ Stop' : '▶ Preview'} onPress={togglePreview} color={playing ? COLORS.accentRed : COLORS.accentGreen} />
