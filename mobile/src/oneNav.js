@@ -12,7 +12,7 @@ export function pathFor(screen, params = {}) {
     case 'Manual':
       return '/manual';
     case 'Studio':
-      return '/studio';
+      return params && params.load ? `/studio?load=${encodeURIComponent(params.load)}` : '/studio';
     case 'About':
       return '/about';
     case 'Category':

@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, Alert } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
-import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
+import { IS_WEB } from '../nativeOnly';
 import EditableBeatGraph from '../components/EditableBeatGraph';
 import { SessionSynth } from '../audio/sessionSynth';
 import { pickImedxFile } from '../catalog/pickImedx';
 import { registerImportedDose } from '../catalog/importDose';
+import { CATEGORIES, dosesByCategory, doseById, isSynthDose } from '../catalog/data';
 
 // Web authoring (`/studio`): the desktop Admin's editor, in the browser, reusing
 // the SAME shared pieces the player uses — BeatChart (graph), SessionSynth
@@ -20,6 +21,20 @@ const fmtClock = sec => {
   sec = Math.max(0, Math.floor(sec));
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 };
+
+// Catalog dose (or imported dose) → editable Studio session state.
+const doseToSession = dose => ({
+  name: dose.name || 'Untitled',
+  description: dose.description || '',
+  category: dose.category || 'Imported',
+  strength: dose.strength ?? 4,
+  durationSec: dose.lengthSeconds ?? 600,
+  carrier: dose.carrier ?? 200,
+  noise: dose.noise || 'none',
+  fade: dose.fade || 'medium',
+  image: dose.image || null,
+  scenes: (dose.scenes || []).map(o => ({ ...o })),
+});
 
 const blankSession = () => ({
   name: 'New session',
@@ -37,12 +52,14 @@ const blankSession = () => ({
   ],
 });
 
-export default function StudioScreen({ navigation }) {
+export default function StudioScreen({ navigation, route }) {
   const [s, setS] = useState<any>(blankSession);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
   const [scrub, setScrub] = useState(0); // chosen preview start position (seconds)
   const [sel, setSel] = useState(-1); // selected node index
+  const [libOpen, setLibOpen] = useState(false); // Library picker (category → item)
+  const [libCat, setLibCat] = useState(null);
   const synthRef = useRef(null);
   const sRef = useRef(s);
   sRef.current = s;
@@ -93,6 +110,19 @@ export default function StudioScreen({ navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // `?load=<id>` → open that catalog dose in the editor on mount.
+  useEffect(() => {
+    const id = route && route.params && route.params.load;
+    if (!id) return;
+    const dose = doseById(id);
+    if (dose && isSynthDose(dose)) {
+      setS(doseToSession(dose));
+      histRef.current = { undo: [], redo: [] };
+      bump();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!IS_WEB) {
     return (
       <View style={styles.center}>
@@ -127,6 +157,18 @@ export default function StudioScreen({ navigation }) {
     try { synthRef.current?.stop(); } catch (e) {}
     synthRef.current = null;
     setPlaying(false);
+  };
+
+  // Load a catalog/imported dose into the editor (Library picker).
+  const loadDose = dose => {
+    stopPreview();
+    setS(doseToSession(dose));
+    histRef.current = { undo: [], redo: [] };
+    setSel(-1);
+    setScrub(0);
+    bump();
+    setLibOpen(false);
+    setLibCat(null);
   };
   const togglePreview = () => {
     if (playing) return stopPreview();
@@ -228,6 +270,7 @@ export default function StudioScreen({ navigation }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.toolbar}>
+        <Pill label="Library" onPress={() => { setLibCat(null); setLibOpen(true); }} />
         <Pill label="Open…" onPress={openFile} />
         <Pill label={playing ? '■ Stop' : '▶ Preview'} onPress={togglePreview} color={playing ? COLORS.accentRed : COLORS.accentGreen} />
         <Pill label="Play in player" onPress={playInPlayer} />
@@ -328,6 +371,38 @@ export default function StudioScreen({ navigation }) {
       <TouchableOpacity style={styles.addBtn} onPress={() => { addNode(); setSel(s.scenes.length); }}>
         <Text style={styles.addTxt}>+ Add node (midpoint)</Text>
       </TouchableOpacity>
+
+      <Modal visible={libOpen} transparent animationType="fade" onRequestClose={() => setLibOpen(false)}>
+        <TouchableOpacity style={styles.libBackdrop} activeOpacity={1} onPress={() => setLibOpen(false)}>
+          <TouchableOpacity style={styles.libPanel} activeOpacity={1} onPress={() => {}}>
+            <Text style={styles.libTitle}>{libCat || 'Open from library'}</Text>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {libCat == null ? (
+                CATEGORIES.map(c => (
+                  <TouchableOpacity key={c} style={styles.libItem} onPress={() => setLibCat(c)}>
+                    <Text style={styles.libItemTxt}>{c}</Text>
+                    <Text style={styles.libChevron}>›</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.libItem} onPress={() => setLibCat(null)}>
+                    <Text style={styles.libBack}>‹ Categories</Text>
+                  </TouchableOpacity>
+                  {dosesByCategory(libCat).filter(isSynthDose).map(d => (
+                    <TouchableOpacity key={d.id} style={styles.libItem} onPress={() => loadDose(d)}>
+                      <Text style={styles.libItemTxt}>{d.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {dosesByCategory(libCat).filter(isSynthDose).length === 0 ? (
+                    <Text style={styles.mutedSmall}>No editable (.imedx) sessions in this category.</Text>
+                  ) : null}
+                </>
+              )}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -386,4 +461,11 @@ const styles = StyleSheet.create({
   delTxt: { color: COLORS.accentRed, fontSize: 16, fontWeight: '800' },
   addBtn: { marginTop: 12, paddingVertical: 12, borderRadius: 10, backgroundColor: COLORS.bgCard, alignItems: 'center' },
   addTxt: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '700' },
+  libBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  libPanel: { width: '100%', maxWidth: 460, backgroundColor: COLORS.bgCard, borderRadius: 16, padding: 16 },
+  libTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '800', marginBottom: 10 },
+  libItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  libItemTxt: { color: COLORS.textPrimary, fontSize: 15, fontWeight: '600' },
+  libChevron: { color: COLORS.textMuted, fontSize: 20 },
+  libBack: { color: COLORS.accentBlueLight, fontSize: 14, fontWeight: '700' },
 });
