@@ -3,6 +3,11 @@ import { AudioContext } from 'react-native-audio-api';
 // How long a noise loop buffer is (seconds). Longer = less obvious looping.
 const NOISE_SECONDS = 3;
 
+// Noise bed loudness — the easy knob if it sits too loud/quiet under the beat.
+// Absolute gain on a 0–1 scale: 1.0 ≈ as loud as the tones, so this is the
+// fraction of "full". 0.1 = noise at 10% of full (turned down 90%).
+const NOISE_LEVEL = 0.1;
+
 // ---- noise generators (fill a Float32Array in place) ----
 function fillWhite(data) {
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -133,7 +138,7 @@ export class BinauralEngine {
     if (type === 'none') return;
     const made = this._makeNoise(type);
     if (!made) return;
-    made.g.gain.value = 0.25; // noise sits under the tones
+    made.g.gain.value = NOISE_LEVEL; // noise sits under the tones
     this.noiseSrc = made.src;
     this.noiseGain = made.g;
   }
@@ -177,9 +182,9 @@ export class BinauralEngine {
     }
     try {
       made.g.gain.setValueAtTime(0, now);
-      made.g.gain.linearRampToValueAtTime(0.25, now + seconds);
+      made.g.gain.linearRampToValueAtTime(NOISE_LEVEL, now + seconds);
     } catch (e) {
-      made.g.gain.value = 0.25;
+      made.g.gain.value = NOISE_LEVEL;
     }
     this.noiseSrc = made.src;
     this.noiseGain = made.g;

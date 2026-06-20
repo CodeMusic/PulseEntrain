@@ -70,11 +70,24 @@ function main() {
   ensure(OUT_IMAGES);
   ensure(OUT_AUDIO);
 
-  const categories = fs
+  // Folders are the source of truth for category. A leading ordering prefix
+  // ("4. ", "10 - ") controls display order but is stripped from the label, and
+  // surrounding whitespace is trimmed — so "4. Sex and Intimacy " shows as
+  // "Sex and Intimacy" while still sorting at position 4. `dir` (the raw folder)
+  // is kept for filesystem reads and id slugs so ids stay stable across renames.
+  const catDirs = fs
     .readdirSync(ASSETS_DIR, { withFileTypes: true })
     .filter(d => d.isDirectory())
-    .map(d => d.name)
-    .sort();
+    .map(d => {
+      const m = d.name.match(/^\s*(\d+)\s*[.\-)]\s*(.*)$/);
+      return {
+        dir: d.name,
+        order: m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER,
+        name: (m ? m[2] : d.name).trim(),
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  const categories = catDirs.map(c => c.name); // cleaned, ordered display labels
 
   const catalog = [];
   const imageEntries = []; // [filename]
@@ -82,8 +95,8 @@ function main() {
   let missingImages = 0;
   let imedxCount = 0;
 
-  for (const category of categories) {
-    const catDir = path.join(ASSETS_DIR, category);
+  for (const { dir, name: category } of catDirs) {
+    const catDir = path.join(ASSETS_DIR, dir);
     // Group by base name; a self-contained .imedx supersedes a legacy .imed.
     const byBase = {};
     for (const f of fs.readdirSync(catDir)) {
@@ -98,7 +111,7 @@ function main() {
 
     for (const base of Object.keys(byBase).sort()) {
       const entry = byBase[base];
-      const key = `${category}/${base}`;
+      const key = `${dir}/${base}`; // raw folder → stable id/slug across label cleanup
       const id = slug(key); // safe filename base — no spaces/+/& (Metro-friendly)
 
       // ---- self-contained .imedx: programmatic beats + embedded base64 image ----

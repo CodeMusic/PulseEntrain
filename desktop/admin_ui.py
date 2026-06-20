@@ -863,6 +863,23 @@ class DoseScreen(Screen):
         outer.add_widget(footer)   # fixed
         self.add_widget(outer)
 
+        # Delete/Backspace removes the selected node (same as the Delete button),
+        # but only while editing and not while typing in a field.
+        Window.bind(on_key_down=self._on_key_down)
+
+    def _on_key_down(self, window, key, scancode, codepoint, modifiers):
+        if key not in (127, 8):  # forward-delete / backspace (mac "delete")
+            return False
+        if self.manager is not None and self.manager.current != self.name:
+            return False
+        if not self.graph.editable or self.graph.sel is None:
+            return False
+        # don't steal the key from a focused text field (title/desc/node values)
+        if any(isinstance(w, TextInput) and w.focus for w in self.walk(restrict=True)):
+            return False
+        self.graph.delete_selected()
+        return True
+
     # ---- load entry points ----
     def load_imed(self, imed, status=""):
         self.imed = imed
@@ -1017,6 +1034,12 @@ class DoseScreen(Screen):
             self._sync_status()
 
     def _on_node_select(self, scene):
+        # Selecting a node on the graph should drop keyboard focus from any text
+        # field, so [Delete] removes the node instead of being swallowed by a
+        # field that still thinks it's being edited.
+        for w in self.walk(restrict=True):
+            if getattr(w, "focus", False):
+                w.focus = False
         self._populating = True
         try:
             if scene is None:
