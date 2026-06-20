@@ -11,6 +11,8 @@ export function pathFor(screen, params = {}) {
       return '/springboard';
     case 'Manual':
       return '/manual';
+    case 'Studio':
+      return '/studio';
     case 'About':
       return '/about';
     case 'Category':
