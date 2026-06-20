@@ -435,7 +435,10 @@ export default function PlayerScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Pressable onPress={onCoverTap}>
+      {/* Web: toggle on press-in — a quick click's onPress gets eaten by the
+          ScrollView responder, so only a held click registered. Native keeps the
+          on-release press so it doesn't fight scrolling. */}
+      <Pressable {...(IS_WEB ? { onPressIn: onCoverTap } : { onPress: onCoverTap })}>
         {graphMode && isSynth ? (
           <View style={styles.graphBox}>
             <BeatChart
