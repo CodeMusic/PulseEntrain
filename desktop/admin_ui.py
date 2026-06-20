@@ -261,7 +261,25 @@ def choose_file(on_pick, filters=None, title="Choose file"):
     popup.open()
 
 
-def save_file(on_save, default_name="session.imed", title="Save .imed"):
+def confirm_dialog(title, message, on_yes, yes_text="OK", yes_color="accent_red"):
+    box = BoxLayout(orientation="vertical", spacing=dp(14), padding=dp(18))
+    msg = Label(text=message, color=C("text_primary"), halign="center", valign="middle")
+    msg.bind(size=lambda w, *_: setattr(w, "text_size", w.size))
+    box.add_widget(msg)
+    row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+    popup = Popup(title=title, content=box, size_hint=(None, None), size=(dp(440), dp(210)),
+                  auto_dismiss=False)
+    cancel = PillButton(text="Cancel", color_key="button_bg")
+    cancel.bind(on_release=lambda *_: popup.dismiss())
+    ok = PillButton(text=yes_text, color_key=yes_color)
+    ok.bind(on_release=lambda *_: (popup.dismiss(), on_yes()))
+    row.add_widget(cancel)
+    row.add_widget(ok)
+    box.add_widget(row)
+    popup.open()
+
+
+def save_file(on_save, default_name="session.imed", title="Save .imed", confirm_overwrite=False):
     chooser = FileChooserListView(path=default_dir(), dirselect=True)
     box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
     box.add_widget(chooser)
@@ -280,8 +298,17 @@ def save_file(on_save, default_name="session.imed", title="Save .imed"):
         name = name_ti.text.strip() or default_name
         if not name.endswith((".imed", ".imedx")):
             name += ".imedx"
-        popup.dismiss()
-        on_save(os.path.join(target, name))
+        full = os.path.join(target, name)
+
+        def commit():
+            popup.dismiss()
+            on_save(full)
+        # Save As over an existing file → confirm before clobbering it.
+        if confirm_overwrite and os.path.isfile(full):
+            confirm_dialog("Overwrite file?", f'"{name}" already exists.\nOverwrite it?',
+                           commit, yes_text="Overwrite")
+        else:
+            commit()
     save.bind(on_release=do)
     row.add_widget(cancel)
     row.add_widget(save)
@@ -638,6 +665,7 @@ class DoseScreen(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.imed = None
+        self.current_path = None  # set once saved/opened as .imedx → plain Save overwrites it
         self._preview = None
         self._preview_ev = None
         self._populating = False  # guard so populating node fields doesn't fire setters
@@ -850,7 +878,7 @@ class DoseScreen(Screen):
         self.preview_btn = PillButton(text="Preview", color_key="accent_blue",
                                       size_hint_x=None, width=dp(170))
         self.preview_btn.bind(on_release=self._toggle_preview)
-        save = PillButton(text="Save .imedx…", color_key="accent_green")
+        save = PillButton(text="Save", color_key="accent_green")
         save.bind(on_release=self._on_save)
         bottom.add_widget(self.preview_btn)
         bottom.add_widget(save)
@@ -865,12 +893,18 @@ class DoseScreen(Screen):
 
         # Delete/Backspace removes the selected node (same as the Delete button),
         # but only while editing and not while typing in a field.
+        from kivy.core.window import Window
         Window.bind(on_key_down=self._on_key_down)
 
     def _on_key_down(self, window, key, scancode, codepoint, modifiers):
-        if key not in (127, 8):  # forward-delete / backspace (mac "delete")
-            return False
         if self.manager is not None and self.manager.current != self.name:
+            return False
+        mods = modifiers or []
+        # Ctrl/Cmd+S → Save (works regardless of edit mode or field focus)
+        if codepoint in ("s", "S") and ("ctrl" in mods or "meta" in mods):
+            self._on_save()
+            return True
+        if key not in (127, 8):  # forward-delete / backspace (mac "delete")
             return False
         if not self.graph.editable or self.graph.sel is None:
             return False
@@ -881,8 +915,9 @@ class DoseScreen(Screen):
         return True
 
     # ---- load entry points ----
-    def load_imed(self, imed, status=""):
+    def load_imed(self, imed, status="", path=None):
         self.imed = imed
+        self.current_path = path  # .imedx opened in place → subsequent Save overwrites; else None
         m = imed.get("meta", {})
         self.f_title.text = m.get("name", "") or ""
         self.f_desc.text = m.get("description") or ""
@@ -1188,19 +1223,33 @@ class DoseScreen(Screen):
         m["durationSec"] = round(self.graph.duration)
         return self.imed
 
+    # Plain Save: overwrite the file we opened/last saved; if there's no path yet
+    # (new / extracted / legacy-converted), fall through to Save As.
     def _on_save(self, *a):
         if not self.imed:
             return
-        imed = self._collect()
-        slug = slugify(imed["meta"]["name"])
-        imed["id"] = slug
-        save_file(self._write, default_name=f"{slug}.imedx")
+        if self.current_path:
+            self._save_to(self.current_path)
+        else:
+            self._save_as()
 
-    def _write(self, path):
+    def _save_as(self, *a):
+        if not self.imed:
+            return
+        self._collect()
+        slug = slugify(self.imed["meta"]["name"]) or "session"
+        self.imed["id"] = slug
+        default = os.path.basename(self.current_path) if self.current_path else f"{slug}.imedx"
+        save_file(self._save_to, default_name=default, confirm_overwrite=True)
+
+    def _save_to(self, path):
         try:
+            self._collect()
+            self.imed["id"] = slugify(self.imed["meta"]["name"]) or "session"
             self._validate(self.imed)
             with open(path, "w") as fh:
                 json.dump(self.imed, fh, indent=2)
+            self.current_path = path  # now "saved" → plain Save overwrites here
             self.status.text = f"Saved → {path}"
         except Exception as e:
             self.status.text = f"[!] save: {e}"
@@ -1238,7 +1287,10 @@ class AdminRoot(BoxLayout):
                               size_hint_x=None, width=dp(120), height=dp(40))
         dd = DropDown(auto_width=False, width=dp(200))
         items = [("Extract from MP3…", self._extract), ("Open .imed…", self._open),
-                 ("Create new", self._create), ("Pulsetto device", lambda: setattr(self.sm, "current", "pulsetto"))]
+                 ("Create new", self._create),
+                 ("Save  (⌘/Ctrl+S)", lambda: self.dose._on_save()),
+                 ("Save As…", lambda: self.dose._save_as()),
+                 ("Pulsetto device", lambda: setattr(self.sm, "current", "pulsetto"))]
         for lbl, cb in items:
             it = Button(text=lbl, size_hint_y=None, height=dp(46), halign="left", valign="middle",
                         background_normal="", background_down="", background_color=C("bg_card_light"),
@@ -1277,7 +1329,8 @@ class AdminRoot(BoxLayout):
             if self._is_legacy(data):
                 self._open_legacy(data, os.path.dirname(path), os.path.basename(path))
             else:
-                self.dose.load_imed(data, status=f"Opened {os.path.basename(path)}")
+                # opened a self-contained .imedx in place → plain Save overwrites it
+                self.dose.load_imed(data, status=f"Opened {os.path.basename(path)}", path=path)
         choose_file(picked, filters=["*.imedx", "*.imed", "*.json"],
                     title="Open a session (.imedx / legacy .imed)")
 

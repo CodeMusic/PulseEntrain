@@ -38,13 +38,23 @@ See the platform overview in the [root README](../README.md), the authoring tool
 npm install
 ```
 
+**Quick start** (serve the JS bundle for the native app on a device/simulator):
+
+```bash
+./start.sh             # = npm run dev:native (sync-catalog + ONE_METRO_MODE=1 one dev)
+```
+
+The device/simulator must be on the **same Wi-Fi** as this machine (a phone on cellular can't reach
+the dev server — see the "No script URL provided" error). Then launch the app; it loads the bundle
+over the LAN. Tap **Reload JS** if it was already open.
+
 **Web:**
 ```bash
 npm run dev            # One dev server (Vite) — opens the app in the browser
 ```
 
 **Native (iOS/Android):** the JS bundle **must** be served by One's bundler, not `expo start` /
-`react-native start`. The reliable loop:
+`react-native start`. `./start.sh` (above) does this; the manual reliable loop:
 
 1. Build & install once (Xcode, or `xcrun devicectl device install app …` — avoids the
    `@expo/cli` lockdownd issue on recent iOS).

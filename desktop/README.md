@@ -46,15 +46,26 @@ desktop/
 
 **Prerequisites:** Python 3.11+ and [Poetry](https://python-poetry.org/docs/#installation).
 
+**Quick start** (after `poetry install` once):
+
+```bash
+cd desktop
+./start.sh          # = poetry run python main.py
+```
+
+First time / full setup:
+
 ```bash
 cd desktop
 poetry install                 # app + content engine (numpy/scipy/librosa/pillow/jsonschema/sounddevice)
-poetry run python main.py
+./start.sh                     # or: poetry run python main.py
 ```
 
 The window opens on the dose editor (a blank **Create** session). Use **Menu → Extract / Open /
-Create**, edit on the graph, **Preview**, then **Save .imedx…** (defaults to `../imedsAssets/`).
-Saved files are picked up by the mobile catalog via `npm run sync-catalog`.
+Create**, edit on the graph, **Preview**, then **Save** (⌘/Ctrl+S; defaults to `../imedsAssets/`).
+**Save** overwrites the file you opened; **Save As…** (in the Menu) writes a new file and confirms
+before overwriting an existing one. Saved files are picked up by the mobile catalog via
+`npm run sync-catalog`.
 
 ### CLI extraction (batch / scripting)
 

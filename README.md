@@ -93,6 +93,17 @@ PulseEntrain is two apps built around one shared **session format**:
 
 The two BLE protocols were reverse-engineered: [docs/PULSETTO_PROTOCOL.md](docs/PULSETTO_PROTOCOL.md), [docs/LUMENATE_NOVA_PROTOCOL.md](docs/LUMENATE_NOVA_PROTOCOL.md).
 
+### Quick start
+
+Each app has a `./start.sh` (run after the one-time install in its README):
+
+```bash
+cd desktop && ./start.sh    # Admin (Kivy) — poetry run python main.py
+cd mobile  && ./start.sh    # Player native bundler — npm run dev:native (One Metro)
+```
+
+For the mobile app, the device/simulator must be on the **same Wi-Fi** as this machine. See each app's README for first-time setup (`poetry install` / `npm install`) and the web target.
+
 ---
 
 ## Session format
