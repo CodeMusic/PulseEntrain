@@ -15,6 +15,7 @@ import ArtImage from '../components/ArtImage';
 import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useNova } from '../nova/NovaProvider';
+import { useSessions } from '../wellness/SessionsProvider';
 import NovaExplorer from '../components/NovaExplorer';
 import { setupPlayer } from '../audio/player';
 import { SessionSynth } from '../audio/sessionSynth';
@@ -47,7 +48,18 @@ export default function PlayerScreen({ route, navigation }) {
   const dose = doseById(id);
   const pulsetto = usePulsetto();
   const nova = useNova();
+  const sessions = useSessions();
+  const loggedRef = useRef(false); // log a completed session once
   const tp = useProgress(500);
+
+  // A finished playback counts toward the daily goal (same store as Manual mode).
+  const logCompletion = secs => {
+    if (loggedRef.current || !sessions) return;
+    const d = Math.round(secs || 0);
+    if (d < 1) return;
+    loggedRef.current = true;
+    sessions.logSession({ plannedSeconds: d, actualSeconds: d, kind: (dose && dose.category) || 'session' });
+  };
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -211,6 +223,7 @@ export default function PlayerScreen({ route, navigation }) {
           },
           onEnded: () => {
             setSynthPlaying(false);
+            logCompletion(synth.duration);
             if (pulsetto.sessionActive) pulsetto.stopSession();
             if (wantNova && nova.connected) nova.stopStrobe();
           },
@@ -301,6 +314,7 @@ export default function PlayerScreen({ route, navigation }) {
   useEffect(() => {
     if (playbackState?.state === State.Ended && !endedRef.current) {
       endedRef.current = true;
+      logCompletion(tp.duration);
       if (pulsetto.sessionActive) pulsetto.stopSession();
       if (wantNova && nova.connected) nova.stopStrobe();
     }

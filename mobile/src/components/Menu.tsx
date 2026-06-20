@@ -107,6 +107,17 @@ export function HeaderMenuButton() {
   );
 }
 
+// Center header title: shows the screen's title (default "PulseEntrain"); tapping
+// it returns Home. Used as the Stack's `headerTitle`.
+export function HeaderTitle({ children }: any) {
+  const nav = useNav();
+  return (
+    <TouchableOpacity onPress={() => nav.navigate('Springboard')} hitSlop={10}>
+      <Text style={styles.headerTitle}>{children || 'PulseEntrain'}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
   panel: {
@@ -135,4 +146,5 @@ const styles = StyleSheet.create({
   itemSmall: { fontSize: 16, fontWeight: '500', color: COLORS.textSecondary },
   headerBtn: { paddingHorizontal: 6 },
   headerIcon: { color: COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
+  headerTitle: { color: COLORS.textPrimary, fontSize: 17, fontWeight: '700' },
 });
