@@ -60,9 +60,12 @@ export default function StudioScreen({ navigation, route }) {
   const [sel, setSel] = useState(-1); // selected node index
   const [libOpen, setLibOpen] = useState(false); // Library picker (category → item)
   const [libCat, setLibCat] = useState(null);
+  const [dirty, setDirty] = useState(false); // unsaved edits since last download / load / new
   const synthRef = useRef(null);
   const sRef = useRef(s);
   sRef.current = s;
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
 
   // ---- undo/redo over scene edits (add / move / delete) ----
   const histRef = useRef<{ undo: any[]; redo: any[] }>({ undo: [], redo: [] });
@@ -81,6 +84,7 @@ export default function StudioScreen({ navigation, route }) {
     h.redo.push(cloneScenes(sRef.current.scenes));
     setS(p => ({ ...p, scenes: h.undo.pop() }));
     setSel(-1);
+    setDirty(true);
     bump();
   };
   const redo = () => {
@@ -89,6 +93,7 @@ export default function StudioScreen({ navigation, route }) {
     h.undo.push(cloneScenes(sRef.current.scenes));
     setS(p => ({ ...p, scenes: h.redo.pop() }));
     setSel(-1);
+    setDirty(true);
     bump();
   };
 
@@ -118,9 +123,22 @@ export default function StudioScreen({ navigation, route }) {
     if (dose && isSynthDose(dose)) {
       setS(doseToSession(dose));
       histRef.current = { undo: [], redo: [] };
+      setDirty(false);
       bump();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Warn on tab close / reload with unsaved (un-downloaded) edits.
+  useEffect(() => {
+    if (!IS_WEB || typeof window === 'undefined') return;
+    const onBeforeUnload = e => {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
   if (!IS_WEB) {
@@ -132,16 +150,32 @@ export default function StudioScreen({ navigation, route }) {
     );
   }
 
-  const set = patch => setS(prev => ({ ...prev, ...patch }));
+  const set = patch => { setS(prev => ({ ...prev, ...patch })); setDirty(true); };
   const sortedScenes = () => [...s.scenes].sort((a, b) => a.atSec - b.atSec);
 
-  const setScene = (i, patch) =>
+  // Run `action` unless there are unsaved edits the user hasn't confirmed discarding.
+  const confirmIfDirty = action => {
+    if (!dirtyRef.current) return action();
+    if (typeof window !== 'undefined' && window.confirm) {
+      if (window.confirm('Discard unsaved changes? Download .imedx first to keep them.')) action();
+    } else {
+      Alert.alert('Discard unsaved changes?', 'Your edits will be lost. Download .imedx first to keep them.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: action },
+      ]);
+    }
+  };
+
+  const setScene = (i, patch) => {
+    setDirty(true);
     setS(prev => {
       const scenes = prev.scenes.map((sc, j) => (j === i ? { ...sc, ...patch } : sc));
       return { ...prev, scenes };
     });
+  };
   const addNode = () => {
     pushHistory();
+    setDirty(true);
     setS(prev => {
       const last = prev.scenes[prev.scenes.length - 1] || { atSec: 0, beatHz: 10 };
       const at = Math.min(prev.durationSec, Math.round((last.atSec + prev.durationSec) / 2));
@@ -150,6 +184,7 @@ export default function StudioScreen({ navigation, route }) {
   };
   const delNode = i => {
     pushHistory();
+    setDirty(true);
     setS(prev => ({ ...prev, scenes: prev.scenes.filter((_, j) => j !== i) }));
   };
 
@@ -166,6 +201,7 @@ export default function StudioScreen({ navigation, route }) {
     histRef.current = { undo: [], redo: [] };
     setSel(-1);
     setScrub(0);
+    setDirty(false);
     bump();
   };
 
@@ -176,6 +212,7 @@ export default function StudioScreen({ navigation, route }) {
     histRef.current = { undo: [], redo: [] };
     setSel(-1);
     setScrub(0);
+    setDirty(false);
     bump();
     setLibOpen(false);
     setLibCat(null);
@@ -239,6 +276,7 @@ export default function StudioScreen({ navigation, route }) {
     a.download = `${slug(s.name)}.imedx`;
     a.click();
     URL.revokeObjectURL(url);
+    setDirty(false); // saved to disk
   };
 
   const openFile = async () => {
@@ -262,6 +300,11 @@ export default function StudioScreen({ navigation, route }) {
         image: meta.image || null,
         scenes: (j.entrainment && j.entrainment.scenes) || [],
       });
+      histRef.current = { undo: [], redo: [] };
+      setSel(-1);
+      setScrub(0);
+      setDirty(false); // freshly loaded from a file
+      bump();
     } catch (e) {
       Alert.alert("Couldn't open that file", (e && e.message) || 'Unknown error.');
     }
@@ -280,9 +323,9 @@ export default function StudioScreen({ navigation, route }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.toolbar}>
-        <Pill label="New" onPress={newSession} />
+        <Pill label="New" onPress={() => confirmIfDirty(newSession)} />
         <Pill label="Library" onPress={() => { setLibCat(null); setLibOpen(true); }} />
-        <Pill label="Open…" onPress={openFile} />
+        <Pill label="Open…" onPress={() => confirmIfDirty(openFile)} />
         <Pill label={playing ? '■ Stop' : '▶ Preview'} onPress={togglePreview} color={playing ? COLORS.accentRed : COLORS.accentGreen} />
         <Pill label="Play in player" onPress={playInPlayer} />
         <Pill label="Download .imedx" onPress={download} color={COLORS.accentBlue} />
@@ -401,7 +444,7 @@ export default function StudioScreen({ navigation, route }) {
                     <Text style={styles.libBack}>‹ Categories</Text>
                   </TouchableOpacity>
                   {dosesByCategory(libCat).filter(isSynthDose).map(d => (
-                    <TouchableOpacity key={d.id} style={styles.libItem} onPress={() => loadDose(d)}>
+                    <TouchableOpacity key={d.id} style={styles.libItem} onPress={() => confirmIfDirty(() => loadDose(d))}>
                       <Text style={styles.libItemTxt}>{d.name}</Text>
                     </TouchableOpacity>
                   ))}
