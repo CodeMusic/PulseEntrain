@@ -29,6 +29,7 @@ export default function EditableBeatGraph({
   selected = -1,
   onSelect,
   onChange, // (nextScenes) => void
+  onBeginEdit, // called once at the start of an add/drag gesture (for undo history)
   progress = null,
 }) {
   const [w, setW] = useState(0);
@@ -90,6 +91,7 @@ export default function EditableBeatGraph({
 
   const onGrant = e => {
     const { locationX, locationY } = e.nativeEvent;
+    onBeginEdit && onBeginEdit(); // snapshot for undo before this gesture mutates
     const i = hitNode(locationX, locationY);
     if (i >= 0) {
       dragIdx = i;

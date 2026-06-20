@@ -16,6 +16,10 @@ const NOISES = ['none', 'white', 'pink', 'brown'];
 const FADES = ['none', 'short', 'medium', 'long'];
 const slug = s =>
   String(s || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'session';
+const fmtClock = sec => {
+  sec = Math.max(0, Math.floor(sec));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+};
 
 const blankSession = () => ({
   name: 'New session',
@@ -37,10 +41,57 @@ export default function StudioScreen({ navigation }) {
   const [s, setS] = useState<any>(blankSession);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
+  const [scrub, setScrub] = useState(0); // chosen preview start position (seconds)
   const [sel, setSel] = useState(-1); // selected node index
   const synthRef = useRef(null);
+  const sRef = useRef(s);
+  sRef.current = s;
+
+  // ---- undo/redo over scene edits (add / move / delete) ----
+  const histRef = useRef<{ undo: any[]; redo: any[] }>({ undo: [], redo: [] });
+  const [, force] = useState(0);
+  const bump = () => force(x => x + 1);
+  const cloneScenes = arr => arr.map(o => ({ ...o }));
+  const pushHistory = () => {
+    histRef.current.undo.push(cloneScenes(sRef.current.scenes));
+    if (histRef.current.undo.length > 100) histRef.current.undo.shift();
+    histRef.current.redo = [];
+    bump();
+  };
+  const undo = () => {
+    const h = histRef.current;
+    if (!h.undo.length) return;
+    h.redo.push(cloneScenes(sRef.current.scenes));
+    setS(p => ({ ...p, scenes: h.undo.pop() }));
+    setSel(-1);
+    bump();
+  };
+  const redo = () => {
+    const h = histRef.current;
+    if (!h.redo.length) return;
+    h.undo.push(cloneScenes(sRef.current.scenes));
+    setS(p => ({ ...p, scenes: h.redo.pop() }));
+    setSel(-1);
+    bump();
+  };
 
   useEffect(() => () => { try { synthRef.current?.stop(); } catch (e) {} }, []);
+
+  // Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redo (web; refs keep it fresh).
+  useEffect(() => {
+    if (!IS_WEB || typeof document === 'undefined') return;
+    const onKey = e => {
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let fields keep native text undo
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = (e.key || '').toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!IS_WEB) {
     return (
@@ -59,20 +110,23 @@ export default function StudioScreen({ navigation }) {
       const scenes = prev.scenes.map((sc, j) => (j === i ? { ...sc, ...patch } : sc));
       return { ...prev, scenes };
     });
-  const addNode = () =>
+  const addNode = () => {
+    pushHistory();
     setS(prev => {
       const last = prev.scenes[prev.scenes.length - 1] || { atSec: 0, beatHz: 10 };
       const at = Math.min(prev.durationSec, Math.round((last.atSec + prev.durationSec) / 2));
       return { ...prev, scenes: [...prev.scenes, { atSec: at, beatHz: last.beatHz }] };
     });
-  const delNode = i =>
+  };
+  const delNode = i => {
+    pushHistory();
     setS(prev => ({ ...prev, scenes: prev.scenes.filter((_, j) => j !== i) }));
+  };
 
   const stopPreview = () => {
     try { synthRef.current?.stop(); } catch (e) {}
     synthRef.current = null;
     setPlaying(false);
-    setPos(0);
   };
   const togglePreview = () => {
     if (playing) return stopPreview();
@@ -84,11 +138,21 @@ export default function StudioScreen({ navigation }) {
       transitionFade: s.fade,
       volume: 1,
       onTick: p => setPos(p),
-      onEnded: () => { setPlaying(false); setPos(0); },
+      onEnded: () => { setPlaying(false); setPos(0); setScrub(0); },
     });
     synthRef.current = synth;
+    synth.seek(Math.max(0, Math.min(s.durationSec, scrub))); // start from the chosen position
     synth.play();
+    setPos(scrub);
     setPlaying(true);
+  };
+  // Drag the position slider — seeks live if playing, else sets the start point.
+  const onScrub = v => {
+    setScrub(v);
+    if (playing) {
+      setPos(v);
+      try { synthRef.current?.seek(v); } catch (e) {}
+    }
   };
 
   // Assemble the self-contained .imedx (same shape the Admin writes / the app reads).
@@ -156,7 +220,10 @@ export default function StudioScreen({ navigation }) {
     navigation.navigate('Player', { id: dose.id, usePulsetto: false, useNova: false });
   };
 
-  const progress = s.durationSec > 0 ? pos / s.durationSec : 0;
+  const headSec = playing ? pos : scrub; // playhead position (live, or chosen start)
+  const progress = s.durationSec > 0 ? headSec / s.durationSec : 0;
+  const canUndo = histRef.current.undo.length > 0;
+  const canRedo = histRef.current.redo.length > 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -165,6 +232,8 @@ export default function StudioScreen({ navigation }) {
         <Pill label={playing ? '■ Stop' : '▶ Preview'} onPress={togglePreview} color={playing ? COLORS.accentRed : COLORS.accentGreen} />
         <Pill label="Play in player" onPress={playInPlayer} />
         <Pill label="Download .imedx" onPress={download} color={COLORS.accentBlue} />
+        <Pill label="↶ Undo" onPress={undo} dim={!canUndo} />
+        <Pill label="↷ Redo" onPress={redo} dim={!canRedo} />
       </View>
 
       <View style={styles.graphCard}>
@@ -176,8 +245,24 @@ export default function StudioScreen({ navigation }) {
           selected={sel}
           onSelect={setSel}
           onChange={scenes => set({ scenes })}
-          progress={playing ? progress : null}
+          onBeginEdit={pushHistory}
+          progress={progress}
         />
+      </View>
+      {/* Position: drag to set where Preview starts (the graph itself adds nodes). */}
+      <View style={styles.scrubRow}>
+        <Text style={styles.scrubTime}>{fmtClock(headSec)}</Text>
+        <Slider
+          style={styles.scrubSlider}
+          minimumValue={0}
+          maximumValue={Math.max(1, s.durationSec)}
+          value={Math.min(headSec, s.durationSec)}
+          onValueChange={onScrub}
+          minimumTrackTintColor={COLORS.accentBlue}
+          maximumTrackTintColor={COLORS.bgCardLight}
+          thumbTintColor="#fff"
+        />
+        <Text style={styles.scrubTime}>{fmtClock(s.durationSec)}</Text>
       </View>
 
       <Field label="Title">
@@ -247,8 +332,12 @@ export default function StudioScreen({ navigation }) {
   );
 }
 
-const Pill = ({ label, onPress, color }: any) => (
-  <TouchableOpacity style={[styles.pill, color && { backgroundColor: color }]} onPress={onPress} activeOpacity={0.85}>
+const Pill = ({ label, onPress, color, dim }: any) => (
+  <TouchableOpacity
+    disabled={dim}
+    style={[styles.pill, color && { backgroundColor: color }, dim && { opacity: 0.4 }]}
+    onPress={onPress}
+    activeOpacity={0.85}>
     <Text style={styles.pillTxt}>{label}</Text>
   </TouchableOpacity>
 );
@@ -277,7 +366,10 @@ const styles = StyleSheet.create({
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   pill: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 22, backgroundColor: COLORS.bgCardLight },
   pillTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  graphCard: { backgroundColor: COLORS.bgCard, borderRadius: 14, paddingTop: 14, paddingHorizontal: 8, marginBottom: 14 },
+  graphCard: { backgroundColor: COLORS.bgCard, borderRadius: 14, paddingTop: 14, paddingHorizontal: 8, marginBottom: 8 },
+  scrubRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  scrubSlider: { flex: 1, marginHorizontal: 8, height: 36 },
+  scrubTime: { color: COLORS.textMuted, fontSize: 11, width: 40, textAlign: 'center' },
   field: { marginTop: 12 },
   fieldLabel: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 4 },
   rowFields: { flexDirection: 'row', alignItems: 'flex-end' },
