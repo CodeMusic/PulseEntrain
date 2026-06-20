@@ -11,29 +11,25 @@ import {
   openSettings,
 } from 'react-native-permissions';
 import { Buffer } from 'buffer';
+// Pulsetto UART protocol (commands, clamp, battery math, notification parse) is
+// platform-agnostic and shared — a desktop/Electron transport reuses it verbatim.
+import {
+  DEVICE_NAME_PREFIX,
+  UART_SERVICE_UUID,
+  UART_RX_CHAR_UUID,
+  UART_TX_CHAR_UUID,
+  clampLevel,
+  CMD,
+  levelCmd,
+  parseNotification,
+} from '../shared/pulsettoProtocol';
 
-// ---- BLE constants (Pulsetto UART) — lifted verbatim from the controller ----
 // `manager` is the shared BleManager (see src/ble/manager.js).
-const DEVICE_NAME_PREFIX = 'Pulsetto';
-const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const UART_RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Write
-const UART_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // Notify
-const BATTERY_FULL_VOLTAGE = 3.9;
-const BATTERY_EMPTY_VOLTAGE = 3.5;
 const KEEPALIVE_INTERVAL = 10000;
 const STATUS_POLL_INTERVAL = 30000;
 const SESSION_POLL_INTERVAL = 3000;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-// Safety: the Pulsetto only accepts level 0-9. Coerce any input (a tampered
-// .imed strength, a bad slider value, NaN, etc.) into range so the device can
-// never be sent something out of bounds. 0 = off (ramp / pause); stim is 1-9.
-const clampLevel = (n, min = 0) => {
-  const v = Math.round(Number(n));
-  if (!Number.isFinite(v)) return min;
-  return Math.min(9, Math.max(min, v));
-};
 
 const PulsettoContext = createContext(null);
 
@@ -104,28 +100,10 @@ export function PulsettoProvider({ children }) {
     }
   };
 
-  const calculateBatteryPercentage = voltage => {
-    if (voltage >= BATTERY_FULL_VOLTAGE) return 100;
-    if (voltage <= BATTERY_EMPTY_VOLTAGE) return 0;
-    return Math.round(
-      ((voltage - BATTERY_EMPTY_VOLTAGE) / (BATTERY_FULL_VOLTAGE - BATTERY_EMPTY_VOLTAGE)) * 100,
-    );
-  };
-
   const handleNotification = (decodedData, rawBytes) => {
-    const trimmedData = decodedData.trim();
-    if (trimmedData.startsWith('Batt:')) {
-      try {
-        const v = parseFloat(trimmedData.split('Batt:')[1]);
-        setBattery(calculateBatteryPercentage(v));
-      } catch (e) {
-        console.error('Failed to parse battery data:', e);
-      }
-    }
-    if (rawBytes.length >= 3 && rawBytes[0] === 0x75 && rawBytes[1] === 0x01) {
-      if (rawBytes[2] === 0x30) setCharging('Not Charging');
-      else if (rawBytes[2] === 0x31) setCharging('Charging');
-    }
+    const patch = parseNotification(decodedData, rawBytes); // pure parse → state patch
+    if ('battery' in patch) setBattery(patch.battery);
+    if ('charging' in patch) setCharging(patch.charging);
   };
 
   const subscribeToNotifications = device => {
@@ -147,12 +125,12 @@ export function PulsettoProvider({ children }) {
   };
 
   const queryDeviceStatus = async device => {
-    await sendCommand('u\n', device); // charging
-    await sendCommand('Q\n', device); // battery
+    await sendCommand(CMD.queryCharging, device); // charging
+    await sendCommand(CMD.queryBattery, device); // battery
   };
   const queryDeviceInfo = async device => {
-    await sendCommand('v\n', device); // firmware
-    await sendCommand('i\n', device); // identity
+    await sendCommand(CMD.queryFirmware, device); // firmware
+    await sendCommand(CMD.queryIdentity, device); // identity
   };
 
   const startStatusPolling = interval => {
@@ -166,7 +144,7 @@ export function PulsettoProvider({ children }) {
     if (keepaliveRef.current) clearInterval(keepaliveRef.current);
     keepaliveRef.current = setInterval(() => {
       if (sessionActiveRef.current && connectedRef.current) {
-        sendCommand(`${clampLevel(activeStrengthRef.current, 0)}\n`);
+        sendCommand(levelCmd(activeStrengthRef.current, 0));
       }
     }, KEEPALIVE_INTERVAL);
   };
@@ -179,19 +157,19 @@ export function PulsettoProvider({ children }) {
 
   // ---- start / stop ramp sequences (from official APK begin/endSession) ----
   const runStartSequence = async (device, strength) => {
-    await sendCommand('+\n', device); // rampUp
-    await sendCommand('-\n', device); // rampDown
+    await sendCommand(CMD.rampUp, device); // rampUp
+    await sendCommand(CMD.rampDown, device); // rampDown
     await sleep(250);
-    await sendCommand('0\n', device);
+    await sendCommand(CMD.off, device);
     await sleep(450);
-    await sendCommand('5\n', device); // calibration pulse
+    await sendCommand(CMD.calib, device); // calibration pulse
     await sleep(450);
-    await sendCommand('0\n', device);
+    await sendCommand(CMD.off, device);
     await sleep(450);
-    await sendCommand(`${clampLevel(strength, 1)}\n`, device); // target intensity (1-9)
+    await sendCommand(levelCmd(strength, 1), device); // target intensity (1-9)
     await sleep(250);
-    await sendCommand('D\n', device); // both sides
-    await sendCommand('E\n', device); // LED low
+    await sendCommand(CMD.bothSides, device); // both sides
+    await sendCommand(CMD.ledLow, device); // LED low
   };
 
   const handleDisconnection = () => {
@@ -336,9 +314,9 @@ export function PulsettoProvider({ children }) {
     stopKeepalive();
     const device = connectedRef.current;
     if (device) {
-      await sendCommand('+\n', device);
-      await sendCommand('-\n', device);
-      await sendCommand('-\n', device); // endSession
+      await sendCommand(CMD.rampUp, device);
+      await sendCommand(CMD.rampDown, device);
+      await sendCommand(CMD.rampDown, device); // endSession
       startStatusPolling(STATUS_POLL_INTERVAL);
       await queryDeviceStatus(device);
     }
@@ -348,7 +326,7 @@ export function PulsettoProvider({ children }) {
     value = clampLevel(value, 0); // 0 = mute (pause); active stim is 1-9
     activeStrengthRef.current = value;
     if (sessionActiveRef.current && connectedRef.current) {
-      await sendCommand(`${value}\n`);
+      await sendCommand(levelCmd(value, 0));
     }
   };
 

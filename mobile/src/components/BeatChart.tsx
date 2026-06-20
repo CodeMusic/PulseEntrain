@@ -1,27 +1,17 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
+import { carrierColor, bandFor } from '../shared/entrainment';
 
 // beat-over-time chart: bar height = beat, bar colour = carrier (low red → high
 // purple), with axis bounds and an optional live playhead. Shared by the player's
 // live graph and (conceptually) the peek modal.
+export { carrierColor, bandFor }; // re-export so importers (PlayerScreen) keep their path
 const N = 80;
 const fmt = s => {
   s = Math.max(0, Math.floor(s));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-function hsv(h, s, v) {
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
-  return `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
-}
-export const carrierColor = c => hsv(Math.max(0, Math.min(1, (c - 70) / 430)) * 0.8, 0.72, 0.95);
-export const bandFor = b =>
-  b < 0.5 ? 'Epsilon' : b < 4 ? 'Delta' : b < 8 ? 'Theta' : b < 13 ? 'Alpha' : b < 30 ? 'Beta' : 'Gamma';
 
 export default function BeatChart({ scenes, duration, baseCarrier = 200, height = 200, progress = null }) {
   const data = useMemo(() => {

@@ -2,29 +2,17 @@ import React, { useMemo } from 'react';
 import { Modal, View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { isSynthDose } from '../catalog/data';
+import { carrierColor, bandFor as band } from '../shared/entrainment';
 
 // A read-only "peek behind the track" — the beat-over-time map (the .imedx scene
 // timeline) drawn as a thin-bar area chart with axis bounds, over a faded blur of
 // the real artwork. No SVG dependency: the curve is a row of height-scaled Views.
+// Carrier→colour + band come from shared/entrainment (low = red, high = purple).
 const N = 80;
 const fmt = s => {
   s = Math.max(0, Math.floor(s));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-const band = b =>
-  b < 0.5 ? 'Epsilon' : b < 4 ? 'Delta' : b < 8 ? 'Theta' : b < 13 ? 'Alpha' : b < 30 ? 'Beta' : 'Gamma';
-
-// Carrier frequency → colour: low = red, high = purple (matches the Admin scale).
-function hsv(h, s, v) {
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
-  return `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
-}
-const carrierColor = c => hsv(Math.max(0, Math.min(1, (c - 70) / 430)) * 0.8, 0.72, 0.95);
 
 export default function BeatPeek({ visible, onClose, dose, image }) {
   const data = useMemo(() => {
