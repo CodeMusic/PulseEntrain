@@ -4,6 +4,7 @@ import Slider from '@react-native-community/slider';
 import KeepAwake from 'react-native-keep-awake';
 import { COLORS } from '../theme';
 import { BinauralEngine, bandFor } from '../audio/binauralEngine';
+import { carrierColor } from '../shared/entrainment';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
@@ -156,9 +157,10 @@ export default function ManualScreen() {
           ))}
         </View>
 
-        <Text style={styles.label}>Carrier · {Math.round(carrier)} Hz</Text>
+        <Text style={[styles.label, { color: carrierColor(carrier) }]}>Carrier · {Math.round(carrier)} Hz</Text>
         <Slider minimumValue={80} maximumValue={500} step={5} value={carrier} onValueChange={onCarrier}
-          minimumTrackTintColor={COLORS.accentBlueLight} maximumTrackTintColor={COLORS.bgCardLight} thumbTintColor="#fff" style={styles.slider} />
+          minimumTrackTintColor={carrierColor(carrier)} maximumTrackTintColor={COLORS.bgCardLight}
+          thumbTintColor={carrierColor(carrier)} style={styles.slider} />
 
         <Text style={styles.label}>Background noise</Text>
         <View style={styles.chips}>
