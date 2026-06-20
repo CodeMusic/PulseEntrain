@@ -59,8 +59,7 @@ export default function PlayerScreen({ route, navigation }) {
   const [synthPos, setSynthPos] = useState(0);
   const [synthDur, setSynthDur] = useState((dose && dose.lengthSeconds) || 0);
   const [synthPlaying, setSynthPlaying] = useState(false);
-  const [graphMode, setGraphMode] = useState(false); // double-tap the cover → live beat map
-  const lastTapRef = useRef(0);
+  const [graphMode, setGraphMode] = useState(false); // tap the cover → live beat map
   const novaOverrideRef = useRef(false); // Developer Tools took manual control of the flicker
 
   const [intensity, setIntensityVal] = useState(
@@ -408,9 +407,9 @@ export default function PlayerScreen({ route, navigation }) {
   const pct = duration > 0 ? Math.min(1, position / duration) : 0;
   const onCoverTap = () => {
     if (!isSynth) return; // only synth (.imedx) doses have a beat map
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) setGraphMode(g => !g);
-    lastTapRef.current = now;
+    // Single tap toggles the beat map. (Was a double-tap, but the timing window
+    // is unreliable through Pressable on web — clicks land outside it.)
+    setGraphMode(g => !g);
   };
   const cur = graphMode && isSynth && synthRef.current ? synthRef.current.current() : null;
   const pulseLabel = wantPulsetto
