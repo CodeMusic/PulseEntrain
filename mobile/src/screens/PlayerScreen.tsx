@@ -12,7 +12,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
+import { Stack } from 'one';
 import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
+import { carrierColorVibrant } from '../shared/entrainment';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useNova } from '../nova/NovaProvider';
 import { useSessions } from '../wellness/SessionsProvider';
@@ -464,14 +466,14 @@ export default function PlayerScreen({ route, navigation }) {
     : ' · Binaural only';
   const showIntensity = wantPulsetto && pulsetto.connected;
 
+  // Header tints to the live carrier colour while a synth session plays (binned so
+  // the colour only updates when it meaningfully changes, not every tick).
+  const headerTint =
+    isSynth && isPlaying ? carrierColorVibrant(Math.round(liveCarrier / 8) * 8) : COLORS.bgCard;
+
   return (
-    <View style={styles.root}>
-      {isSynth && isPlaying ? (
-        <View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { backgroundColor: carrierColor(liveCarrier), opacity: 0.1 }]}
-        />
-      ) : null}
+    <>
+      <Stack.Screen options={{ headerStyle: { backgroundColor: headerTint } }} />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Web: toggle on press-in — a quick click's onPress gets eaten by the
           ScrollView responder, so only a held click registered. Native keeps the
@@ -626,13 +628,12 @@ export default function PlayerScreen({ route, navigation }) {
         </View>
       ) : null}
       </ScrollView>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.bgDark },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: COLORS.bgDark },
   content: { padding: 24, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { color: COLORS.textMuted },
