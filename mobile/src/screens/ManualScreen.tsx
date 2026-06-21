@@ -198,7 +198,7 @@ export default function ManualScreen() {
         if (runningRef.current && engineRef.current) engineRef.current.setBeat(b);
         if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
         uiTick(() => setBeat(Math.round(b * 10) / 10));
-      } else if (ev.type === 'pressure') {
+      } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         const v = clamp(mapRange(ev.value, 0, 127, 0.25, 1), 0.25, 1);
         if (runningRef.current && engineRef.current) engineRef.current.setVolume(v);
         uiTick(() => setVolume(v));

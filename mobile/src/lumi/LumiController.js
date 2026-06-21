@@ -96,11 +96,22 @@ export class LumiController {
         this.onStatus('error');
         return false;
       }
+      this._logTs = 0;
       this.sub = this.char.monitor((err, ch) => {
         if (err || !ch || !ch.value || !this.onNote) return;
         const bytes = Buffer.from(ch.value, 'base64');
-        // Forward all events — note-on (carrier), CC74 slide (beat), pressure (volume).
-        for (const ev of parseBleMidi(bytes)) this.onNote(ev);
+        const evs = parseBleMidi(bytes);
+        // Diagnostic (throttled): see exactly what the keyboard emits — note-on
+        // (carrier), CC74 slide (beat), pressure (volume), poly-AT, pitch-bend.
+        const now = Date.now();
+        if (now - this._logTs > 150) {
+          this._logTs = now;
+          const summary = evs
+            .map(e => e.type + (e.controller != null ? ':cc' + e.controller : '') + (e.value != null ? '=' + e.value : ''))
+            .join(' ');
+          console.log('[LUMI]', bytes.toString('hex'), '→', summary || '(none)');
+        }
+        for (const ev of evs) this.onNote(ev);
       });
       this.device = dev;
       dev.onDisconnected(() => {

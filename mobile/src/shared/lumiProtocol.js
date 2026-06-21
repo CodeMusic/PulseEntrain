@@ -50,8 +50,14 @@ export function parseBleMidi(buf) {
       out.push({ type: 'cc', controller, value, channel: ch }); // CC74 = MPE slide (Y)
     } else if (hi === 0xd0) {
       out.push({ type: 'pressure', value: buf[i++], channel: ch }); // channel pressure (Z)
-    } else if (hi === 0xa0 || hi === 0xe0) {
-      i += 2; // poly-AT / pitch-bend — 2 data bytes, skipped
+    } else if (hi === 0xa0) {
+      const note = buf[i++];
+      const value = buf[i++];
+      out.push({ type: 'polyAT', note, value, channel: ch }); // poly aftertouch (per-key Z)
+    } else if (hi === 0xe0) {
+      const lsb = buf[i++];
+      const msb = buf[i++];
+      out.push({ type: 'pitchBend', value: ((msb << 7) | lsb) - 8192, channel: ch }); // glide (X)
     } else if (hi === 0xc0) {
       i += 1; // program change — 1 data byte
     } else {
