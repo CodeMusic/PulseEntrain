@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TextInput, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { useSettings } from '../settings/SettingsProvider';
 
@@ -7,7 +7,7 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, trackStyle, setTrackStyle } = s;
+  const { name, setName } = s;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -22,28 +22,6 @@ export default function SettingsScreen() {
           placeholderTextColor={COLORS.textMuted}
         />
         <Text style={styles.hint}>Used for your welcome and goal notes. Stays on this device.</Text>
-      </View>
-
-      <Text style={styles.section}>Appearance</Text>
-      <View style={styles.card}>
-        <Text style={styles.label}>Track style</Text>
-        <Text style={styles.hint}>How a session's beat/carrier is shown — and the art for tracks without an image.</Text>
-        <View style={styles.segmented}>
-          {[
-            ['bar', 'Bars'],
-            ['circle', 'Circle'],
-          ].map(([k, lbl]) => (
-            <TouchableOpacity
-              key={k}
-              onPress={() => setTrackStyle(k)}
-              style={[styles.segBtn, trackStyle === k && styles.segBtnOn]}>
-              <Text style={[styles.segTxt, trackStyle === k && styles.segTxtOn]}>{lbl}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {trackStyle === 'circle' ? (
-          <Text style={styles.hint}>Circle (donut radial chart) art is coming soon — Bars render today.</Text>
-        ) : null}
       </View>
 
       <Text style={styles.foot}>
@@ -62,10 +40,5 @@ const styles = StyleSheet.create({
   label: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
   input: { backgroundColor: COLORS.bgCardLight, color: COLORS.textPrimary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, marginTop: 10 },
   hint: { color: COLORS.textMuted, fontSize: 12, lineHeight: 17, marginTop: 8 },
-  segmented: { flexDirection: 'row', backgroundColor: COLORS.bgCardLight, borderRadius: 10, padding: 3, marginTop: 10, gap: 3 },
-  segBtn: { flex: 1, paddingVertical: 11, borderRadius: 8, alignItems: 'center' },
-  segBtnOn: { backgroundColor: COLORS.accentBlue },
-  segTxt: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '700' },
-  segTxtOn: { color: '#fff' },
   foot: { color: COLORS.textMuted, fontSize: 12, lineHeight: 18, marginTop: 22 },
 });

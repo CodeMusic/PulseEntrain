@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
+import TrackArt from '../components/TrackArt';
 import { Stack } from 'one';
 import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
 import { carrierColorVibrant } from '../shared/entrainment';
@@ -501,6 +502,16 @@ export default function PlayerScreen({ route, navigation }) {
               progress={duration > 0 ? position / duration : 0}
             />
           </View>
+        ) : isSynth ? (
+          <View style={styles.artCenter}>
+            <TrackArt
+              scenes={(dose as any).scenes}
+              carrier={(dose as any).carrier}
+              image={imageSource(dose.image)}
+              name={dose.name}
+              size={252}
+            />
+          </View>
         ) : (
           <ArtImage source={imageSource(dose.image)} height={260} radius={20} hpad={24} />
         )}
@@ -646,6 +657,7 @@ export default function PlayerScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgDark },
+  artCenter: { alignItems: 'center', justifyContent: 'center', height: 260 },
   content: { padding: 24, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { color: COLORS.textMuted },
