@@ -11,6 +11,7 @@ declare module 'one' {
         | `/_sitemap`
         | `/about`
         | `/manual`
+        | `/settings`
         | `/springboard`
         | `/studio`
       DynamicRoutes:
