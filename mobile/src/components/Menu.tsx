@@ -81,6 +81,7 @@ function Flyout({ isOpen, close, go }) {
         <Item label="Home" onPress={() => go('Springboard')} />
         <Item label="Open a file" onPress={openFile} />
         {IS_WEB ? <Item label="Studio (web)" onPress={() => go('Studio')} /> : null}
+        <Item label="Settings" onPress={() => go('Settings')} />
         <Item label="About" onPress={() => go('About')} />
         <Text style={styles.section}>Programs</Text>
         <ScrollView showsVerticalScrollIndicator={false}>
