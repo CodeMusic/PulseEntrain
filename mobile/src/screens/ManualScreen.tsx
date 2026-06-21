@@ -177,11 +177,12 @@ export default function ManualScreen() {
   useEffect(() => {
     if (!lumiKeys.connected || !lumiKeys.setNoteListener) return;
     lumiKeys.setNoteListener(ev => {
-      let n = ev.note;
-      while (n < 60) n += 12; // start at the 4th octave (C4) — octave-agnostic
-      const hz = clamp(midiNoteToHz(n), CARR_MIN, CARR_MAX);
+      // Natural pitch — the keyboard's own octave control moves the carrier. Wide
+      // bound (binaural fusion holds to ~1 kHz); the standard 2-octave keybed sits
+      // ~C3–B4 = 130–494 Hz.
+      const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
       setCarrier(Math.round(hz));
-      setLastNote(noteName(n));
+      setLastNote(noteName(ev.note));
       if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
     });
     return () => lumiKeys.setNoteListener(null);
