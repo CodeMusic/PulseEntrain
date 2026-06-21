@@ -177,9 +177,11 @@ export default function ManualScreen() {
   useEffect(() => {
     if (!lumiKeys.connected || !lumiKeys.setNoteListener) return;
     lumiKeys.setNoteListener(ev => {
-      const hz = clamp(midiNoteToHz(ev.note), CARR_MIN, CARR_MAX);
+      let n = ev.note;
+      while (n < 60) n += 12; // start at the 4th octave (C4) — octave-agnostic
+      const hz = clamp(midiNoteToHz(n), CARR_MIN, CARR_MAX);
       setCarrier(Math.round(hz));
-      setLastNote(noteName(ev.note));
+      setLastNote(noteName(n));
       if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
     });
     return () => lumiKeys.setNoteListener(null);
