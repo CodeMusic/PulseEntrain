@@ -33,6 +33,13 @@ export class NovaController {
     this._lastHex = null;
     this.telemetryChar = null;
     this.telemetrySub = null;
+    this.onMotion = null; // (sample) => void — head-motion listener (accelerometer)
+  }
+
+  // Register a listener for accelerometer samples. Each sample is the decoded
+  // { x, y, z } plus derived { pitch, roll } degrees (see telemetry monitor).
+  setMotionListener(fn) {
+    this.onMotion = fn || null;
   }
 
   get connected() {
@@ -140,10 +147,23 @@ export class NovaController {
         return false;
       }
       // Step 3 (protocol brief): subscribe to telemetry — the strobe engine
-      // expects an active stream subscriber. We ignore the data.
+      // expects an active stream subscriber. Decode it too (6 bytes = 3×int16 LE
+      // accelerometer x/y/z) and surface head pitch/roll for motion-driven modes.
       if (this.telemetryChar) {
         try {
-          this.telemetrySub = this.telemetryChar.monitor(() => {});
+          this.telemetrySub = this.telemetryChar.monitor((err, ch) => {
+            if (err || !ch || !ch.value || !this.onMotion) return;
+            const b = Buffer.from(ch.value, 'base64');
+            if (b.length < 6) return;
+            const x = b.readInt16LE(0), y = b.readInt16LE(2), z = b.readInt16LE(4);
+            // Derived orientation (degrees). Axis→head mapping isn't documented,
+            // so these are a starting point to calibrate against on-device:
+            //   pitch (look up/down), roll (tilt left/right). Yaw isn't knowable
+            //   from gravity alone.
+            const pitch = (Math.atan2(-y, Math.hypot(x, z)) * 180) / Math.PI;
+            const roll = (Math.atan2(x, Math.hypot(y, z)) * 180) / Math.PI;
+            this.onMotion({ x, y, z, pitch, roll });
+          });
         } catch (e) {}
       }
       // Step 4: start the data stream.

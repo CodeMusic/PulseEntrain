@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
@@ -30,6 +30,18 @@ export default function NovaExplorer({ nova, showFrequency = false, onOverride =
   const [override, setOverride] = useState(false);
   const [freq, setFreq] = useState(10);
   const [style, setStyle] = useState('standard');
+  const [motion, setMotion] = useState(null); // latest { x,y,z,pitch,roll }
+  const zeroRef = useRef({ pitch: 0, roll: 0 }); // calibration offset (Center)
+
+  // Live head-motion readout while the panel is open (validates the axis mapping
+  // on-device before we drive carrier/beat from it).
+  useEffect(() => {
+    if (!open || !nova || !nova.connected || !nova.setMotionListener) return;
+    nova.setMotionListener(s => setMotion(s));
+    return () => nova.setMotionListener(null);
+  }, [open, nova, nova && nova.connected]);
+  const pitch = motion ? motion.pitch - zeroRef.current.pitch : 0;
+  const roll = motion ? motion.roll - zeroRef.current.roll : 0;
 
   const send = patch => nova && nova.setSyncedValues(patch);
   const applyStyle = name => send(STYLE_LEVELS[name]);
@@ -100,6 +112,31 @@ export default function NovaExplorer({ nova, showFrequency = false, onOverride =
           </TouchableOpacity>
         ))}
       </View>
+
+      {nova && nova.connected && nova.setMotionListener ? (
+        <>
+          <View style={styles.motionHead}>
+            <Text style={styles.label}>Head motion (accelerometer)</Text>
+            <TouchableOpacity
+              style={styles.centerBtn}
+              onPress={() => motion && (zeroRef.current = { pitch: motion.pitch, roll: motion.roll })}>
+              <Text style={styles.centerTxt}>Center</Text>
+            </TouchableOpacity>
+          </View>
+          {motion ? (
+            <Text style={styles.motionTxt}>
+              pitch (up/down) {pitch.toFixed(0)}° · roll (tilt L/R) {roll.toFixed(0)}°{'\n'}
+              raw x {motion.x} · y {motion.y} · z {motion.z}
+            </Text>
+          ) : (
+            <Text style={styles.motionTxt}>Waiting for samples (~1 Hz)… move your head to test.</Text>
+          )}
+          <Text style={styles.motionHint}>
+            Experimental. Tilt up/down = pitch, tilt L/R = roll. Use Center to zero it. (Turning
+            left/right — yaw — isn't sensed by the accelerometer.)
+          </Text>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -145,6 +182,11 @@ const styles = StyleSheet.create({
   styleBtnActive: { backgroundColor: COLORS.accentBlue },
   styleTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
   styleTxtActive: { color: '#fff' },
+  motionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  centerBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: COLORS.bgCardLight, marginTop: 10 },
+  centerTxt: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '700' },
+  motionTxt: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '600', marginTop: 6, lineHeight: 20, fontVariant: ['tabular-nums'] },
+  motionHint: { color: COLORS.textMuted, fontSize: 11, lineHeight: 16, marginTop: 6 },
   checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, gap: 10 },
   checkBox: {
     width: 22,

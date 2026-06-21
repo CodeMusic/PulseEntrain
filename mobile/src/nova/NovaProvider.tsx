@@ -24,6 +24,7 @@ export function NovaProvider({ children }) {
       setFrequency: hz => ctrl.setFrequency(hz),
       setSyncedValues: patch => ctrl.setSyncedValues(patch),
       setMasterBrightness: m => ctrl.setMasterBrightness(m),
+      setMotionListener: fn => ctrl.setMotionListener(fn),
       stopStrobe: () => ctrl.stopStrobe(),
     }),
     [status, ctrl],
