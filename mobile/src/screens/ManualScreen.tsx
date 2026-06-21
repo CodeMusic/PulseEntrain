@@ -61,6 +61,7 @@ export default function ManualScreen() {
   const explore = trackMode !== 'off';
   const runningRef = useRef(false);
   runningRef.current = running;
+  const baseBeatRef = useRef(10); // the "settled" beat; pitch-bend offsets around it
   const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // head Center calibration
   const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw head sample
   const phoneZeroRef = useRef({ pitch: 0, heading: 0 }); // phone Center calibration
@@ -69,6 +70,7 @@ export default function ManualScreen() {
 
   // Shared: set carrier/beat live from a steered value.
   const steer = (b, c) => {
+    baseBeatRef.current = b;
     setBeat(Math.round(b * 10) / 10);
     setCarrier(Math.round(c));
     if (runningRef.current && engineRef.current) {
@@ -185,6 +187,12 @@ export default function ManualScreen() {
         fn();
       }
     };
+    const applyBeat = b => {
+      const v = clamp(b, BEAT_MIN, BEAT_MAX);
+      if (runningRef.current && engineRef.current) engineRef.current.setBeat(v);
+      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
+      uiTick(() => setBeat(Math.round(v * 10) / 10));
+    };
     lumiKeys.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
         // Natural pitch — the keyboard's octave control moves the carrier (fusion
@@ -193,11 +201,17 @@ export default function ManualScreen() {
         setCarrier(Math.round(hz));
         setLastNote(noteName(ev.note));
         if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
+      } else if (ev.type === 'noteOff') {
+        applyBeat(baseBeatRef.current); // spring the beat back when the key lifts
       } else if (ev.type === 'cc' && ev.controller === 74) {
+        // Slide (Y) sets the base beat (where it settles).
         const b = clamp(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
-        if (runningRef.current && engineRef.current) engineRef.current.setBeat(b);
-        if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
-        uiTick(() => setBeat(Math.round(b * 10) / 10));
+        baseBeatRef.current = b;
+        applyBeat(b);
+      } else if (ev.type === 'pitchBend') {
+        // Glide (X) bends the beat around its base; springs back as you release.
+        // (Beat clamps to 1–40, so a generous factor is safe; tune to taste.)
+        applyBeat(baseBeatRef.current + ev.value * 0.015);
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         const v = clamp(mapRange(ev.value, 0, 127, 0.25, 1), 0.25, 1);
         if (runningRef.current && engineRef.current) engineRef.current.setVolume(v);
@@ -216,6 +230,7 @@ export default function ManualScreen() {
 
   // live controls
   const onBeat = v => {
+    baseBeatRef.current = v;
     setBeat(v);
     if (running) engineRef.current?.setBeat(v);
     if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
@@ -392,8 +407,8 @@ export default function ManualScreen() {
                 ? 'Keyboard — in the app'
                 : lumiKeys.connected
                 ? lastNote
-                  ? `${lastNote} → carrier ${Math.round(carrier)} Hz · slide = beat · press = volume`
-                  : 'Connected — note = carrier · slide = beat · press = volume'
+                  ? `${lastNote} → carrier ${Math.round(carrier)} Hz · bend = beat · slide/press (5D)`
+                  : 'Connected — note = carrier · bend = beat · slide/press (5D)'
                 : lumiKeys.status === 'scanning'
                 ? 'Searching…'
                 : lumiKeys.status === 'notfound'
