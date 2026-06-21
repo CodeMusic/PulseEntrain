@@ -510,6 +510,7 @@ export default function PlayerScreen({ route, navigation }) {
               image={imageSource(dose.image)}
               name={dose.name}
               size={252}
+              progress={isPlaying && duration > 0 ? position / duration : null}
             />
           </View>
         ) : (

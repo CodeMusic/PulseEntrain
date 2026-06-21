@@ -4,6 +4,7 @@ import Slider from '@react-native-community/slider';
 import { COLORS, strengthColor } from '../theme';
 import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
+import TrackArt from '../components/TrackArt';
 import BeatPeek from '../components/BeatPeek';
 import StrengthBadge from '../components/StrengthBadge';
 import NovaExplorer from '../components/NovaExplorer';
@@ -152,7 +153,13 @@ export default function DoseDetailScreen({ route, navigation }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Pressable onLongPress={() => setPeek(true)} delayLongPress={300}>
-        <ArtImage source={img} height={220} radius={18} hpad={16} />
+        {img ? (
+          <ArtImage source={img} height={220} radius={18} hpad={16} />
+        ) : (
+          <View style={styles.artCenter}>
+            <TrackArt scenes={dose.scenes} carrier={dose.carrier} image={null} name={dose.name} size={200} />
+          </View>
+        )}
       </Pressable>
       <BeatPeek visible={peek} onClose={() => setPeek(false)} dose={dose} image={img} />
       <Text style={styles.title}>{dose.name}</Text>
@@ -251,6 +258,7 @@ export default function DoseDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgDark },
   content: { padding: 16, paddingBottom: 40 },
+  artCenter: { alignItems: 'center', justifyContent: 'center', height: 220 },
   muted: { color: COLORS.textMuted, textAlign: 'center', marginTop: 40 },
   hero: { width: '100%', height: 220, borderRadius: 18, backgroundColor: COLORS.bgCardLight },
   heroEmpty: { borderWidth: 1, borderColor: COLORS.divider },
