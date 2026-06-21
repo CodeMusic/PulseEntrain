@@ -57,6 +57,14 @@ export default function NovaExplorer({ nova, showFrequency = false, onOverride =
   const send = patch => nova && nova.setSyncedValues(patch);
   const applyStyle = name => send(STYLE_LEVELS[name]);
 
+  // Push the selected style to the device when the panel opens, so the LEDs match
+  // the shown selection from the start (the controller defaults to both-lit, which
+  // looked like "Enlightened" while "Standard" was displayed).
+  useEffect(() => {
+    if (open && nova && nova.connected) send(STYLE_LEVELS[style]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, nova && nova.connected]);
+
   const onFreq = v => {
     setFreq(v);
     if (!nova) return;

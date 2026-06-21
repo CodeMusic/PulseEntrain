@@ -10,6 +10,7 @@ import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useSessions } from '../wellness/SessionsProvider';
 import NovaExplorer from '../components/NovaExplorer';
+import { usePhoneOrientation, PHONE_SUPPORTED } from '../sensors/usePhoneOrientation';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 // Unified Manual mode: one screen, one Start/Stop that runs audio (binaural +
@@ -52,11 +53,26 @@ export default function ManualScreen() {
   const [timerMin, setTimerMin] = useState(10);
   const [running, setRunning] = useState(false);
   const [remaining, setRemaining] = useState(0);
-  const [explore, setExplore] = useState(false); // head-motion → carrier/beat
+  const [trackMode, setTrackMode] = useState('off'); // off | head (Nova) | phone
+  const explore = trackMode !== 'off';
   const runningRef = useRef(false);
   runningRef.current = running;
-  const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // Center calibration
-  const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw sample (for Center)
+  const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // head Center calibration
+  const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw head sample
+  const phoneZeroRef = useRef({ pitch: 0, heading: 0 }); // phone Center calibration
+  const lastPhoneRef = useRef({ pitch: 0, heading: 0 }); // latest raw phone sample
+  const phone = usePhoneOrientation(trackMode === 'phone');
+
+  // Shared: set carrier/beat live from a steered value.
+  const steer = (b, c) => {
+    setBeat(Math.round(b * 10) / 10);
+    setCarrier(Math.round(c));
+    if (runningRef.current && engineRef.current) {
+      engineRef.current.setBeat(b);
+      engineRef.current.setCarrier(c);
+    }
+    if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+  };
 
   const ensureEngine = () => {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
@@ -74,30 +90,42 @@ export default function ManualScreen() {
     [],
   );
 
-  // Explore mode: subscribe to head motion and steer carrier (roll) + beat (pitch).
+  // Head tracking: Nova accelerometer → beat (look up/down) + carrier (tilt L/R).
   useEffect(() => {
-    if (!explore || !nova.connected || !nova.setMotionListener) return;
+    if (trackMode !== 'head' || !nova.connected || !nova.setMotionListener) return;
     if (nova.setTelemetryRate) nova.setTelemetryRate(10); // ask for faster cadence (best-effort)
     nova.setMotionListener(s => {
       lastSampleRef.current = { pitch: s.pitch, roll: s.roll };
       const p = s.pitch - motionZeroRef.current.pitch; // look up/down
       const r = s.roll - motionZeroRef.current.roll; // tilt L/R ("azimuth")
-      const b = clamp(mapRange(p, -TILT, TILT, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
-      const c = clamp(mapRange(r, -TILT, TILT, CARR_MIN, CARR_MAX), CARR_MIN, CARR_MAX);
-      setBeat(Math.round(b * 10) / 10);
-      setCarrier(Math.round(c));
-      if (runningRef.current && engineRef.current) {
-        engineRef.current.setBeat(b);
-        engineRef.current.setCarrier(c);
-      }
-      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+      // look UP raises the beat; tilt RIGHT raises the carrier (tilt LEFT lowers).
+      steer(
+        clamp(mapRange(p, -TILT, TILT, BEAT_MAX, BEAT_MIN), BEAT_MIN, BEAT_MAX),
+        clamp(mapRange(r, -TILT, TILT, CARR_MIN, CARR_MAX), CARR_MIN, CARR_MAX),
+      );
     });
     return () => {
       nova.setMotionListener(null);
       if (nova.setTelemetryRate) nova.setTelemetryRate(1);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [explore, nova.connected]);
+  }, [trackMode, nova.connected]);
+
+  // Phone tracking: device orientation → beat (point up/down) + carrier (compass
+  // azimuth — true left/right turning, which the phone can do and the Nova can't).
+  useEffect(() => {
+    if (trackMode !== 'phone' || !phone) return;
+    lastPhoneRef.current = { pitch: phone.pitch, heading: phone.heading };
+    const p = phone.pitch - phoneZeroRef.current.pitch; // point up → positive
+    let h = phone.heading - phoneZeroRef.current.heading; // compass delta
+    if (h > 180) h -= 360;
+    if (h < -180) h += 360;
+    steer(
+      clamp(mapRange(p, -TILT, TILT, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX), // up raises
+      clamp(mapRange(h, -90, 90, CARR_MIN, CARR_MAX), CARR_MIN, CARR_MAX), // turn right raises
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, trackMode]);
 
   const logIfCounted = () => {
     if (!startRef.current || !sessions) return;
@@ -208,24 +236,45 @@ export default function ManualScreen() {
           minimumTrackTintColor={carrierColor(carrier)} maximumTrackTintColor={COLORS.bgCardLight}
           thumbTintColor={carrierColor(carrier)} style={styles.slider} />
 
-        {/* EXPLORE — head-motion steers the binaural space (needs Nova) */}
+        {/* EXPLORE — motion steers the binaural space */}
         <View style={styles.exploreRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>🧭 Explore (head motion)</Text>
-            <Text style={styles.deviceSub}>
-              {!nova.connected ? 'Connect the Nova below to enable' : 'Look up/down = beat · tilt L/R = carrier'}
-            </Text>
-          </View>
-          <Switch value={explore} disabled={!nova.connected} onValueChange={setExplore}
-            trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
+          <Text style={styles.label}>🧭 Explore (motion)</Text>
         </View>
+        <View style={styles.segmented}>
+          {[
+            ['off', 'Off', true],
+            ['head', 'Head (Nova)', nova.connected],
+            ['phone', 'Phone', PHONE_SUPPORTED],
+          ].map(([k, lbl, enabled]) => (
+            <TouchableOpacity
+              key={k}
+              disabled={!enabled}
+              onPress={() => setTrackMode(k)}
+              style={[styles.segBtn, trackMode === k && styles.segBtnOn, !enabled && styles.segBtnOff]}>
+              <Text style={[styles.segTxt, trackMode === k && styles.segTxtOn]}>{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.deviceSub}>
+          {trackMode === 'head'
+            ? 'Look up/down = beat · tilt L/R = carrier'
+            : trackMode === 'phone'
+            ? 'Point up/down = beat · turn (compass) = carrier'
+            : !nova.connected && !PHONE_SUPPORTED
+            ? 'Connect the Nova (head) — phone tracking needs the sensors module on native'
+            : 'Look around to explore the binaural space'}
+        </Text>
         {explore ? (
           <View style={styles.exploreReadout}>
             <Text style={[styles.exploreVal, { color: carrierColor(carrier) }]}>
               carrier {Math.round(carrier)} Hz · beat {beat.toFixed(1)} Hz ({bandFor(beat)})
             </Text>
-            <TouchableOpacity style={styles.centerBtn}
-              onPress={() => { motionZeroRef.current = { ...lastSampleRef.current }; }}>
+            <TouchableOpacity
+              style={styles.centerBtn}
+              onPress={() => {
+                if (trackMode === 'phone') phoneZeroRef.current = { ...lastPhoneRef.current };
+                else motionZeroRef.current = { ...lastSampleRef.current };
+              }}>
               <Text style={styles.centerTxt}>Center</Text>
             </TouchableOpacity>
           </View>
@@ -332,6 +381,12 @@ const styles = StyleSheet.create({
   deviceTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '700' },
   deviceSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
   exploreRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18, borderTopWidth: 1, borderTopColor: COLORS.divider, paddingTop: 14 },
+  segmented: { flexDirection: 'row', backgroundColor: COLORS.bgCardLight, borderRadius: 10, padding: 3, marginTop: 8, gap: 3 },
+  segBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center' },
+  segBtnOn: { backgroundColor: COLORS.accentBlue },
+  segBtnOff: { opacity: 0.35 },
+  segTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '700' },
+  segTxtOn: { color: '#fff' },
   exploreReadout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   exploreVal: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'], flex: 1 },
   centerBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: COLORS.bgCardLight },

@@ -426,6 +426,9 @@ export default function PlayerScreen({ route, navigation }) {
     setGraphMode(g => !g);
   };
   const cur = graphMode && isSynth && synthRef.current ? synthRef.current.current() : null;
+  // Live carrier (recomputed as the synth ticks) → a faint full-screen tint so the
+  // player subtly takes on the current carrier's colour while playing.
+  const liveCarrier = isSynth && synthRef.current ? synthRef.current.current().carrier : ((dose && dose.carrier) || 200);
   const pulseLabel = wantPulsetto
     ? pulsetto.connected
       ? ' · Pulsetto on'
@@ -434,7 +437,14 @@ export default function PlayerScreen({ route, navigation }) {
   const showIntensity = wantPulsetto && pulsetto.connected;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
+      {isSynth && isPlaying ? (
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: carrierColor(liveCarrier), opacity: 0.1 }]}
+        />
+      ) : null}
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Web: toggle on press-in — a quick click's onPress gets eaten by the
           ScrollView responder, so only a held click registered. Native keeps the
           on-release press so it doesn't fight scrolling. */}
@@ -578,12 +588,14 @@ export default function PlayerScreen({ route, navigation }) {
           />
         </View>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bgDark },
+  root: { flex: 1, backgroundColor: COLORS.bgDark },
+  container: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: 24, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { color: COLORS.textMuted },
