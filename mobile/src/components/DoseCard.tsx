@@ -10,7 +10,7 @@ export default function DoseCard({ dose, onPress }) {
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.card}>
       <View style={styles.thumb}>
-        <TrackArt scenes={dose.scenes} carrier={dose.carrier} image={img} name={dose.name} size={64} />
+        <TrackArt scenes={dose.scenes} carrier={dose.carrier} image={img} name={dose.name} size={84} />
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     alignItems: 'center',
   },
-  thumb: { width: 64, height: 64, marginRight: 12 },
+  thumb: { width: 84, height: 84, marginRight: 12 },
   body: { flex: 1 },
   title: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
   meta: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },

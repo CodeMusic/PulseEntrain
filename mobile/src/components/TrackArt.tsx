@@ -36,18 +36,25 @@ function TrackArt({ scenes, carrier = 200, image = null, name = '', size = 220, 
   const data = useMemo(() => sample(scenes, carrier, N), [scenes, carrier, N]);
   const R = size / 2;
   const outerR = R - Math.max(2, size * 0.012);
-  const imageR = outerR * 0.7; // big centre so the image reads; bars live in the rim band
-  const band = outerR - imageR; // bars hang inward from the rim into this band
-  const barW = Math.max(1.4, (2 * Math.PI * imageR) / N * 0.7);
+  const barMax = outerR * 0.4; // bars reach up to 40% inward, drawn over the image
+  const barW = Math.max(1.4, (2 * Math.PI * (outerR - barMax)) / N * 0.7);
   const dot = Math.max(3, size * 0.024);
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
 
   const body = (
     <View style={{ width: size, height: size }}>
-      {/* spokes — anchored at the rim, growing inward by beat (low Hz = short stub) */}
+      {/* full-disc image fills behind (or the initial on a disc) */}
+      <View style={[styles.disc, { left: R - outerR, top: R - outerR, width: outerR * 2, height: outerR * 2, borderRadius: outerR }]}>
+        {image ? (
+          <Image source={image} style={{ width: outerR * 2, height: outerR * 2 }} resizeMode="cover" />
+        ) : (
+          <Text style={{ color: 'rgba(255,255,255,0.82)', fontSize: outerR * 0.8, fontWeight: '700' }}>{initial}</Text>
+        )}
+      </View>
+      {/* spokes — anchored at the rim, drawn inward over the image by beat */}
       {data
         ? data.beats.map((b, i) => {
-            const len = Math.max(1, Math.min(1, b / AXIS_MAX) * band);
+            const len = Math.max(1, Math.min(1, b / AXIS_MAX) * barMax);
             const radius = outerR - len / 2; // bar centre; spans (outerR-len)..outerR
             const deg = (i / N) * 360;
             return (
@@ -67,14 +74,6 @@ function TrackArt({ scenes, carrier = 200, image = null, name = '', size = 220, 
             );
           })
         : null}
-      {/* centre: circle-cropped image, else the initial */}
-      <View style={[styles.hole, { left: R - imageR, top: R - imageR, width: imageR * 2, height: imageR * 2, borderRadius: imageR }]}>
-        {image ? (
-          <Image source={image} style={{ width: imageR * 2, height: imageR * 2 }} resizeMode="cover" />
-        ) : (
-          <Text style={{ color: 'rgba(255,255,255,0.82)', fontSize: imageR * 0.9, fontWeight: '700' }}>{initial}</Text>
-        )}
-      </View>
       {/* playhead dot on the rim */}
       {progress != null ? (
         <View
@@ -106,7 +105,7 @@ function TrackArt({ scenes, carrier = 200, image = null, name = '', size = 220, 
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  hole: { position: 'absolute', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: COLORS.bgDark },
+  disc: { position: 'absolute', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: COLORS.bgCardLight },
 });
 
 export default React.memo(TrackArt);
