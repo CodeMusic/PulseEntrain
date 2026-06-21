@@ -8,6 +8,8 @@ import { carrierColor } from '../shared/entrainment';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
+import { useLumi } from '../lumi/LumiProvider';
+import { midiNoteToHz, noteName } from '../shared/lumiProtocol';
 import { useSessions } from '../wellness/SessionsProvider';
 import NovaExplorer from '../components/NovaExplorer';
 import { usePhoneOrientation, PHONE_SUPPORTED } from '../sensors/usePhoneOrientation';
@@ -37,7 +39,9 @@ const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) |
 export default function ManualScreen() {
   const nova = useNova();
   const pulsetto = usePulsetto();
+  const lumiKeys = useLumi();
   const sessions = useSessions();
+  const [lastNote, setLastNote] = useState(null); // last LUMI note played
   const engineRef = useRef(null);
   const endRef = useRef(0);
   const tickRef = useRef(null);
@@ -166,6 +170,26 @@ export default function ManualScreen() {
       setRemaining(Math.max(0, rem));
       if (rem <= 0) stop();
     }, 1000);
+  };
+
+  // LUMI Keys: a played note sets the carrier (binaural piano). Carrier follows
+  // the note's pitch, clamped to the manual carrier range.
+  useEffect(() => {
+    if (!lumiKeys.connected || !lumiKeys.setNoteListener) return;
+    lumiKeys.setNoteListener(ev => {
+      const hz = clamp(midiNoteToHz(ev.note), CARR_MIN, CARR_MAX);
+      setCarrier(Math.round(hz));
+      setLastNote(noteName(ev.note));
+      if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
+    });
+    return () => lumiKeys.setNoteListener(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lumiKeys.connected]);
+
+  const toggleLumi = val => {
+    if (val && IS_WEB) return nativeOnlyNotice('LUMI Keys');
+    if (val) lumiKeys.connect();
+    else lumiKeys.disconnect();
   };
 
   // live controls
@@ -334,6 +358,30 @@ export default function ManualScreen() {
               minimumTrackTintColor={COLORS.accentBlue} maximumTrackTintColor={COLORS.bgCardLight} thumbTintColor="#fff" style={styles.slider} />
           </>
         ) : null}
+      </View>
+
+      {/* LUMI Keys — a played note sets the carrier (binaural piano) */}
+      <View style={styles.card}>
+        <View style={styles.deviceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.deviceTitle}>LUMI Keys</Text>
+            <Text style={styles.deviceSub}>
+              {IS_WEB
+                ? 'Keyboard — in the app'
+                : lumiKeys.connected
+                ? lastNote
+                  ? `${lastNote} → carrier ${Math.round(carrier)} Hz`
+                  : 'Connected — play a note to set the carrier'
+                : lumiKeys.status === 'scanning'
+                ? 'Searching…'
+                : lumiKeys.status === 'notfound'
+                ? 'Not found — is it on and nearby?'
+                : 'Binaural piano — a note sets the carrier'}
+            </Text>
+          </View>
+          <Switch value={lumiKeys.connected} disabled={IS_WEB} onValueChange={toggleLumi}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
+        </View>
       </View>
 
       {/* TIMER + master Start/Stop */}
