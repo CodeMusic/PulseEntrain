@@ -35,20 +35,20 @@ function TrackArt({ scenes, carrier = 200, image = null, name = '', size = 220, 
   const N = Math.max(28, Math.min(96, Math.round(size / 2.6)));
   const data = useMemo(() => sample(scenes, carrier, N), [scenes, carrier, N]);
   const R = size / 2;
-  const outerR = R - Math.max(3, size * 0.02);
-  const innerR = outerR * 0.56;
-  const barW = Math.max(1.4, (2 * Math.PI * innerR) / N * 0.72);
-  const dot = Math.max(3, size * 0.022);
+  const outerR = R - Math.max(2, size * 0.012);
+  const imageR = outerR * 0.7; // big centre so the image reads; bars live in the rim band
+  const band = outerR - imageR; // bars hang inward from the rim into this band
+  const barW = Math.max(1.4, (2 * Math.PI * imageR) / N * 0.7);
+  const dot = Math.max(3, size * 0.024);
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
 
   const body = (
     <View style={{ width: size, height: size }}>
-      {/* faint boundary ring */}
-      <View style={{ position: 'absolute', left: R - outerR, top: R - outerR, width: outerR * 2, height: outerR * 2, borderRadius: outerR, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }} />
-      {/* spokes */}
+      {/* spokes — anchored at the rim, growing inward by beat (low Hz = short stub) */}
       {data
         ? data.beats.map((b, i) => {
-            const len = Math.max(1, Math.min(1, b / AXIS_MAX) * (outerR - innerR));
+            const len = Math.max(1, Math.min(1, b / AXIS_MAX) * band);
+            const radius = outerR - len / 2; // bar centre; spans (outerR-len)..outerR
             const deg = (i / N) * 360;
             return (
               <View
@@ -61,18 +61,18 @@ function TrackArt({ scenes, carrier = 200, image = null, name = '', size = 220, 
                   height: len,
                   borderRadius: barW / 2,
                   backgroundColor: carrierColor(data.carriers[i]),
-                  transform: [{ rotate: `${deg}deg` }, { translateY: -(innerR + len / 2) }],
+                  transform: [{ rotate: `${deg}deg` }, { translateY: -radius }],
                 }}
               />
             );
           })
         : null}
-      {/* centre hole: circle-cropped image, else the initial */}
-      <View style={[styles.hole, { left: R - innerR, top: R - innerR, width: innerR * 2, height: innerR * 2, borderRadius: innerR }]}>
+      {/* centre: circle-cropped image, else the initial */}
+      <View style={[styles.hole, { left: R - imageR, top: R - imageR, width: imageR * 2, height: imageR * 2, borderRadius: imageR }]}>
         {image ? (
-          <Image source={image} style={{ width: innerR * 2, height: innerR * 2 }} resizeMode="cover" />
+          <Image source={image} style={{ width: imageR * 2, height: imageR * 2 }} resizeMode="cover" />
         ) : (
-          <Text style={{ color: 'rgba(255,255,255,0.82)', fontSize: innerR * 0.9, fontWeight: '700' }}>{initial}</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.82)', fontSize: imageR * 0.9, fontWeight: '700' }}>{initial}</Text>
         )}
       </View>
       {/* playhead dot on the rim */}
