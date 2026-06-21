@@ -37,11 +37,14 @@ Generated sessions can be **saved and reused** later.
 | Pulsetto control (intensity, timer, status) | ✅ Available |
 | Binaural-beat audio playback | ✅ Available |
 | Advanced pulse-envelope mode (desktop) | ✅ Available |
-| Program catalog (96 sessions) | ✅ Available (mobile) |
+| Program catalog (sessions by category) | ✅ Available (mobile) |
 | Manual mode (frequency + noise + Pulsetto / Nova) | ✅ Available (mobile) |
 | **Admin** authoring app (extract / create / edit sessions) | ✅ Available (desktop) |
 | Self-contained `.imedx` sessions (programmatic beats + embedded art) | ✅ Available |
 | **Lumenate Nova** visual (light) entrainment | ✅ Available (mobile) |
+| Web **Studio** editor + open/play a saved `.imedx` | ✅ Available (web) |
+| Head/phone **motion** mode — orientation steers carrier/beat | 🧪 Experimental |
+| **ROLI LUMI** keyboard — play a note → set the carrier; tempo → set the beat (a piano front-end for binaural entrainment) | 💡 Idea |
 | AI-generated sessions (n8n + image gen, saveable) | 🔜 Planned |
 | Audio streaming (replace bundled MP3s) | 🔜 Planned |
 

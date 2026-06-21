@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'one';
 import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, {
   useProgress,
@@ -202,6 +203,17 @@ export default function PlayerScreen({ route, navigation }) {
       nova.stopStrobe();
     } catch (e) {}
   };
+  const teardownRef = useRef(teardown);
+  teardownRef.current = teardown;
+
+  // Stop everything when the player loses focus (e.g. tapping Home/title pushes a
+  // new screen without unmounting this one — audio would otherwise keep playing).
+  useFocusEffect(() => {
+    return () => {
+      try { teardownRef.current(); } catch (e) {}
+      setSynthPlaying(false);
+    };
+  }, []);
 
   // ---- load + start on mount ----
   useEffect(() => {

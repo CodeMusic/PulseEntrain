@@ -15,6 +15,7 @@ import { COLORS } from '../theme';
 import { CATEGORIES } from '../catalog/data';
 import { registerImportedDose } from '../catalog/importDose';
 import { pickImedxFile } from '../catalog/pickImedx';
+import { useRouter } from 'one';
 import { useNav } from '../oneNav';
 
 const PANEL_WIDTH = 290;
@@ -108,11 +109,12 @@ export function HeaderMenuButton() {
 }
 
 // Center header title: shows the screen's title (default "PulseEntrain"); tapping
-// it returns Home. Used as the Stack's `headerTitle`.
+// it returns Home. Uses router.navigate (pops back to the existing Springboard so
+// the player/dose screens unmount and stop) rather than pushing a new one.
 export function HeaderTitle({ children }: any) {
-  const nav = useNav();
+  const router = useRouter();
   return (
-    <TouchableOpacity onPress={() => nav.navigate('Springboard')} hitSlop={10}>
+    <TouchableOpacity onPress={() => router.navigate('/springboard')} hitSlop={10}>
       <Text style={styles.headerTitle}>{children || 'PulseEntrain'}</Text>
     </TouchableOpacity>
   );

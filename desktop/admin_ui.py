@@ -680,6 +680,7 @@ class DoseScreen(Screen):
         self.imed = None
         self.current_path = None  # set once saved/opened as .imedx → plain Save overwrites it
         self.on_open = None       # set by AdminRoot → Ctrl/Cmd+O opens a session
+        self.on_new = None        # set by AdminRoot → Ctrl/Cmd+N new blank session
         self._preview = None
         self._preview_ev = None
         self._populating = False  # guard so populating node fields doesn't fire setters
@@ -922,6 +923,10 @@ class DoseScreen(Screen):
         if cmd and codepoint in ("o", "O"):
             if self.on_open:
                 self.on_open()
+            return True
+        if cmd and codepoint in ("n", "N"):  # New (blank session)
+            if self.on_new:
+                self.on_new()
             return True
         if key not in (127, 8):  # forward-delete / backspace (mac "delete")
             return False
@@ -1295,6 +1300,7 @@ class AdminRoot(BoxLayout):
         self.sm = ScreenManager(transition=FadeTransition(duration=0.12))
         self.dose = DoseScreen(name="dose")
         self.dose.on_open = self._open  # Ctrl/Cmd+O from the dose screen
+        self.dose.on_new = self._create  # Ctrl/Cmd+N from the dose screen
         pulse = Screen(name="pulsetto")
         pulse.add_widget(pulsetto_screen)
         self.sm.add_widget(self.dose)
@@ -1307,8 +1313,8 @@ class AdminRoot(BoxLayout):
         menu_btn = PillButton(text="Menu", color_key="bg_card_light",
                               size_hint_x=None, width=dp(120), height=dp(40))
         dd = DropDown(auto_width=False, width=dp(200))
-        items = [("Extract from MP3…", self._extract), ("Open…  (⌘/Ctrl+O)", self._open),
-                 ("Create new", self._create),
+        items = [("New  (⌘/Ctrl+N)", self._create),
+                 ("Extract from MP3…", self._extract), ("Open…  (⌘/Ctrl+O)", self._open),
                  ("Save  (⌘/Ctrl+S)", lambda: self.dose._on_save()),
                  ("Save As…", lambda: self.dose._save_as()),
                  ("Pulsetto device", lambda: setattr(self.sm, "current", "pulsetto"))]
