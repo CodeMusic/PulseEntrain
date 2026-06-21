@@ -172,18 +172,37 @@ export default function ManualScreen() {
     }, 1000);
   };
 
-  // LUMI Keys: a played note sets the carrier (binaural piano). Carrier follows
-  // the note's pitch, clamped to the manual carrier range.
+  // LUMI Keys → binaural instrument: note = carrier, slide (CC74) = beat, press
+  // (channel pressure) = volume. MPE expression streams fast, so drive the engine
+  // every message but throttle the React state (UI) to ~15 fps.
+  const lumiUiRef = useRef(0);
   useEffect(() => {
     if (!lumiKeys.connected || !lumiKeys.setNoteListener) return;
+    const uiTick = fn => {
+      const now = Date.now();
+      if (now - lumiUiRef.current > 66) {
+        lumiUiRef.current = now;
+        fn();
+      }
+    };
     lumiKeys.setNoteListener(ev => {
-      // Natural pitch — the keyboard's own octave control moves the carrier. Wide
-      // bound (binaural fusion holds to ~1 kHz); the standard 2-octave keybed sits
-      // ~C3–B4 = 130–494 Hz.
-      const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
-      setCarrier(Math.round(hz));
-      setLastNote(noteName(ev.note));
-      if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
+      if (ev.type === 'noteOn') {
+        // Natural pitch — the keyboard's octave control moves the carrier (fusion
+        // holds to ~1 kHz; the standard 2-octave keybed sits ~C3–B4).
+        const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
+        setCarrier(Math.round(hz));
+        setLastNote(noteName(ev.note));
+        if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
+      } else if (ev.type === 'cc' && ev.controller === 74) {
+        const b = clamp(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
+        if (runningRef.current && engineRef.current) engineRef.current.setBeat(b);
+        if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+        uiTick(() => setBeat(Math.round(b * 10) / 10));
+      } else if (ev.type === 'pressure') {
+        const v = clamp(mapRange(ev.value, 0, 127, 0.25, 1), 0.25, 1);
+        if (runningRef.current && engineRef.current) engineRef.current.setVolume(v);
+        uiTick(() => setVolume(v));
+      }
     });
     return () => lumiKeys.setNoteListener(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -373,8 +392,8 @@ export default function ManualScreen() {
                 ? 'Keyboard — in the app'
                 : lumiKeys.connected
                 ? lastNote
-                  ? `${lastNote} → carrier ${Math.round(carrier)} Hz`
-                  : 'Connected — play a note to set the carrier'
+                  ? `${lastNote} → carrier ${Math.round(carrier)} Hz · slide = beat · press = volume`
+                  : 'Connected — note = carrier · slide = beat · press = volume'
                 : lumiKeys.status === 'scanning'
                 ? 'Searching…'
                 : lumiKeys.status === 'notfound'

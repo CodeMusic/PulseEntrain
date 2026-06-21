@@ -99,9 +99,8 @@ export class LumiController {
       this.sub = this.char.monitor((err, ch) => {
         if (err || !ch || !ch.value || !this.onNote) return;
         const bytes = Buffer.from(ch.value, 'base64');
-        for (const ev of parseBleMidi(bytes)) {
-          if (ev.type === 'noteOn') this.onNote(ev); // carrier follows note-on; ignore note-off
-        }
+        // Forward all events — note-on (carrier), CC74 slide (beat), pressure (volume).
+        for (const ev of parseBleMidi(bytes)) this.onNote(ev);
       });
       this.device = dev;
       dev.onDisconnected(() => {

@@ -44,10 +44,16 @@ export function parseBleMidi(buf) {
       const vel = buf[i++];
       const type = hi === 0x90 && vel > 0 ? 'noteOn' : 'noteOff'; // velocity 0 = note-off
       out.push({ type, note, velocity: vel, channel: ch });
-    } else if (hi === 0xa0 || hi === 0xb0 || hi === 0xe0) {
-      i += 2; // poly-AT / CC / pitch-bend — 2 data bytes (MPE expression)
-    } else if (hi === 0xc0 || hi === 0xd0) {
-      i += 1; // program change / channel pressure — 1 data byte
+    } else if (hi === 0xb0) {
+      const controller = buf[i++];
+      const value = buf[i++];
+      out.push({ type: 'cc', controller, value, channel: ch }); // CC74 = MPE slide (Y)
+    } else if (hi === 0xd0) {
+      out.push({ type: 'pressure', value: buf[i++], channel: ch }); // channel pressure (Z)
+    } else if (hi === 0xa0 || hi === 0xe0) {
+      i += 2; // poly-AT / pitch-bend — 2 data bytes, skipped
+    } else if (hi === 0xc0) {
+      i += 1; // program change — 1 data byte
     } else {
       i++; // system/unknown — step forward and resync
     }
