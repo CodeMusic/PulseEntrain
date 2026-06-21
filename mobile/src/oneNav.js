@@ -15,6 +15,8 @@ export function pathFor(screen, params = {}) {
       return params && params.load ? `/studio?load=${encodeURIComponent(params.load)}` : '/studio';
     case 'About':
       return '/about';
+    case 'Settings':
+      return '/settings';
     case 'Category':
       return `/category/${encodeURIComponent(params.category)}`;
     case 'DoseDetail':

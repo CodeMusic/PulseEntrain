@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'one';
 import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import TrackPlayer, {
   useProgress,
@@ -12,7 +13,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../theme';
 import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
 import ArtImage from '../components/ArtImage';
+import TrackArt from '../components/TrackArt';
+import { Stack } from 'one';
 import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
+import { carrierColorVibrant } from '../shared/entrainment';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useNova } from '../nova/NovaProvider';
 import { useSessions } from '../wellness/SessionsProvider';
@@ -72,6 +76,8 @@ export default function PlayerScreen({ route, navigation }) {
   const [synthDur, setSynthDur] = useState((dose && dose.lengthSeconds) || 0);
   const [synthPlaying, setSynthPlaying] = useState(false);
   const [graphMode, setGraphMode] = useState(false); // tap the cover → live beat map
+  const [seeking, setSeeking] = useState(false); // dragging the progress slider
+  const [seekVal, setSeekVal] = useState(0);
   const novaOverrideRef = useRef(false); // Developer Tools took manual control of the flicker
 
   const [intensity, setIntensityVal] = useState(
@@ -198,6 +204,17 @@ export default function PlayerScreen({ route, navigation }) {
       nova.stopStrobe();
     } catch (e) {}
   };
+  const teardownRef = useRef(teardown);
+  teardownRef.current = teardown;
+
+  // Stop everything when the player loses focus (e.g. tapping Home/title pushes a
+  // new screen without unmounting this one — audio would otherwise keep playing).
+  useFocusEffect(() => {
+    return () => {
+      try { teardownRef.current(); } catch (e) {}
+      setSynthPlaying(false);
+    };
+  }, []);
 
   // ---- load + start on mount ----
   useEffect(() => {
@@ -394,6 +411,22 @@ export default function PlayerScreen({ route, navigation }) {
     nova.setMasterBrightness(v / 100);
   };
 
+  // Web: spacebar toggles play/pause (ignored while typing or on a control).
+  const togglePlayRef = useRef(togglePlay);
+  togglePlayRef.current = togglePlay;
+  useEffect(() => {
+    if (!IS_WEB || typeof window === 'undefined') return;
+    const onKey = e => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+      e.preventDefault();
+      togglePlayRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // ---- render ----
   if (!dose) {
     return (
@@ -418,7 +451,17 @@ export default function PlayerScreen({ route, navigation }) {
     );
   }
 
-  const pct = duration > 0 ? Math.min(1, position / duration) : 0;
+  // Seek to a position (seconds). Works for both transports.
+  const doSeek = sec => {
+    const t = Math.max(0, Math.min(duration || 0, sec));
+    if (isSynth) {
+      synthRef.current?.seek(t);
+      setSynthPos(t);
+    } else {
+      TrackPlayer.seekTo(t);
+    }
+  };
+  const headSec = seeking ? seekVal : position; // slider/label follow the drag
   const onCoverTap = () => {
     if (!isSynth) return; // only synth (.imedx) doses have a beat map
     // Single tap toggles the beat map. (Was a double-tap, but the timing window
@@ -426,6 +469,9 @@ export default function PlayerScreen({ route, navigation }) {
     setGraphMode(g => !g);
   };
   const cur = graphMode && isSynth && synthRef.current ? synthRef.current.current() : null;
+  // Live carrier (recomputed as the synth ticks) → a faint full-screen tint so the
+  // player subtly takes on the current carrier's colour while playing.
+  const liveCarrier = isSynth && synthRef.current ? synthRef.current.current().carrier : ((dose && dose.carrier) || 200);
   const pulseLabel = wantPulsetto
     ? pulsetto.connected
       ? ' · Pulsetto on'
@@ -433,8 +479,15 @@ export default function PlayerScreen({ route, navigation }) {
     : ' · Binaural only';
   const showIntensity = wantPulsetto && pulsetto.connected;
 
+  // Header tints to the live carrier colour while a synth session plays (binned so
+  // the colour only updates when it meaningfully changes, not every tick).
+  const headerTint =
+    isSynth && isPlaying ? carrierColorVibrant(Math.round(liveCarrier / 8) * 8) : COLORS.bgCard;
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <Stack.Screen options={{ headerStyle: { backgroundColor: headerTint } }} />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Web: toggle on press-in — a quick click's onPress gets eaten by the
           ScrollView responder, so only a held click registered. Native keeps the
           on-release press so it doesn't fight scrolling. */}
@@ -447,6 +500,17 @@ export default function PlayerScreen({ route, navigation }) {
               baseCarrier={(dose as any).carrier}
               height={244}
               progress={duration > 0 ? position / duration : 0}
+            />
+          </View>
+        ) : isSynth ? (
+          <View style={styles.artCenter}>
+            <TrackArt
+              scenes={(dose as any).scenes}
+              carrier={(dose as any).carrier}
+              image={imageSource(dose.image)}
+              name={dose.name}
+              size={252}
+              progress={isPlaying && duration > 0 ? position / duration : null}
             />
           </View>
         ) : (
@@ -465,11 +529,20 @@ export default function PlayerScreen({ route, navigation }) {
         </Text>
       )}
 
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${pct * 100}%` }]} />
-      </View>
+      <Slider
+        style={styles.progressSlider}
+        minimumValue={0}
+        maximumValue={Math.max(1, duration)}
+        value={Math.min(headSec, duration || 0)}
+        onSlidingStart={() => { setSeekVal(position); setSeeking(true); }}
+        onValueChange={setSeekVal}
+        onSlidingComplete={v => { doSeek(v); setSeeking(false); }}
+        minimumTrackTintColor={COLORS.accentBlue}
+        maximumTrackTintColor={COLORS.bgCardLight}
+        thumbTintColor="#fff"
+      />
       <View style={styles.timeRow}>
-        <Text style={styles.time}>{fmt(position)}</Text>
+        <Text style={styles.time}>{fmt(headSec)}</Text>
         <Text style={styles.time}>{fmt(duration)}</Text>
       </View>
 
@@ -578,12 +651,14 @@ export default function PlayerScreen({ route, navigation }) {
           />
         </View>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgDark },
+  artCenter: { alignItems: 'center', justifyContent: 'center', height: 260 },
   content: { padding: 24, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { color: COLORS.textMuted },
@@ -591,8 +666,7 @@ const styles = StyleSheet.create({
   graphBox: { height: 260, marginHorizontal: 24, borderRadius: 20, backgroundColor: COLORS.bgCard, paddingTop: 14, paddingHorizontal: 8 },
   title: { color: COLORS.textPrimary, fontSize: 26, fontWeight: '800', marginTop: 22, textAlign: 'center' },
   sub: { color: COLORS.textSecondary, fontSize: 14, marginTop: 6, textAlign: 'center' },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: COLORS.bgCardLight, marginTop: 24, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: COLORS.accentBlue },
+  progressSlider: { width: '100%', height: 36, marginTop: 18 },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   time: { color: COLORS.textMuted, fontSize: 12 },
   controls: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 26, gap: 28 },

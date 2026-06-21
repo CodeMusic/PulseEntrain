@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PulsettoProvider } from './pulsetto/PulsettoProvider';
 import { NovaProvider } from './nova/NovaProvider';
 import { SessionsProvider } from './wellness/SessionsProvider';
+import { SettingsProvider } from './settings/SettingsProvider';
 import { MenuProvider } from './components/Menu';
 
 // App-wide context tree. Previously lived in App.js; under One it wraps the
@@ -15,8 +16,10 @@ export function Providers({ children }) {
       <PulsettoProvider>
         <NovaProvider>
           <SessionsProvider>
-            <StatusBar barStyle="light-content" />
-            <MenuProvider>{children}</MenuProvider>
+            <SettingsProvider>
+              <StatusBar barStyle="light-content" />
+              <MenuProvider>{children}</MenuProvider>
+            </SettingsProvider>
           </SessionsProvider>
         </NovaProvider>
       </PulsettoProvider>

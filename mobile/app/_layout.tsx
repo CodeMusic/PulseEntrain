@@ -28,6 +28,7 @@ function Navigator() {
       <Stack.Screen name="player/[id]" options={{ title: 'PulseEntrain' }} />
       <Stack.Screen name="manual" options={{ title: 'Manual' }} />
       <Stack.Screen name="studio" options={{ title: 'Studio' }} />
+      <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       <Stack.Screen name="about" options={{ title: 'About' }} />
     </Stack>
   );

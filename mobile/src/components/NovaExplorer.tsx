@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { COLORS } from '../theme';
@@ -30,9 +30,40 @@ export default function NovaExplorer({ nova, showFrequency = false, onOverride =
   const [override, setOverride] = useState(false);
   const [freq, setFreq] = useState(10);
   const [style, setStyle] = useState('standard');
+  const [motion, setMotion] = useState(null); // latest { x,y,z,pitch,roll, hz }
+  const [rate, setRate] = useState(1); // requested telemetry rate byte
+  const zeroRef = useRef({ pitch: 0, roll: 0 }); // calibration offset (Center)
+  const lastTsRef = useRef(0); // last sample time (for measured Hz)
+
+  // Live head-motion readout while the panel is open (validates the axis mapping
+  // on-device before we drive carrier/beat from it).
+  useEffect(() => {
+    if (!open || !nova || !nova.connected || !nova.setMotionListener) return;
+    nova.setMotionListener(s => {
+      const now = Date.now();
+      const dt = now - lastTsRef.current;
+      lastTsRef.current = now;
+      setMotion({ ...s, hz: dt > 0 && dt < 5000 ? 1000 / dt : 0 });
+    });
+    return () => nova.setMotionListener(null);
+  }, [open, nova, nova && nova.connected]);
+  const setTelemetryRate = b => {
+    setRate(b);
+    if (nova && nova.setTelemetryRate) nova.setTelemetryRate(b);
+  };
+  const pitch = motion ? motion.pitch - zeroRef.current.pitch : 0;
+  const roll = motion ? motion.roll - zeroRef.current.roll : 0;
 
   const send = patch => nova && nova.setSyncedValues(patch);
   const applyStyle = name => send(STYLE_LEVELS[name]);
+
+  // Push the selected style to the device when the panel opens, so the LEDs match
+  // the shown selection from the start (the controller defaults to both-lit, which
+  // looked like "Enlightened" while "Standard" was displayed).
+  useEffect(() => {
+    if (open && nova && nova.connected) send(STYLE_LEVELS[style]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, nova && nova.connected]);
 
   const onFreq = v => {
     setFreq(v);
@@ -100,6 +131,40 @@ export default function NovaExplorer({ nova, showFrequency = false, onOverride =
           </TouchableOpacity>
         ))}
       </View>
+
+      {nova && nova.connected && nova.setMotionListener ? (
+        <>
+          <View style={styles.motionHead}>
+            <Text style={styles.label}>Head motion (accelerometer)</Text>
+            <TouchableOpacity
+              style={styles.centerBtn}
+              onPress={() => motion && (zeroRef.current = { pitch: motion.pitch, roll: motion.roll })}>
+              <Text style={styles.centerTxt}>Center</Text>
+            </TouchableOpacity>
+          </View>
+          {motion ? (
+            <Text style={styles.motionTxt}>
+              pitch (up/down) {pitch.toFixed(0)}° · roll (tilt L/R) {roll.toFixed(0)}°{'\n'}
+              raw x {motion.x} · y {motion.y} · z {motion.z} · ~{motion.hz.toFixed(1)} Hz
+            </Text>
+          ) : (
+            <Text style={styles.motionTxt}>Waiting for samples… move your head to test.</Text>
+          )}
+          <Text style={styles.motionSub}>Telemetry rate (find the fastest that streams)</Text>
+          <View style={styles.rateRow}>
+            {[1, 2, 5, 10, 20].map(b => (
+              <TouchableOpacity key={b} style={[styles.rateBtn, rate === b && styles.rateBtnOn]} onPress={() => setTelemetryRate(b)}>
+                <Text style={[styles.rateTxt, rate === b && styles.rateTxtOn]}>{b}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.motionHint}>
+            Experimental. Tilt up/down = pitch, tilt L/R = roll. Use Center to zero it. Only rate 1
+            (~1 Hz) is confirmed — higher is untested; watch the live Hz. (Yaw — turning L/R — isn't
+            sensed by the accelerometer.)
+          </Text>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -145,6 +210,17 @@ const styles = StyleSheet.create({
   styleBtnActive: { backgroundColor: COLORS.accentBlue },
   styleTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
   styleTxtActive: { color: '#fff' },
+  motionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  centerBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: COLORS.bgCardLight, marginTop: 10 },
+  centerTxt: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '700' },
+  motionTxt: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '600', marginTop: 6, lineHeight: 20, fontVariant: ['tabular-nums'] },
+  motionSub: { color: COLORS.textMuted, fontSize: 11, marginTop: 10 },
+  rateRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  rateBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: COLORS.bgCardLight, alignItems: 'center' },
+  rateBtnOn: { backgroundColor: COLORS.accentBlue },
+  rateTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '700' },
+  rateTxtOn: { color: '#fff' },
+  motionHint: { color: COLORS.textMuted, fontSize: 11, lineHeight: 16, marginTop: 8 },
   checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, gap: 10 },
   checkBox: {
     width: 22,

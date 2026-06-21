@@ -2,13 +2,24 @@ import React from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { categoryCards } from '../catalog/data';
+import { useSettings } from '../settings/SettingsProvider';
+import { useSessions } from '../wellness/SessionsProvider';
 import SpringboardCard from '../components/SpringboardCard';
 import WeeklyTracker from '../components/WeeklyTracker';
 
 export default function SpringboardScreen({ navigation }) {
   const cats = categoryCards();
+  const settings = useSettings();
+  const sessions = useSessions();
+  const name = (settings && settings.name && settings.name.trim()) || '';
+  const complete = sessions && sessions.todayComplete;
+  const greeting = complete
+    ? name ? `Nice work, ${name} — today's goal is done ✓` : "Today's goal is done ✓"
+    : name ? `Welcome back, ${name}` : 'Welcome back';
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.greeting}>{greeting}</Text>
       <WeeklyTracker />
       <Text style={styles.h2}>Modes</Text>
       <View style={styles.row}>
@@ -42,6 +53,7 @@ export default function SpringboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgDark },
   content: { padding: 16 },
+  greeting: { color: COLORS.textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 12 },
   h2: {
     color: COLORS.textSecondary,
     fontSize: 13,

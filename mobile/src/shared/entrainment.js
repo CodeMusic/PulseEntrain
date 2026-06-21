@@ -20,3 +20,6 @@ export function hsv(h, s, v) {
 
 // Carrier frequency (Hz) → colour. 70–500 Hz maps low=red → high=purple.
 export const carrierColor = c => hsv(Math.max(0, Math.min(1, (c - 70) / 430)) * 0.8, 0.72, 0.95);
+// Deeper, more saturated variant for filled surfaces (e.g. the player header) so
+// it reads as vibrant and keeps white text legible.
+export const carrierColorVibrant = c => hsv(Math.max(0, Math.min(1, (c - 70) / 430)) * 0.8, 0.85, 0.72);
