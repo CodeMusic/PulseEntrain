@@ -396,6 +396,22 @@ export default function PlayerScreen({ route, navigation }) {
     nova.setMasterBrightness(v / 100);
   };
 
+  // Web: spacebar toggles play/pause (ignored while typing or on a control).
+  const togglePlayRef = useRef(togglePlay);
+  togglePlayRef.current = togglePlay;
+  useEffect(() => {
+    if (!IS_WEB || typeof window === 'undefined') return;
+    const onKey = e => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+      e.preventDefault();
+      togglePlayRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // ---- render ----
   if (!dose) {
     return (
