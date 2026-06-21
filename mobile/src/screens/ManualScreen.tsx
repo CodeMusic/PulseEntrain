@@ -26,6 +26,13 @@ const fmtTime = sec => {
   return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 };
 
+// Explore mode: head orientation → binaural space. Full-scale tilt (±TILT°) sweeps
+// the whole range. pitch (look up/down) → beat; roll (tilt L/R, the "azimuth") →
+// carrier. (True yaw/turning isn't sensed by an accelerometer.)
+const BEAT_MIN = 1, BEAT_MAX = 40, CARR_MIN = 80, CARR_MAX = 500, TILT = 45;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
+
 export default function ManualScreen() {
   const nova = useNova();
   const pulsetto = usePulsetto();
@@ -45,6 +52,11 @@ export default function ManualScreen() {
   const [timerMin, setTimerMin] = useState(10);
   const [running, setRunning] = useState(false);
   const [remaining, setRemaining] = useState(0);
+  const [explore, setExplore] = useState(false); // head-motion → carrier/beat
+  const runningRef = useRef(false);
+  runningRef.current = running;
+  const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // Center calibration
+  const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw sample (for Center)
 
   const ensureEngine = () => {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
@@ -61,6 +73,31 @@ export default function ManualScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // Explore mode: subscribe to head motion and steer carrier (roll) + beat (pitch).
+  useEffect(() => {
+    if (!explore || !nova.connected || !nova.setMotionListener) return;
+    if (nova.setTelemetryRate) nova.setTelemetryRate(10); // ask for faster cadence (best-effort)
+    nova.setMotionListener(s => {
+      lastSampleRef.current = { pitch: s.pitch, roll: s.roll };
+      const p = s.pitch - motionZeroRef.current.pitch; // look up/down
+      const r = s.roll - motionZeroRef.current.roll; // tilt L/R ("azimuth")
+      const b = clamp(mapRange(p, -TILT, TILT, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
+      const c = clamp(mapRange(r, -TILT, TILT, CARR_MIN, CARR_MAX), CARR_MIN, CARR_MAX);
+      setBeat(Math.round(b * 10) / 10);
+      setCarrier(Math.round(c));
+      if (runningRef.current && engineRef.current) {
+        engineRef.current.setBeat(b);
+        engineRef.current.setCarrier(c);
+      }
+      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+    });
+    return () => {
+      nova.setMotionListener(null);
+      if (nova.setTelemetryRate) nova.setTelemetryRate(1);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explore, nova.connected]);
 
   const logIfCounted = () => {
     if (!startRef.current || !sessions) return;
@@ -158,7 +195,7 @@ export default function ManualScreen() {
           <Text style={styles.band}>{bandFor(beat)}</Text>
           <Text style={styles.beatVal}>{beat.toFixed(1)} Hz</Text>
         </View>
-        <Slider minimumValue={0.5} maximumValue={40} step={0.5} value={beat} onValueChange={onBeat}
+        <Slider minimumValue={0.5} maximumValue={40} step={0.5} value={beat} onValueChange={onBeat} disabled={explore}
           minimumTrackTintColor={COLORS.accentBlue} maximumTrackTintColor={COLORS.bgCardLight} thumbTintColor="#fff" style={styles.slider} />
         <View style={styles.scaleRow}>
           {BANDS.map(b => (
@@ -167,9 +204,32 @@ export default function ManualScreen() {
         </View>
 
         <Text style={[styles.label, { color: carrierColor(carrier) }]}>Carrier · {Math.round(carrier)} Hz</Text>
-        <Slider minimumValue={80} maximumValue={500} step={5} value={carrier} onValueChange={onCarrier}
+        <Slider minimumValue={80} maximumValue={500} step={5} value={carrier} onValueChange={onCarrier} disabled={explore}
           minimumTrackTintColor={carrierColor(carrier)} maximumTrackTintColor={COLORS.bgCardLight}
           thumbTintColor={carrierColor(carrier)} style={styles.slider} />
+
+        {/* EXPLORE — head-motion steers the binaural space (needs Nova) */}
+        <View style={styles.exploreRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>🧭 Explore (head motion)</Text>
+            <Text style={styles.deviceSub}>
+              {!nova.connected ? 'Connect the Nova below to enable' : 'Look up/down = beat · tilt L/R = carrier'}
+            </Text>
+          </View>
+          <Switch value={explore} disabled={!nova.connected} onValueChange={setExplore}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
+        </View>
+        {explore ? (
+          <View style={styles.exploreReadout}>
+            <Text style={[styles.exploreVal, { color: carrierColor(carrier) }]}>
+              carrier {Math.round(carrier)} Hz · beat {beat.toFixed(1)} Hz ({bandFor(beat)})
+            </Text>
+            <TouchableOpacity style={styles.centerBtn}
+              onPress={() => { motionZeroRef.current = { ...lastSampleRef.current }; }}>
+              <Text style={styles.centerTxt}>Center</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <Text style={styles.label}>Background noise</Text>
         <View style={styles.chips}>
@@ -271,6 +331,11 @@ const styles = StyleSheet.create({
   deviceRow: { flexDirection: 'row', alignItems: 'center' },
   deviceTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '700' },
   deviceSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  exploreRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18, borderTopWidth: 1, borderTopColor: COLORS.divider, paddingTop: 14 },
+  exploreReadout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  exploreVal: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'], flex: 1 },
+  centerBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: COLORS.bgCardLight },
+  centerTxt: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '700' },
   timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 6 },
   timerBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.bgCardLight, alignItems: 'center', justifyContent: 'center' },
   timerBtnTxt: { color: COLORS.textPrimary, fontSize: 30, fontWeight: '300' },
