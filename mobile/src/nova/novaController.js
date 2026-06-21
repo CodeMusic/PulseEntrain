@@ -42,6 +42,16 @@ export class NovaController {
     this.onMotion = fn || null;
   }
 
+  // Telemetry cadence: write a rate byte to the stream char (abcdef01). 0x01 is
+  // the only live-confirmed rate (~1 Hz); higher bytes (0x02/0x05/0x0A…) are
+  // speculative per the protocol — use the live Hz readout to see what sticks.
+  async setTelemetryRate(byte) {
+    if (!this.streamChar) return;
+    try {
+      await this.streamChar.writeWithoutResponse(Buffer.from([byte & 0xff]).toString('base64'));
+    } catch (e) {}
+  }
+
   get connected() {
     return !!this.device;
   }
