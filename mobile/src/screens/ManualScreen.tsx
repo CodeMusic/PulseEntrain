@@ -148,7 +148,11 @@ export default function ManualScreen() {
 
   const stop = async () => {
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
-    try { engineRef.current?.stop(); } catch (e) {}
+    const eng = engineRef.current; // fade out, then stop the engine after the fade
+    if (eng) {
+      try { eng.fadeOut(0.8); } catch (e) {}
+      setTimeout(() => { try { eng.stop(); } catch (e) {} }, 850);
+    }
     try { nova.stopStrobe(); } catch (e) {}
     if (pulsetto.sessionActive) { try { await pulsetto.stopSession(); } catch (e) {} }
     logIfCounted();
@@ -160,6 +164,7 @@ export default function ManualScreen() {
   const start = async () => {
     const e = ensureEngine();
     e.start({ carrier, beat, volume, background: noise });
+    e.fadeIn(1.0); // ease in instead of an abrupt start
     if (nova.connected) nova.startStrobe(beat);
     if (pulsetto.connected) { try { await pulsetto.startSession(intensity); } catch (er) {} }
     startRef.current = { time: Date.now(), plannedSeconds: timerMin * 60 };
@@ -200,7 +205,7 @@ export default function ManualScreen() {
         const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
         setCarrier(Math.round(hz));
         setLastNote(noteName(ev.note));
-        if (runningRef.current && engineRef.current) engineRef.current.setCarrier(hz);
+        if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(hz, 0.9); // smooth sweep, not a jump
       } else if (ev.type === 'noteOff') {
         applyBeat(baseBeatRef.current); // spring the beat back when the key lifts
       } else if (ev.type === 'cc' && ev.controller === 74) {
