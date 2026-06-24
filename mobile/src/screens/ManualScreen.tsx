@@ -33,6 +33,12 @@ const fmtTime = sec => {
 // the whole range. pitch (look up/down) → beat; roll (tilt L/R, the "azimuth") →
 // carrier. (True yaw/turning isn't sensed by an accelerometer.)
 const BEAT_MIN = 1, BEAT_MAX = 40, CARR_MIN = 80, CARR_MAX = 500, TILT = 45;
+// LUMI: white keys → carrier, black keys → beat. Beat from the black key's pitch
+// (~0.8 Hz/semitone up from C3); octave-shifting raises both. Ceil a bit past 40.
+const BEAT_CEIL = 50;
+const LUMI_BASE_NOTE = 48; // C3 ≈ 0 beat
+const LUMI_BEAT_PER_SEMI = 0.8;
+const isAccidental = n => [1, 3, 6, 8, 10].includes(((n % 12) + 12) % 12); // black key
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 
@@ -179,9 +185,10 @@ export default function ManualScreen() {
     }, 1000);
   };
 
-  // LUMI Keys → binaural instrument: note = carrier, slide (CC74) = beat, press
-  // (channel pressure) = volume. MPE expression streams fast, so drive the engine
-  // every message but throttle the React state (UI) to ~15 fps.
+  // LUMI Keys → binaural instrument: WHITE keys set the carrier, BLACK keys set the
+  // beat (by pitch); pitch-bend trims the beat ±0.5 Hz; the octave button raises
+  // both. (Slide/press also map on 5D units.) Expression streams fast, so drive the
+  // engine every message but throttle React state (UI) to ~15 fps.
   const lumiUiRef = useRef(0);
   useEffect(() => {
     if (!lumiKeys.connected || !lumiKeys.setNoteListener) return;
@@ -192,31 +199,39 @@ export default function ManualScreen() {
         fn();
       }
     };
-    const applyBeat = b => {
-      const v = clamp(b, BEAT_MIN, BEAT_MAX);
-      if (runningRef.current && engineRef.current) engineRef.current.setBeat(v);
+    const applyBeat = (b, glideS = 0) => {
+      const v = clamp(b, BEAT_MIN, BEAT_CEIL);
+      if (runningRef.current && engineRef.current) {
+        if (glideS > 0) engineRef.current.glideBeat(v, glideS);
+        else engineRef.current.setBeat(v);
+      }
       if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
       uiTick(() => setBeat(Math.round(v * 10) / 10));
     };
     lumiKeys.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
-        // Natural pitch — the keyboard's octave control moves the carrier (fusion
-        // holds to ~1 kHz; the standard 2-octave keybed sits ~C3–B4).
-        const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
-        setCarrier(Math.round(hz));
-        setLastNote(noteName(ev.note));
-        if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(hz, 0.9); // smooth sweep, not a jump
+        if (isAccidental(ev.note)) {
+          // Black key → beat (from its pitch); glides, persists on release.
+          const b = clamp((ev.note - LUMI_BASE_NOTE) * LUMI_BEAT_PER_SEMI, BEAT_MIN, BEAT_CEIL);
+          baseBeatRef.current = b;
+          setLastNote(noteName(ev.note));
+          applyBeat(b, 0.3);
+        } else {
+          // White key → carrier (octave control moves it; fusion holds to ~1 kHz).
+          const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
+          setCarrier(Math.round(hz));
+          setLastNote(noteName(ev.note));
+          if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(hz, 0.9);
+        }
       } else if (ev.type === 'noteOff') {
-        applyBeat(baseBeatRef.current); // spring the beat back when the key lifts
-      } else if (ev.type === 'cc' && ev.controller === 74) {
-        // Slide (Y) sets the base beat (where it settles).
-        const b = clamp(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
-        baseBeatRef.current = b;
-        applyBeat(b);
+        applyBeat(baseBeatRef.current); // bend springs back; beat stays at its base
       } else if (ev.type === 'pitchBend') {
-        // Glide (X) bends the beat around its base; springs back as you release.
-        // (Beat clamps to 1–40, so a generous factor is safe; tune to taste.)
-        applyBeat(baseBeatRef.current + ev.value * 0.015);
+        const offset = clamp(ev.value * 0.004, -0.5, 0.5); // ±0.5 Hz fine trim
+        applyBeat(baseBeatRef.current + offset);
+      } else if (ev.type === 'cc' && ev.controller === 74) {
+        const b = clamp(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
+        baseBeatRef.current = b; // 5D slide also sets the beat
+        applyBeat(b, 0.2);
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         const v = clamp(mapRange(ev.value, 0, 127, 0.25, 1), 0.25, 1);
         if (runningRef.current && engineRef.current) engineRef.current.setVolume(v);
@@ -289,7 +304,7 @@ export default function ManualScreen() {
           <Text style={styles.band}>{bandFor(beat)}</Text>
           <Text style={styles.beatVal}>{beat.toFixed(1)} Hz</Text>
         </View>
-        <Slider minimumValue={0.5} maximumValue={40} step={0.5} value={beat} onValueChange={onBeat} disabled={explore}
+        <Slider minimumValue={0.5} maximumValue={50} step={0.5} value={beat} onValueChange={onBeat} disabled={explore}
           minimumTrackTintColor={COLORS.accentBlue} maximumTrackTintColor={COLORS.bgCardLight} thumbTintColor="#fff" style={styles.slider} />
         <View style={styles.scaleRow}>
           {BANDS.map(b => (
@@ -412,8 +427,8 @@ export default function ManualScreen() {
                 ? 'Keyboard — in the app'
                 : lumiKeys.connected
                 ? lastNote
-                  ? `${lastNote} → carrier ${Math.round(carrier)} Hz · bend = beat · slide/press (5D)`
-                  : 'Connected — note = carrier · bend = beat · slide/press (5D)'
+                  ? `carrier ${Math.round(carrier)} · beat ${beat.toFixed(1)} Hz — white=carrier · black=beat`
+                  : 'Connected — white keys = carrier · black keys = beat · bend = ±0.5 Hz'
                 : lumiKeys.status === 'scanning'
                 ? 'Searching…'
                 : lumiKeys.status === 'notfound'
