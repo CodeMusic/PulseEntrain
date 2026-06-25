@@ -44,7 +44,8 @@ Generated sessions can be **saved and reused** later.
 | **Lumenate Nova** visual (light) entrainment | ✅ Available (mobile) |
 | Web **Studio** editor + open/play a saved `.imedx` | ✅ Available (web) |
 | Head/phone **motion** mode — orientation steers carrier/beat | 🧪 Experimental |
-| **ROLI LUMI** keyboard — play a note → set the carrier; tempo → set the beat (a piano front-end for binaural entrainment) | 💡 Idea |
+| **ROLI LUMI** keyboard (Manual) — play a note → set the carrier (binaural piano). Connect + note input via standard BLE-MIDI | 🧪 Experimental (mobile) |
+| LUMI tempo → beat, and beat-synced key lighting | 💡 Idea |
 | AI-generated sessions (n8n + image gen, saveable) | 🔜 Planned |
 | Audio streaming (replace bundled MP3s) | 🔜 Planned |
 

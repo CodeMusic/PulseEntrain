@@ -160,6 +160,40 @@ export class BinauralEngine {
     if (this.leftOsc) this.leftOsc.frequency.value = carrier;
     if (this.rightOsc) this.rightOsc.frequency.value = carrier + this.beat;
   }
+  // Glide the carrier (and the right ear's carrier+beat) to a target over `seconds`
+  // instead of jumping — a smooth portamento for note-driven carrier changes.
+  glideCarrier(carrier, seconds = 1) {
+    this.carrier = carrier;
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const ramp = (param, to) => {
+      try {
+        param.setValueAtTime(param.value, now);
+        param.linearRampToValueAtTime(to, now + seconds);
+      } catch (e) {
+        param.value = to;
+      }
+    };
+    if (this.leftOsc) ramp(this.leftOsc.frequency, carrier);
+    if (this.rightOsc) ramp(this.rightOsc.frequency, carrier + this.beat);
+  }
+  // Glide just the beat (the right ear, carrier + beat) over `seconds`.
+  glideBeat(beat, seconds = 0.3) {
+    this.beat = beat;
+    if (!this.rightOsc) return;
+    if (!this.ctx) {
+      this.rightOsc.frequency.value = this.carrier + beat;
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const p = this.rightOsc.frequency;
+    try {
+      p.setValueAtTime(p.value, now);
+      p.linearRampToValueAtTime(this.carrier + beat, now + seconds);
+    } catch (e) {
+      p.value = this.carrier + beat;
+    }
+  }
   setVolume(v) {
     this.volume = v;
     if (this.master) this.master.gain.value = v;
