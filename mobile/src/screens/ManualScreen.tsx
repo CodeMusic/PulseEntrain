@@ -67,7 +67,9 @@ export default function ManualScreen() {
   const explore = trackMode !== 'off';
   const runningRef = useRef(false);
   runningRef.current = running;
-  const baseBeatRef = useRef(10); // the "settled" beat; pitch-bend offsets around it
+  const baseBeatRef = useRef(10); // the "settled" beat; black-key bend offsets around it
+  const baseCarrierNoteRef = useRef(60); // last white key's MIDI note; white-key bend offsets ±1 semitone
+  const lastKeyTypeRef = useRef('white'); // route pitch-bend: white → carrier, black → beat
   const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // head Center calibration
   const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw head sample
   const phoneZeroRef = useRef({ pitch: 0, heading: 0 }); // phone Center calibration
@@ -208,26 +210,41 @@ export default function ManualScreen() {
       if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
       uiTick(() => setBeat(Math.round(v * 10) / 10));
     };
+    // White-key bend: carrier offset in semitones (±1 reaches the next sharp/flat).
+    const applyCarrierBend = (semiOffset, glideS = 0.06) => {
+      const hz = clamp(midiNoteToHz(baseCarrierNoteRef.current + semiOffset), 65, 1100);
+      if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(hz, glideS);
+      uiTick(() => setCarrier(Math.round(hz)));
+    };
     lumiKeys.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
         if (isAccidental(ev.note)) {
           // Black key → beat (from its pitch); glides, persists on release.
           const b = clamp((ev.note - LUMI_BASE_NOTE) * LUMI_BEAT_PER_SEMI, BEAT_MIN, BEAT_CEIL);
           baseBeatRef.current = b;
+          lastKeyTypeRef.current = 'black';
           setLastNote(noteName(ev.note));
           applyBeat(b, 0.3);
         } else {
           // White key → carrier (octave control moves it; fusion holds to ~1 kHz).
+          baseCarrierNoteRef.current = ev.note;
+          lastKeyTypeRef.current = 'white';
           const hz = clamp(midiNoteToHz(ev.note), 65, 1100);
           setCarrier(Math.round(hz));
           setLastNote(noteName(ev.note));
           if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(hz, 0.9);
         }
       } else if (ev.type === 'noteOff') {
-        applyBeat(baseBeatRef.current); // bend springs back; beat stays at its base
+        // Spring the bent axis back to its base when the key lifts.
+        if (isAccidental(ev.note)) applyBeat(baseBeatRef.current);
+        else applyCarrierBend(0);
       } else if (ev.type === 'pitchBend') {
-        const offset = clamp(ev.value * 0.004, -0.5, 0.5); // ±0.5 Hz fine trim
-        applyBeat(baseBeatRef.current + offset);
+        // Bend the axis the last-played key controls.
+        if (lastKeyTypeRef.current === 'white') {
+          applyCarrierBend(clamp(ev.value * 0.007, -1, 1)); // ±1 semitone → reach the sharp/flat
+        } else {
+          applyBeat(baseBeatRef.current + clamp(ev.value * 0.004, -0.5, 0.5)); // ±0.5 Hz fine trim
+        }
       } else if (ev.type === 'cc' && ev.controller === 74) {
         const b = clamp(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX), BEAT_MIN, BEAT_MAX);
         baseBeatRef.current = b; // 5D slide also sets the beat
