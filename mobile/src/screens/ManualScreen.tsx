@@ -36,6 +36,7 @@ const BEAT_MIN = 1, BEAT_MAX = 40, CARR_MIN = 80, CARR_MAX = 500, TILT = 45;
 // LUMI: white keys → carrier, black keys → beat. Beat from the black key's pitch
 // (~0.8 Hz/semitone up from C3); octave-shifting raises both. Ceil a bit past 40.
 const BEAT_CEIL = 50;
+const BEAT_GLIDE = 0.7; // seconds — beat changes sweep (like the carrier) instead of jumping
 const LUMI_BASE_NOTE = 48; // C3 ≈ 0 beat
 const LUMI_BEAT_PER_SEMI = 0.8;
 const isAccidental = n => [1, 3, 6, 8, 10].includes(((n % 12) + 12) % 12); // black key
@@ -224,7 +225,7 @@ export default function ManualScreen() {
           baseBeatRef.current = b;
           lastKeyTypeRef.current = 'black';
           setLastNote(noteName(ev.note));
-          applyBeat(b, 0.3);
+          applyBeat(b, BEAT_GLIDE);
         } else {
           // White key → carrier (octave control moves it; fusion holds to ~1 kHz).
           baseCarrierNoteRef.current = ev.note;
@@ -269,7 +270,7 @@ export default function ManualScreen() {
   const onBeat = v => {
     baseBeatRef.current = v;
     setBeat(v);
-    if (running) engineRef.current?.setBeat(v);
+    if (running) engineRef.current?.glideBeat(v, BEAT_GLIDE); // sweep to the new beat, like the carrier
     if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
   };
   const onCarrier = v => { setCarrier(v); if (running) engineRef.current?.setCarrier(v); };
