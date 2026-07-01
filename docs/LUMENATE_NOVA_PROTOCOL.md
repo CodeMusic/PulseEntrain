@@ -1,9 +1,6 @@
 # Lumenate Nova — BLE Protocol & Build Guide
 
-> **Status: DECODED & VERIFIED.** From the official Android app
-> (`com.lumenate.lumenateaa` v6.4.2) decompiled to source, cross-checked against
-> live device probing. ✅ source-confirmed · 🔬 live-confirmed · 🔶 inferred
-
+> **Status: VERIFIED.** 
 ---
 
 ## ⚡ Agent Brief (read first)
@@ -191,7 +188,3 @@ This is a build requirement, not a disclaimer.
    from `1.0.2`, re-run tests 1–2 before trusting the encoding.
 
 ---
-
-## Scope
-Reverse-engineered from an app/device the owner possesses, for personal
-interoperability. Do not redistribute Lumenate firmware or proprietary content.
