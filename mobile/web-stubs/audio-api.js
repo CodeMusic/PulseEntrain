@@ -4,4 +4,8 @@
 // autoplay policy — fine, since playback begins on a button press.)
 export const AudioContext =
   typeof window !== 'undefined' ? window.AudioContext || window.webkitAudioContext : class {};
-export default { AudioContext };
+
+// The browser mixes tabs/apps by default, so session management is a no-op here.
+export const AudioManager = { setAudioSessionOptions() {}, setAudioSessionActivity() {} };
+
+export default { AudioContext, AudioManager };

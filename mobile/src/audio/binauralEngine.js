@@ -1,10 +1,27 @@
-import { AudioContext } from 'react-native-audio-api';
+import { AudioContext, AudioManager } from 'react-native-audio-api';
 // Coefficients + noise generators are platform-agnostic and shared with the other
 // synths (and the desktop Python preview); band helper lives in shared/entrainment.
 import { NOISE_SECONDS, NOISE_LEVEL, NOISE_FILL } from '../shared/synthCoefficients';
 import { bandFor } from '../shared/entrainment';
 
 export { bandFor }; // re-export so importers (ManualScreen) keep their path
+
+// Set the iOS audio session to "playback + mixWithOthers" once, so our tones
+// blend with other apps (guided meditations, music) rather than stopping them.
+// AudioManager is only present on native; the web stub omits it → guarded no-op.
+let _mixingConfigured = false;
+function configureMixing() {
+  if (_mixingConfigured || !AudioManager || typeof AudioManager.setAudioSessionOptions !== 'function') return;
+  try {
+    AudioManager.setAudioSessionOptions({
+      iosCategory: 'playback',
+      iosMode: 'default',
+      iosOptions: ['mixWithOthers'],
+      iosNotifyOthersOnDeactivation: true, // let the other app resume cleanly when we stop
+    });
+    _mixingConfigured = true;
+  } catch (e) {}
+}
 
 // A live binaural-beat synth: two hard-panned sine oscillators a `beat` Hz
 // apart, plus an optional noise bed. Real-time setters drive the manual sliders;
@@ -30,6 +47,12 @@ export class BinauralEngine {
     this.beat = beat;
     this.volume = volume;
     this.background = background;
+
+    // Play as a "playback" session that *mixes with* other apps instead of
+    // interrupting them — so a guided meditation (or any audio app) can run on
+    // top of the binaural bed. Paired with the `audio` UIBackgroundMode, our
+    // tones keep going after the user switches to the other app. No-op on web.
+    configureMixing();
 
     const ctx = new AudioContext();
     this.ctx = ctx;
