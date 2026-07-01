@@ -6,21 +6,34 @@ import { bandFor } from '../shared/entrainment';
 
 export { bandFor }; // re-export so importers (ManualScreen) keep their path
 
-// Set the iOS audio session to "playback + mixWithOthers" once, so our tones
-// blend with other apps (guided meditations, music) rather than stopping them.
-// AudioManager is only present on native; the web stub omits it → guarded no-op.
-let _mixingConfigured = false;
-function configureMixing() {
-  if (_mixingConfigured || !AudioManager || typeof AudioManager.setAudioSessionOptions !== 'function') return;
+// iOS audio session policy. When mixing is on we use "playback + mixWithOthers"
+// so our tones blend with other apps (guided meditations, music) instead of
+// stopping them; off = exclusive playback (we take over the output). Driven by
+// the user's Settings toggle via setMixWithOthers(). AudioManager is only present
+// on native; the web stub omits the real one → guarded no-op there.
+let _mixEnabled = true;
+
+function applySessionOptions() {
+  if (!AudioManager || typeof AudioManager.setAudioSessionOptions !== 'function') return;
   try {
     AudioManager.setAudioSessionOptions({
       iosCategory: 'playback',
       iosMode: 'default',
-      iosOptions: ['mixWithOthers'],
+      iosOptions: _mixEnabled ? ['mixWithOthers'] : [],
       iosNotifyOthersOnDeactivation: true, // let the other app resume cleanly when we stop
     });
-    _mixingConfigured = true;
   } catch (e) {}
+}
+
+// Called by SettingsProvider on load and whenever the toggle changes. Applies
+// immediately so it also affects a session that's already playing.
+export function setMixWithOthers(enabled) {
+  _mixEnabled = !!enabled;
+  applySessionOptions();
+}
+
+function configureMixing() {
+  applySessionOptions();
 }
 
 // A live binaural-beat synth: two hard-panned sine oscillators a `beat` Hz

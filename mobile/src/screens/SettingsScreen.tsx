@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, Text, TextInput, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { useSettings } from '../settings/SettingsProvider';
 
@@ -7,7 +7,7 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName } = s;
+  const { name, setName, mixWithOthers, setMix } = s;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -24,6 +24,25 @@ export default function SettingsScreen() {
         <Text style={styles.hint}>Used for your welcome and goal notes. Stays on this device.</Text>
       </View>
 
+      <Text style={styles.section}>Audio</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Blend with other apps</Text>
+            <Text style={styles.hint}>
+              Keep playing under a guided meditation or music from another app instead of stopping it.
+              Turn off to have PulseEntrain take over audio on its own.
+            </Text>
+          </View>
+          <Switch
+            value={mixWithOthers}
+            onValueChange={setMix}
+            trackColor={{ true: COLORS.accentGreen, false: COLORS.bgCardLight }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+
       <Text style={styles.foot}>
         Accounts &amp; cross-device sync are on the roadmap. For now your profile and goals live on this
         device only.
@@ -37,6 +56,8 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   section: { color: COLORS.textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
   card: { backgroundColor: COLORS.bgCard, borderRadius: 16, padding: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowText: { flex: 1, paddingRight: 14 },
   label: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
   input: { backgroundColor: COLORS.bgCardLight, color: COLORS.textPrimary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, marginTop: 10 },
   hint: { color: COLORS.textMuted, fontSize: 12, lineHeight: 17, marginTop: 8 },
