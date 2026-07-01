@@ -187,14 +187,32 @@ export class BinauralEngine {
     this.noiseGain = made.g;
   }
 
+  // Set an AudioParam to `value` *now*, on the automation timeline. A prior ramp
+  // (fadeIn, glide) leaves scheduled events that otherwise pin the param and make
+  // plain `param.value = v` a no-op — so cancel them first, then anchor the value.
+  _setParam(param, value) {
+    if (!param) return;
+    if (!this.ctx) {
+      param.value = value;
+      return;
+    }
+    const now = this.ctx.currentTime;
+    try {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(value, now);
+    } catch (e) {
+      param.value = value;
+    }
+  }
+
   setBeat(beat) {
     this.beat = beat;
-    if (this.rightOsc) this.rightOsc.frequency.value = this.carrier + beat;
+    if (this.rightOsc) this._setParam(this.rightOsc.frequency, this.carrier + beat);
   }
   setCarrier(carrier) {
     this.carrier = carrier;
-    if (this.leftOsc) this.leftOsc.frequency.value = carrier;
-    if (this.rightOsc) this.rightOsc.frequency.value = carrier + this.beat;
+    if (this.leftOsc) this._setParam(this.leftOsc.frequency, carrier);
+    if (this.rightOsc) this._setParam(this.rightOsc.frequency, carrier + this.beat);
   }
   // Glide the carrier (and the right ear's carrier+beat) to a target over `seconds`
   // instead of jumping — a smooth portamento for note-driven carrier changes.
@@ -232,7 +250,7 @@ export class BinauralEngine {
   }
   setVolume(v) {
     this.volume = v;
-    if (this.master) this.master.gain.value = v;
+    if (this.master) this._setParam(this.master.gain, v);
   }
 
   // Ramp the master gain 0 → volume (start) over `seconds`.
