@@ -63,8 +63,13 @@ export const DEFAULT_VALUES = beatHz => ({
   rFreq: beatHz,
   lDuty: 0.5,
   rDuty: 0.5,
-  lLevel: 1,
-  rLevel: 1,
+  // `level` is the eye's *steady* brightness: 1 sits the LED full-on and washes
+  // out the strobe (looks like it's barely blinking), 0 is a pure flash. Default
+  // to the "Standard" pure-strobe flicker so the light flashes as soon as a
+  // session starts — previously it defaulted both-lit and only started flashing
+  // once the Developer Tools panel pushed the Standard style.
+  lLevel: 0,
+  rLevel: 0,
   lPhase: 0,
   rPhase: 0,
 });
