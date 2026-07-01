@@ -20,6 +20,7 @@ See the platform overview in the [root README](../README.md), the authoring tool
 - **Manual mode** — dial a beat frequency + noise bed live (same `BinauralEngine`).
 - **Devices (BLE)** — **Pulsetto** intensity tracks the session; **Lumenate Nova** strobes in
   sync with the live beat (clamped to `nova.maxHz`, default 60 Hz — delta→gamma). Both are optional; binaural-only works on any headphones. On web (no BLE) the player shows these as disabled with a hint to get the native app.
+- **ROLI controllers (BLE-MIDI)** *(experimental)* — a **LUMI Keys** keyboard or a **Lightpad Block / Block M** pad can play Manual mode live. Both share one transport ([`LumiController`](src/lumi/LumiController.js) + shared [`lumiProtocol`](src/shared/lumiProtocol.js)), picked apart by name: LUMI → carrier/beat from notes; Lightpad → XY pad (glide = carrier, slide = beat, press = volume). Receive-only; the pads use their own touch-glow (custom LED colour would need ROLI's proprietary BLOCKS protocol).
 - **Open a file** — pick a saved `.imedx` from the hamburger menu and play it (your own
   creation or one shared with you). Validated against the session contract.
 - **Studio** *(web)* — author `.imedx` in the browser: an interactive beat-over-time graph

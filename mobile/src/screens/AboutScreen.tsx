@@ -47,6 +47,17 @@ export default function AboutScreen() {
         parasympathetic state. Its intensity can follow the session or be set by hand.
       </Text>
 
+      <Text style={styles.h2}>Play it live (ROLI controllers)</Text>
+      <Text style={styles.p}>
+        In Manual mode you can steer the binaural space by hand from a{' '}
+        <Text style={styles.b}>ROLI</Text> controller over Bluetooth MIDI. A{' '}
+        <Text style={styles.b}>LUMI Keys</Text> keyboard plays it like an instrument — a note sets the
+        carrier, black keys set the beat. A <Text style={styles.b}>Lightpad Block</Text> (or the legacy
+        Block M) becomes an XY pad: glide left↔right for the carrier, up↔down for the beat, and press for
+        volume — so you can feel around for a spot that suits you. The pad lights under your finger on its
+        own; matching those lights to our colours is a future addition.
+      </Text>
+
       <Text style={styles.h2}>Daily goal</Text>
       <Text style={styles.p}>
         Any completed session — from the catalog or a Manual timer — counts toward your daily goal,

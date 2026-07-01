@@ -19,6 +19,7 @@ Build your own session by hand:
 - **Background noise** — choose a noise bed (e.g. white / pink / brown) to sit under the beats.
 - **Pulsetto option** — enable vagus nerve stimulation alongside the audio, with intensity and pulse pattern.
 - **Lumenate Nova option** *(mobile)* — enable synchronized light, strobing in time with the beat, with master brightness control.
+- **ROLI controller option** *(mobile)* — play the binaural space from a **ROLI LUMI Keys** keyboard (a note sets the carrier; black keys set the beat) or a **ROLI Lightpad Block / Block M** touch pad (glide left↔right for carrier, up↔down for beat, press for volume). Both connect over standard BLE-MIDI.
 
 ### 3. AI-generated sessions *(planned)*
 Describe what you want in a prompt, and PulseEntrain will:
@@ -44,7 +45,9 @@ Generated sessions can be **saved and reused** later.
 | **Lumenate Nova** visual (light) entrainment | ✅ Available (mobile) |
 | Web **Studio** editor + open/play a saved `.imedx` | ✅ Available (web) |
 | Head/phone **motion** mode — orientation steers carrier/beat | 🧪 Experimental |
-| **ROLI LUMI** keyboard (Manual) — play a note → set the carrier (binaural piano). Connect + note input via standard BLE-MIDI | 🧪 Experimental (mobile) |
+| **ROLI LUMI** keyboard (Manual) — play a note → set the carrier (binaural piano); black keys set the beat. Standard BLE-MIDI | 🧪 Experimental (mobile) |
+| **ROLI Lightpad Block / Block M** (Manual) — XY touch pad: glide → carrier, slide → beat, press → volume. Same BLE-MIDI transport | 🧪 Experimental (mobile) |
+| Custom carrier-colour LEDs on the Lightpad (ROLI BLOCKS protocol) | 💡 Idea |
 | LUMI tempo → beat, and beat-synced key lighting | 💡 Idea |
 | AI-generated sessions (n8n + image gen, saveable) | 🔜 Planned |
 | Audio streaming (replace bundled MP3s) | 🔜 Planned |
@@ -58,8 +61,11 @@ Generated sessions can be **saved and reused** later.
 | Vagus nerve stimulation | **[Pulsetto](https://pulsetto.tech/)** | ✅ Supported |
 | Audio (binaural beats) | Any headphones | ✅ Supported |
 | Visual entrainment (light) | **[Lumenate Nova](https://lumenate.co/lumenate-nova/)** | ✅ Supported (mobile) |
+| Live control (MIDI) | **ROLI LUMI Keys**, **ROLI Lightpad Block / Block M** | 🧪 Experimental (mobile) — play the carrier/beat by hand over BLE-MIDI |
 
 Binaural beats **require stereo headphones** — each ear must receive a different tone for the effect to work.
+
+The ROLI controllers are **optional live input** for Manual mode — a hands-on way to "feel around" the binaural space. They use the published BLE-MIDI standard, so any ROLI LUMI or Lightpad Block (including the legacy Block M) works; custom LED colouring is not yet implemented (it needs ROLI's proprietary BLOCKS protocol), so the pads show their own built-in touch-glow.
 
 ---
 

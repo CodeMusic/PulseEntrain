@@ -6,6 +6,17 @@
 > confirmation of a few specifics.
 > ✅ spec-confirmed (BLE-MIDI standard) · 🔬 verify-on-hardware · 🔶 external/inferred
 
+> **Also covers the ROLI Lightpad Block / Block M.** These are the same BLE-MIDI /
+> MPE transport as the LUMI — the *connect + receive* half of this guide applies
+> unchanged. Only the client-side mapping differs: LUMI reads note-on as a keyboard
+> (note → carrier, black keys → beat), while the Lightpad is read as an XY pad
+> (MPE glide/note → carrier, slide CC74 → beat, pressure → volume). In the app one
+> [`LumiController`](../mobile/src/lumi/LumiController.js) serves both, matched by
+> device name (`isLumi` / `isLightpad`). The Block and Block M differ only in
+> surface material and LED brightness (both are the 15×15 / 225-cell surface) — the
+> protocol is identical. Custom LED colouring on either pad still needs ROLI's
+> proprietary **BLOCKS** protocol (a future spike), not standard MIDI.
+
 ---
 
 ## ⚡ Agent Brief (read first)
