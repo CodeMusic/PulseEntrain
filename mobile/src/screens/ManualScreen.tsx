@@ -41,6 +41,14 @@ const BEAT_GLIDE = 0.7; // seconds — beat changes sweep (like the carrier) ins
 const LUMI_BASE_NOTE = 48; // C3 ≈ 0 beat
 const LUMI_BEAT_PER_SEMI = 0.8;
 const isAccidental = n => [1, 3, 6, 8, 10].includes(((n % 12) + 12) % 12); // black key
+// ROLI Lightpad Block: its default note grid is 5×5 from C3 (48), +1 semitone per
+// column, +5 per row (confirmed from device logs). We decode each touch's note
+// into (column, row) and map the WHOLE grid to the binaural space: column (X) →
+// carrier over the full 80–500 Hz, row (Y) → beat 0–40 Hz. MPE glide (pitch bend)
+// slides the carrier across columns; MPE slide (CC74) trims the beat within rows.
+const LP_BASE = 48, LP_COLS = 5, LP_ROWS = 5, LP_ROW_OFFSET = 5;
+const LP_CARR_MIN = 80, LP_CARR_MAX = 500, LP_BEAT_MAX = 40;
+const LP_BEND_PER_COL = 170; // 14-bit pitch-bend units ≈ one semitone (one column) at ±48 st range
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 
@@ -73,7 +81,10 @@ export default function ManualScreen() {
   const baseBeatRef = useRef(10); // the "settled" beat; black-key bend offsets around it
   const baseCarrierNoteRef = useRef(60); // last white key's MIDI note; white-key bend offsets ±1 semitone
   const lastKeyTypeRef = useRef('white'); // route pitch-bend: white → carrier, black → beat
-  const lpCarrNoteRef = useRef(60); // Lightpad: cell note under the touch (carrier anchor)
+  const lpColRef = useRef(2); // Lightpad: touched cell column (X → carrier) + fine bend
+  const lpRowRef = useRef(2); // touched cell row (Y → beat)
+  const lpBendRef = useRef(0); // fine X offset (columns) from MPE pitch bend
+  const lpSlideRef = useRef(0); // fine Y offset (rows) from MPE slide (CC74)
   const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // head Center calibration
   const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw head sample
   const phoneZeroRef = useRef({ pitch: 0, heading: 0 }); // phone Center calibration
@@ -269,10 +280,12 @@ export default function ManualScreen() {
     else lumiKeys.disconnect();
   };
 
-  // ROLI Lightpad Block → an XY binaural pad. Horizontal (which cell / MPE glide)
-  // sweeps the carrier; vertical (MPE slide, CC74) sets the beat; press (Z) rides
-  // the volume. It "feels around" the space and holds where you lift off. Tunable
-  // via the constants above; the exact axis feel depends on the pad's grid mode.
+  // ROLI Lightpad Block → an XY binaural pad. Each touched cell decodes to a
+  // (column, row): column spans the carrier across the full 80–500 Hz, row spans
+  // the beat 0–40 Hz — so touching a corner reaches the extremes. MPE glide slides
+  // the carrier between columns, MPE slide trims the beat, press (Z) rides volume.
+  // It holds where you lift off. If the axes feel scrambled, the pad's grid differs
+  // from 5×5 / C3 — retune LP_BASE / LP_COLS / LP_ROW_OFFSET above.
   const lpUiRef = useRef(0);
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
@@ -280,28 +293,36 @@ export default function ManualScreen() {
       const now = Date.now();
       if (now - lpUiRef.current > 66) { lpUiRef.current = now; fn(); }
     };
-    const setBeatLive = (b, glideS = 0.2) => {
-      const v = clamp(b, BEAT_MIN, BEAT_CEIL);
-      baseBeatRef.current = v;
-      if (runningRef.current && engineRef.current) engineRef.current.glideBeat(v, glideS);
-      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
-      uiTick(() => setBeat(Math.round(v * 10) / 10));
-    };
-    const setCarrierLive = (hz, glideS = 0.2) => {
-      const c = clamp(hz, 65, 1100);
-      if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(c, glideS);
-      uiTick(() => setCarrier(Math.round(c)));
+    const applyLp = () => {
+      const col = clamp(lpColRef.current + lpBendRef.current, 0, LP_COLS - 1);
+      const row = clamp(lpRowRef.current + lpSlideRef.current, 0, LP_ROWS - 1);
+      const c = mapRange(col, 0, LP_COLS - 1, LP_CARR_MIN, LP_CARR_MAX);
+      const b = clamp(mapRange(row, 0, LP_ROWS - 1, BEAT_MIN, LP_BEAT_MAX), BEAT_MIN, BEAT_CEIL);
+      baseBeatRef.current = b;
+      if (runningRef.current && engineRef.current) {
+        engineRef.current.glideCarrier(c, 0.12);
+        engineRef.current.glideBeat(b, 0.12);
+      }
+      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+      uiTick(() => { setCarrier(Math.round(c)); setBeat(Math.round(b * 10) / 10); });
     };
     lightpad.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
-        lpCarrNoteRef.current = ev.note; // the cell = coarse X → carrier
+        const n = ev.note - LP_BASE;
+        const row = clamp(Math.floor(n / LP_ROW_OFFSET), 0, LP_ROWS - 1);
+        const col = clamp(n - row * LP_ROW_OFFSET, 0, LP_COLS - 1);
+        lpRowRef.current = row;
+        lpColRef.current = col;
+        lpBendRef.current = 0; // a fresh touch re-centres the fine trims
+        lpSlideRef.current = 0;
         setLastNote(noteName(ev.note));
-        setCarrierLive(midiNoteToHz(ev.note), 0.15);
+        applyLp();
       } else if (ev.type === 'pitchBend') {
-        const semi = clamp(ev.value * 0.007, -1, 1); // fine X within the cell → ±1 semitone
-        setCarrierLive(midiNoteToHz(lpCarrNoteRef.current + semi), 0.05);
+        lpBendRef.current = ev.value / LP_BEND_PER_COL; // MPE glide → carrier columns (X)
+        applyLp();
       } else if (ev.type === 'cc' && ev.controller === 74) {
-        setBeatLive(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX)); // Y → beat
+        lpSlideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1); // MPE slide → beat rows (Y)
+        applyLp();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         const v = clamp(mapRange(ev.value, 0, 127, 0.25, 1), 0.25, 1);
         if (runningRef.current && engineRef.current) engineRef.current.setVolume(v);
