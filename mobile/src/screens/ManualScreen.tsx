@@ -9,6 +9,7 @@ import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLumi } from '../lumi/LumiProvider';
+import { useLightpad } from '../lightpad/LightpadProvider';
 import { midiNoteToHz, noteName } from '../shared/lumiProtocol';
 import { useSessions } from '../wellness/SessionsProvider';
 import NovaExplorer from '../components/NovaExplorer';
@@ -47,6 +48,7 @@ export default function ManualScreen() {
   const nova = useNova();
   const pulsetto = usePulsetto();
   const lumiKeys = useLumi();
+  const lightpad = useLightpad();
   const sessions = useSessions();
   const [lastNote, setLastNote] = useState(null); // last LUMI note played
   const engineRef = useRef(null);
@@ -71,6 +73,7 @@ export default function ManualScreen() {
   const baseBeatRef = useRef(10); // the "settled" beat; black-key bend offsets around it
   const baseCarrierNoteRef = useRef(60); // last white key's MIDI note; white-key bend offsets ±1 semitone
   const lastKeyTypeRef = useRef('white'); // route pitch-bend: white → carrier, black → beat
+  const lpCarrNoteRef = useRef(60); // Lightpad: cell note under the touch (carrier anchor)
   const motionZeroRef = useRef({ pitch: 0, roll: 0 }); // head Center calibration
   const lastSampleRef = useRef({ pitch: 0, roll: 0 }); // latest raw head sample
   const phoneZeroRef = useRef({ pitch: 0, heading: 0 }); // phone Center calibration
@@ -266,6 +269,56 @@ export default function ManualScreen() {
     else lumiKeys.disconnect();
   };
 
+  // ROLI Lightpad Block → an XY binaural pad. Horizontal (which cell / MPE glide)
+  // sweeps the carrier; vertical (MPE slide, CC74) sets the beat; press (Z) rides
+  // the volume. It "feels around" the space and holds where you lift off. Tunable
+  // via the constants above; the exact axis feel depends on the pad's grid mode.
+  const lpUiRef = useRef(0);
+  useEffect(() => {
+    if (!lightpad.connected || !lightpad.setNoteListener) return;
+    const uiTick = fn => {
+      const now = Date.now();
+      if (now - lpUiRef.current > 66) { lpUiRef.current = now; fn(); }
+    };
+    const setBeatLive = (b, glideS = 0.2) => {
+      const v = clamp(b, BEAT_MIN, BEAT_CEIL);
+      baseBeatRef.current = v;
+      if (runningRef.current && engineRef.current) engineRef.current.glideBeat(v, glideS);
+      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
+      uiTick(() => setBeat(Math.round(v * 10) / 10));
+    };
+    const setCarrierLive = (hz, glideS = 0.2) => {
+      const c = clamp(hz, 65, 1100);
+      if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(c, glideS);
+      uiTick(() => setCarrier(Math.round(c)));
+    };
+    lightpad.setNoteListener(ev => {
+      if (ev.type === 'noteOn') {
+        lpCarrNoteRef.current = ev.note; // the cell = coarse X → carrier
+        setLastNote(noteName(ev.note));
+        setCarrierLive(midiNoteToHz(ev.note), 0.15);
+      } else if (ev.type === 'pitchBend') {
+        const semi = clamp(ev.value * 0.007, -1, 1); // fine X within the cell → ±1 semitone
+        setCarrierLive(midiNoteToHz(lpCarrNoteRef.current + semi), 0.05);
+      } else if (ev.type === 'cc' && ev.controller === 74) {
+        setBeatLive(mapRange(ev.value, 0, 127, BEAT_MIN, BEAT_MAX)); // Y → beat
+      } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
+        const v = clamp(mapRange(ev.value, 0, 127, 0.25, 1), 0.25, 1);
+        if (runningRef.current && engineRef.current) engineRef.current.setVolume(v);
+        uiTick(() => setVolume(v));
+      }
+      // noteOff: leave carrier/beat where they landed — the space holds.
+    });
+    return () => lightpad.setNoteListener(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightpad.connected]);
+
+  const toggleLightpad = val => {
+    if (val && IS_WEB) return nativeOnlyNotice('Lightpad Block');
+    if (val) lightpad.connect();
+    else lightpad.disconnect();
+  };
+
   // live controls
   const onBeat = v => {
     baseBeatRef.current = v;
@@ -456,6 +509,30 @@ export default function ManualScreen() {
             </Text>
           </View>
           <Switch value={lumiKeys.connected} disabled={IS_WEB} onValueChange={toggleLumi}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
+        </View>
+      </View>
+
+      {/* ROLI Lightpad Block — an XY pad: left↔right = carrier, up↔down = beat */}
+      <View style={styles.card}>
+        <View style={styles.deviceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.deviceTitle}>Lightpad Block</Text>
+            <Text style={styles.deviceSub}>
+              {IS_WEB
+                ? 'XY pad — in the app'
+                : lightpad.connected
+                ? lastNote
+                  ? `carrier ${Math.round(carrier)} · beat ${beat.toFixed(1)} Hz — ←→ carrier · ↑↓ beat · press = volume`
+                  : 'Connected — glide ←→ for carrier, ↑↓ for beat, press for volume'
+                : lightpad.status === 'scanning'
+                ? 'Searching…'
+                : lightpad.status === 'notfound'
+                ? 'Not found — is it on and nearby?'
+                : 'Touch pad — feel around the binaural space'}
+            </Text>
+          </View>
+          <Switch value={lightpad.connected} disabled={IS_WEB} onValueChange={toggleLightpad}
             trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }} thumbColor="#fff" />
         </View>
       </View>

@@ -8,6 +8,9 @@
 export const LUMI_SERVICE = '03b80e5a-ede8-4b33-a751-6ce34ec4c700';
 export const LUMI_CHAR = '7772e5db-3868-4112-a1a9-f2669d106bf3'; // notify + write-no-response
 export const isLumi = name => !!(name && /lumi/i.test(name));
+// ROLI Lightpad Block (and other BLOCKS) advertise "Lightpad"/"Block" — same
+// BLE-MIDI transport, different mapping (XY pad instead of a keyboard).
+export const isLightpad = name => !!(name && /lightpad|block/i.test(name));
 
 // MIDI note number → frequency (Hz). A4 (69) = 440 Hz.
 export const midiNoteToHz = n => 440 * Math.pow(2, (n - 69) / 12);

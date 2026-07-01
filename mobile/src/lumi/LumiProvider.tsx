@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LumiController } from './LumiController';
+import { isLumi } from '../shared/lumiProtocol';
 
 // Shared ROLI LUMI Keys connection (BLE-MIDI). Mirrors the Nova/Pulsetto providers
 // so Manual mode can connect a keyboard and steer the carrier from played notes.
@@ -9,7 +10,7 @@ export const useLumi = () => useContext(LumiContext);
 export function LumiProvider({ children }) {
   const ctrlRef = useRef(null);
   const [status, setStatus] = useState('idle');
-  if (!ctrlRef.current) ctrlRef.current = new LumiController(setStatus);
+  if (!ctrlRef.current) ctrlRef.current = new LumiController(setStatus, { match: isLumi, label: 'LUMI' });
   const ctrl = ctrlRef.current;
 
   useEffect(() => () => ctrl.disconnect(), [ctrl]);

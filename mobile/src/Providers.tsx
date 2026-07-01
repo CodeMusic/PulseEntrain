@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PulsettoProvider } from './pulsetto/PulsettoProvider';
 import { NovaProvider } from './nova/NovaProvider';
 import { LumiProvider } from './lumi/LumiProvider';
+import { LightpadProvider } from './lightpad/LightpadProvider';
 import { SessionsProvider } from './wellness/SessionsProvider';
 import { SettingsProvider } from './settings/SettingsProvider';
 import { MenuProvider } from './components/Menu';
@@ -17,12 +18,14 @@ export function Providers({ children }) {
       <PulsettoProvider>
         <NovaProvider>
           <LumiProvider>
+          <LightpadProvider>
           <SessionsProvider>
             <SettingsProvider>
               <StatusBar barStyle="light-content" />
               <MenuProvider>{children}</MenuProvider>
             </SettingsProvider>
           </SessionsProvider>
+          </LightpadProvider>
           </LumiProvider>
         </NovaProvider>
       </PulsettoProvider>

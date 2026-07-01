@@ -1,14 +1,17 @@
 import { Buffer } from 'buffer';
 import { bleManager } from '../ble/manager';
-import { LUMI_SERVICE, LUMI_CHAR, isLumi, parseBleMidi } from '../shared/lumiProtocol';
+import { LUMI_SERVICE, LUMI_CHAR, parseBleMidi } from '../shared/lumiProtocol';
 
-// ROLI LUMI Keys — BLE-MIDI transport. Scans for the MIDI service, subscribes to
-// the I/O characteristic, and forwards note-on/off events (parsed via the shared
-// protocol). Receive-only for now (no lighting writes — touch-glow is on-device).
-// Mirrors the Nova/Pulsetto controller pattern over the shared BLE manager.
+// Generic ROLI BLE-MIDI transport (LUMI Keys, Lightpad Block, …). Scans for the
+// MIDI service, subscribes to the I/O characteristic, and forwards parsed MIDI
+// events. Receive-only (no lighting writes — touch-glow is on-device). A `match`
+// predicate picks the right device by name when several BLE-MIDI units are on;
+// `label` just tags the diagnostic log. Mirrors the Nova/Pulsetto controllers.
 export class LumiController {
-  constructor(onStatus) {
+  constructor(onStatus, { match, label } = {}) {
     this.onStatus = onStatus || (() => {});
+    this.match = match || (() => true);
+    this.label = label || 'MIDI';
     this.device = null;
     this.char = null;
     this.sub = null;
@@ -65,8 +68,9 @@ export class LumiController {
           finish(false);
           return;
         }
-        if (device && (isLumi(device.name) || true)) {
-          // scan is already filtered to the MIDI service; accept the first match
+        if (device && (this.match(device.name) || !device.name)) {
+          // Scan is filtered to the MIDI service; take the first device whose name
+          // matches (or has no advertised name yet — fall back rather than miss it).
           bleManager.stopDeviceScan();
           finish(await this._setup(device.id));
         }
@@ -109,7 +113,7 @@ export class LumiController {
           const summary = evs
             .map(e => e.type + (e.controller != null ? ':cc' + e.controller : '') + (e.value != null ? '=' + e.value : ''))
             .join(' ');
-          console.log('[LUMI]', bytes.toString('hex'), '→', summary || '(none)');
+          console.log(`[${this.label}]`, bytes.toString('hex'), '→', summary || '(none)');
         }
         for (const ev of evs) this.onNote(ev);
       });
