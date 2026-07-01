@@ -388,7 +388,8 @@ export default function ManualScreen() {
           ))}
         </View>
 
-        <Text style={styles.label}>Volume</Text>
+        <Text style={styles.label}>Session volume</Text>
+        <Text style={styles.subLabel}>PulseEntrain's tones only — turn down to sit quietly under a blended app.</Text>
         <Slider minimumValue={0} maximumValue={1} value={volume} onValueChange={onVol}
           minimumTrackTintColor={COLORS.accentBlue} maximumTrackTintColor={COLORS.bgCardLight} thumbTintColor="#fff" style={styles.slider} />
       </View>
@@ -495,6 +496,7 @@ const styles = StyleSheet.create({
   scaleTxt: { color: COLORS.textMuted, fontSize: 10 },
   scaleTxtOn: { color: COLORS.accentBlueLight, fontWeight: '700' },
   label: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', marginTop: 16, marginBottom: 4 },
+  subLabel: { color: COLORS.textMuted, fontSize: 12, lineHeight: 16, marginBottom: 8 },
   chips: { flexDirection: 'row', gap: 8 },
   chip: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: COLORS.bgCardLight, alignItems: 'center' },
   chipOn: { backgroundColor: COLORS.accentBlue },
