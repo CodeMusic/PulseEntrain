@@ -60,9 +60,15 @@ over the LAN. Tap **Reload JS** if it was already open.
 
 **Switched Wi-Fi?** This Mac's LAN IP changes with the network, and the installed app caches the old
 one → "No script URL provided". `start.sh` auto-detects the current IP and advertises it to the
-bundler (via `REACT_NATIVE_PACKAGER_HOSTNAME`) — it prints the host on launch. The installed app still
-holds the previous IP, so **once per new network**: shake the phone → Dev Menu → Settings → *Debug
-server host & port for device* → enter the printed `IP:8081`, then Reload. No rebuild needed.
+bundler (via `REACT_NATIVE_PACKAGER_HOSTNAME`) — it prints the host on launch. Two ways to recover:
+
+- **`./start.sh`** (regular, serve-only) — the installed app still holds the previous IP, so **once
+  per new network**: shake the phone → Dev Menu → Settings → *Debug server host & port for device* →
+  enter the printed `IP:8081`, then Reload. No rebuild.
+- **`./start.sh --pair`** — rebuild + install to the connected iOS device, then serve. Re-bakes the
+  current IP into the app, so nothing on the phone needs touching. Slower (native build); use it for a
+  new network or a first install. Falls back to the Xcode/`devicectl` flow below if `run:ios` hits the
+  lockdownd bug.
 
 **Web:**
 ```bash
