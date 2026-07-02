@@ -15,6 +15,7 @@
 # that with a one-time dev-menu repoint (printed below); --pair fixes it by
 # rebuilding so nothing on the phone needs touching.
 set -e
+cd "$(dirname "$0")" # run from the mobile/ folder regardless of caller's cwd
 
 PAIR=0
 for arg in "$@"; do
@@ -41,29 +42,41 @@ fi
 
 echo "────────────────────────────────────────────────────────"
 if [ "$PAIR" = "1" ]; then
-  # `one run:ios --device` with no value falls back to the SIMULATOR — so detect
-  # the connected physical device's UDID and pass it explicitly to force a device
-  # build + install + launch (One then opens the dev client pointed at our IP).
+  # One's `run:ios` ignores --device and always targets the Simulator, so drive
+  # the device directly: xcodebuild for the phone → devicectl install + launch →
+  # serve JS. This is the README's reliable flow (also dodges the @expo/cli
+  # lockdownd install bug). Requires the phone plugged in, unlocked, and trusted.
   UDID="$(xcrun devicectl list devices 2>/dev/null | awk '/available/{print $3; exit}')"
   DEVNAME="$(xcrun devicectl list devices 2>/dev/null | awk '/available/{print $1; exit}')"
-  echo "  Mode: --pair (rebuild + install to iOS device, then serve)"
+  echo "  Mode: --pair (build + install to iOS device via xcodebuild/devicectl)"
   echo "  Wi-Fi bundler host: ${IP:-unknown}"
   if [ -z "$UDID" ]; then
-    echo "  ⚠️  No paired device found — plug in the iPhone, unlock it, and"
-    echo "     trust this Mac. (Falling back to interactive device pick.)"
+    echo "  ⚠️  No paired device found — plug in the iPhone, unlock it, trust this Mac."
     echo "────────────────────────────────────────────────────────"
-    npm run sync-catalog
-    exec env ONE_METRO_MODE=1 npx one run:ios --device
+    exit 1
   fi
   echo "  Target device: ${DEVNAME:-?} ($UDID)"
-  echo "  Keep the phone UNLOCKED. Re-bakes the current IP — no dev-menu repoint."
+  echo "  Keep the phone UNLOCKED throughout."
   echo "────────────────────────────────────────────────────────"
-  # sync catalog (the regular path's predev hook does this; --pair skips it) then
-  # build+install+launch on the specific device. If this dies on the @expo/cli
-  # lockdownd bug, use the Xcode / `xcrun devicectl device install app …` flow in
-  # README, then run plain ./start.sh to serve.
+  export ONE_METRO_MODE=1
+  APP_DD="ios/build" # isolated DerivedData so we know exactly where the .app lands
+  APP_PATH="$APP_DD/Build/Products/Debug-iphoneos/PulseEntrain.app"
   npm run sync-catalog
-  exec env ONE_METRO_MODE=1 npx one run:ios --device "$UDID"
+  echo "▶︎ Building for the device (this takes a few minutes)…"
+  xcodebuild \
+    -workspace ios/PulseEntrain.xcworkspace \
+    -scheme PulseEntrain \
+    -configuration Debug \
+    -destination "id=$UDID" \
+    -derivedDataPath "$APP_DD" \
+    -allowProvisioningUpdates \
+    build
+  echo "▶︎ Installing on $DEVNAME…"
+  xcrun devicectl device install app --device "$UDID" "$APP_PATH"
+  echo "▶︎ Launching…"
+  xcrun devicectl device process launch --terminate-existing --device "$UDID" com.codemusic.PulseEntrain || true
+  echo "▶︎ Serving JS. In the app's dev-client launcher, tap  ${IP:-<mac-ip>}:8081  (or Reload)."
+  exec npm run dev:native
 else
   echo "  Mode: regular (serve JS only)"
   echo "  Wi-Fi bundler host: ${IP:-unknown}"

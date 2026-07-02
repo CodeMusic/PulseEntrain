@@ -65,10 +65,12 @@ bundler (via `REACT_NATIVE_PACKAGER_HOSTNAME`) — it prints the host on launch.
 - **`./start.sh`** (regular, serve-only) — the installed app still holds the previous IP, so **once
   per new network**: shake the phone → Dev Menu → Settings → *Debug server host & port for device* →
   enter the printed `IP:8081`, then Reload. No rebuild.
-- **`./start.sh --pair`** — rebuild + install to the connected iOS device, then serve. Re-bakes the
-  current IP into the app, so nothing on the phone needs touching. Slower (native build); use it for a
-  new network or a first install. Falls back to the Xcode/`devicectl` flow below if `run:ios` hits the
-  lockdownd bug.
+- **`./start.sh --pair`** — build + install to the connected iOS device, then serve. One's `run:ios`
+  ignores `--device` and always targets the Simulator, so `--pair` drives the device directly:
+  `xcodebuild` for the phone → `xcrun devicectl device install app` + `process launch` → serve JS (this
+  also dodges the `@expo/cli` lockdownd install bug). Requires the phone plugged in, unlocked, and
+  trusted; slower (native build). After launch, tap the printed `IP:8081` in the dev-client launcher.
+  Note: JS-only changes don't need this at all — plain `./start.sh` + reload is enough.
 
 **Web:**
 ```bash
