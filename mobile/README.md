@@ -58,6 +58,12 @@ The device/simulator must be on the **same Wi-Fi** as this machine (a phone on c
 the dev server — see the "No script URL provided" error). Then launch the app; it loads the bundle
 over the LAN. Tap **Reload JS** if it was already open.
 
+**Switched Wi-Fi?** This Mac's LAN IP changes with the network, and the installed app caches the old
+one → "No script URL provided". `start.sh` auto-detects the current IP and advertises it to the
+bundler (via `REACT_NATIVE_PACKAGER_HOSTNAME`) — it prints the host on launch. The installed app still
+holds the previous IP, so **once per new network**: shake the phone → Dev Menu → Settings → *Debug
+server host & port for device* → enter the printed `IP:8081`, then Reload. No rebuild needed.
+
 **Web:**
 ```bash
 npm run dev            # One dev server (Vite) — opens the app in the browser
