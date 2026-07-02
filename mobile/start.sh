@@ -41,15 +41,29 @@ fi
 
 echo "────────────────────────────────────────────────────────"
 if [ "$PAIR" = "1" ]; then
+  # `one run:ios --device` with no value falls back to the SIMULATOR — so detect
+  # the connected physical device's UDID and pass it explicitly to force a device
+  # build + install + launch (One then opens the dev client pointed at our IP).
+  UDID="$(xcrun devicectl list devices 2>/dev/null | awk '/available/{print $3; exit}')"
+  DEVNAME="$(xcrun devicectl list devices 2>/dev/null | awk '/available/{print $1; exit}')"
   echo "  Mode: --pair (rebuild + install to iOS device, then serve)"
   echo "  Wi-Fi bundler host: ${IP:-unknown}"
-  echo "  Phone must be UNLOCKED and plugged in / on the same Wi-Fi."
-  echo "  Re-bakes the current IP — no dev-menu repoint needed after."
+  if [ -z "$UDID" ]; then
+    echo "  ⚠️  No paired device found — plug in the iPhone, unlock it, and"
+    echo "     trust this Mac. (Falling back to interactive device pick.)"
+    echo "────────────────────────────────────────────────────────"
+    npm run sync-catalog
+    exec env ONE_METRO_MODE=1 npx one run:ios --device
+  fi
+  echo "  Target device: ${DEVNAME:-?} ($UDID)"
+  echo "  Keep the phone UNLOCKED. Re-bakes the current IP — no dev-menu repoint."
   echo "────────────────────────────────────────────────────────"
-  # Build + install + launch on the device, then serve JS. If this fails on the
-  # @expo/cli lockdownd bug, fall back to the Xcode / `xcrun devicectl device
-  # install app …` flow in README, then run plain ./start.sh to serve.
-  exec npm run ios:device
+  # sync catalog (the regular path's predev hook does this; --pair skips it) then
+  # build+install+launch on the specific device. If this dies on the @expo/cli
+  # lockdownd bug, use the Xcode / `xcrun devicectl device install app …` flow in
+  # README, then run plain ./start.sh to serve.
+  npm run sync-catalog
+  exec env ONE_METRO_MODE=1 npx one run:ios --device "$UDID"
 else
   echo "  Mode: regular (serve JS only)"
   echo "  Wi-Fi bundler host: ${IP:-unknown}"
