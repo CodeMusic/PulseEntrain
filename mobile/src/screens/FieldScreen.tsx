@@ -21,22 +21,25 @@ import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 // by the intensity boost), and what you set persists on release. While holding:
 //   FINGER  x → carrier Hz (min left … max right)
 //           y → binaural beat = audio beat AND flash rate (min ≈0.5 Hz bottom … max top)
-//   HEAD    pitch → same binaural beat (look down = min, up = max)
-//           roll  → slows the LED bank you lean toward (far = 0.5 Hz); level =
-//                   balanced. The resulting left/right flash difference is the
-//                   "biphotic beat", shown above the carrier.
+//   HEAD    pitch → gently BENDS the finger-set beat (± a few Hz), measured from your
+//                   entry pitch, so a still head doesn't change it (carrier bends a
+//                   touch too). Bends bake into the base on release.
+//           roll  → the BIPHOTIC beat: ±5° balanced, then slows the eye you lean
+//                   toward down to 0.5 Hz by ±30°. |left − right| flash is shown.
 const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
 const FIELD_BEAT_MIN = 0.5, FIELD_BEAT_MAX = 40; // binaural beat = audio + flash rate
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
 const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
-// Tuned to a real Nova on a head: pitch swings ~±26° from where you start a push,
-// roll ~±25° from level. Spans are set so a comfortable tilt reaches the extremes
-// (full effect at ≈ span + dead-zone degrees). Retune if your range differs.
-const HEAD_PITCH_SPAN = 18, HEAD_ROLL_SPAN = 18; // degrees of head travel for full swing
-const HEAD_DEADZONE = 5; // degrees of slack — jitter/settle is ignored
+// Head control (Nova accelerometer, while pressing). Roll opens the biphotic beat;
+// pitch only *bends* the finger-set beat. Both are relative to your pose when the
+// push began, and both have a dead-zone so a still/settling head does nothing.
+const ROLL_DEADZONE = 5, ROLL_MAX = 30; // roll: ±5° = balanced, ±30° slows one eye to 0.5 Hz
+const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for a full bend
+const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
+const CARR_BEND_MAX = 3; // Hz — a very subtle carrier bend alongside it
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
-const FIELD_PITCH_SIGN = 1; // flip to -1 if looking up slows instead of speeds
-const FIELD_ROLL_SIGN = 1; // flip to -1 if leaning left slows the wrong eye
+const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
+const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
@@ -72,12 +75,14 @@ export default function FieldScreen() {
   const rowRef = useRef(2);
   const bendRef = useRef(0);
   const slideRef = useRef(0);
-  const carrierRef = useRef(200);
-  const beatRef = useRef(10); // master binaural beat (audio + both-eye flash)
-  const balanceRef = useRef(0); // −1 left … 0 balanced … +1 right (roll)
+  // The beat/carrier are a finger-set BASE plus a small head-pitch BEND.
+  const baseCarrierRef = useRef(200); // finger x → carrier
+  const baseBeatRef = useRef(10); // finger y → binaural beat
+  const beatBendRef = useRef(0); // head pitch → ± a few Hz on the beat
+  const carrierBendRef = useRef(0); // head pitch → ± a couple Hz on the carrier (subtle)
+  const balanceRef = useRef(0); // roll: −1 left … 0 balanced … +1 right (biphotic)
   const pushingRef = useRef(false);
-  const centerPitchRef = useRef(0); // head pitch captured at push-engage (anchor)
-  const anchorBeatRef = useRef(10); // beat at push-engage (pitch deltas move from here)
+  const centerPitchRef = useRef(0); // head pitch captured at push-engage (bend anchor)
   const headRef = useRef(null); // smoothed { pitch, roll }
   const uiRef = useRef(0);
   const novaBrightRef = useRef(0);
@@ -149,10 +154,10 @@ export default function FieldScreen() {
     [],
   );
 
-  // Push the current carrier/beat/balance to audio + light + readout.
+  // Effective values = finger-set base + head-pitch bend. Push to audio/light/UI.
   const applyField = () => {
-    const c = clamp(carrierRef.current, 60, 1100);
-    const b = clamp(beatRef.current, FIELD_BEAT_MIN, FIELD_BEAT_MAX);
+    const c = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
+    const b = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, FIELD_BEAT_MAX);
     if (runningRef.current && !pausedRef.current && engineRef.current) {
       engineRef.current.glideCarrier(c, 0.12);
       engineRef.current.glideBeat(b, 0.12);
@@ -161,11 +166,13 @@ export default function FieldScreen() {
       nova.setFrequency(b);
       nova.setBalance(balanceRef.current);
     }
-    const biph = Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN); // the biphotic beat
+    // Biphotic beat = |left flash − right flash|, in 0.5 Hz steps (roll slows one
+    // eye from b toward 0.5, so the gap is |balance|·(b − 0.5)).
+    const biph = Math.round(Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN) * 2) / 2;
     uiTick(() => {
       setCarrier(Math.round(c));
       setBeat(Math.round(b * 10) / 10);
-      setBiphotic(Math.round(biph * 10) / 10);
+      setBiphotic(biph);
     });
   };
 
@@ -175,9 +182,20 @@ export default function FieldScreen() {
     const fromFinger = () => {
       const xN = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
       const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
-      carrierRef.current = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-      beatRef.current = FIELD_BEAT_MIN + yN * (FIELD_BEAT_MAX - FIELD_BEAT_MIN);
+      baseCarrierRef.current = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
+      baseBeatRef.current = FIELD_BEAT_MIN + yN * (FIELD_BEAT_MAX - FIELD_BEAT_MIN);
       applyField();
+    };
+    // On release, bake any live pitch bend into the base so the tuning locks in
+    // place (the roll/biphotic balance already persists on its own).
+    const releasePush = () => {
+      if (!pushingRef.current) return;
+      pushingRef.current = false;
+      setPushing(false);
+      baseBeatRef.current = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, FIELD_BEAT_MAX);
+      baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
+      beatBendRef.current = 0;
+      carrierBendRef.current = 0;
     };
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
@@ -204,21 +222,21 @@ export default function FieldScreen() {
         if (nowPushing && !pushingRef.current) {
           pushingRef.current = true; setPushing(true);
           const h = headRef.current;
-          centerPitchRef.current = h ? h.pitch : 0; // anchor pitch so it doesn't jump the beat
-          anchorBeatRef.current = beatRef.current;
+          centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
         } else if (!nowPushing && pushingRef.current) {
-          pushingRef.current = false; setPushing(false); // release → persists
+          releasePush();
         }
       } else if (ev.type === 'noteOff') {
-        if (pushingRef.current) { pushingRef.current = false; setPushing(false); }
+        releasePush();
       }
     });
     return () => lightpad.setNoteListener(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightpad.connected]);
 
-  // Head motion (while pressing): pitch → the binaural beat (anchored, no jump),
-  // roll → per-eye slowdown (absolute from level). Smoothed + dead-zoned.
+  // Head motion (while pressing): pitch BENDS the finger-set beat ± a few Hz
+  // (measured from your entry pitch, so a still head does nothing); roll opens the
+  // biphotic beat by slowing one eye (±5° balanced … ±30° down to 0.5 Hz).
   useEffect(() => {
     if (!running || !nova.connected || !nova.setMotionListener) return;
     nova.setTelemetryRate(devRate);
@@ -226,13 +244,11 @@ export default function FieldScreen() {
       if (!pushingRef.current || !runningRef.current || pausedRef.current) return;
       const s = headRef.current;
       if (!s) return;
-      const dPitch = dz((s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN, HEAD_DEADZONE);
-      if (dPitch !== 0) {
-        const swing = FIELD_BEAT_MAX - FIELD_BEAT_MIN;
-        beatRef.current = clamp(anchorBeatRef.current + mapRange(dPitch, -HEAD_PITCH_SPAN, HEAD_PITCH_SPAN, -swing, swing), FIELD_BEAT_MIN, FIELD_BEAT_MAX);
-      }
-      const dRoll = dz(s.roll * FIELD_ROLL_SIGN, HEAD_DEADZONE);
-      balanceRef.current = clamp(dRoll / HEAD_ROLL_SPAN, -1, 1); // level = balanced
+      const p = clamp(dz((s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN, PITCH_DEADZONE), -PITCH_BEND_SPAN, PITCH_BEND_SPAN);
+      beatBendRef.current = (p / PITCH_BEND_SPAN) * BEAT_BEND_MAX;
+      carrierBendRef.current = (p / PITCH_BEND_SPAN) * CARR_BEND_MAX;
+      const dRoll = dz(s.roll * FIELD_ROLL_SIGN, ROLL_DEADZONE);
+      balanceRef.current = clamp(dRoll / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±5° balanced, ±30° full
       applyField();
     };
     nova.setMotionListener(s => {
@@ -264,7 +280,7 @@ export default function FieldScreen() {
       setDev({
         hz: hzRef.current, pitch: rawHeadRef.current.pitch, roll: rawHeadRef.current.roll,
         sPitch: h.pitch, sRoll: h.roll, pushing: pushingRef.current, pressure: lastPressureRef.current,
-        carrier: carrierRef.current, beat: beatRef.current, balance: balanceRef.current,
+        carrier: baseCarrierRef.current + carrierBendRef.current, beat: baseBeatRef.current + beatBendRef.current, balance: balanceRef.current, bend: beatBendRef.current,
         evt: lastEvtRef.current, novaConn: nova.connected, lpConn: lightpad.connected,
       });
     }, 200);
@@ -282,7 +298,8 @@ export default function FieldScreen() {
 
   const start = async () => {
     const e = ensureEngine();
-    carrierRef.current = carrier; beatRef.current = beat; balanceRef.current = 0;
+    baseCarrierRef.current = carrier; baseBeatRef.current = beat;
+    beatBendRef.current = 0; carrierBendRef.current = 0; balanceRef.current = 0;
     e.start({ carrier, beat, volume: intensity, background: 'none' });
     e.fadeIn(1.2);
     if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); nova.setBalance(0); }
@@ -309,7 +326,8 @@ export default function FieldScreen() {
   const resume = async () => {
     setPaused(false);
     try { engineRef.current?.fadeIn(0.6); } catch (e) {}
-    if (nova.connected) { nova.startStrobe(beatRef.current); nova.setMasterBrightness(intensity); nova.setBalance(balanceRef.current); }
+    const liveBeat = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, FIELD_BEAT_MAX);
+    if (nova.connected) { nova.startStrobe(liveBeat); nova.setMasterBrightness(intensity); nova.setBalance(balanceRef.current); }
     if (pulsetto.connected) { try { await pulsetto.startSession(FIELD_PULSE_INTENSITY); } catch (e) {} }
     endRef.current = Date.now() + remaining * 1000;
     KeepAwake.activate();
@@ -357,7 +375,7 @@ export default function FieldScreen() {
       `The Lumenate Nova flashes light, which can trigger seizures in people with photosensitive epilepsy. Capped at ${MAX_NOVA_STROBE_HZ} Hz. Don't use if you (or anyone who can see it) may be photosensitive; stop if you feel unwell.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'I understand — connect', onPress: async () => { const ok = await nova.connect(); if (ok && runningRef.current) nova.startStrobe(beatRef.current); } },
+        { text: 'I understand — connect', onPress: async () => { const ok = await nova.connect(); if (ok && runningRef.current) nova.startStrobe(baseBeatRef.current + beatBendRef.current); } },
       ],
       { cancelable: true },
     );
@@ -371,7 +389,7 @@ export default function FieldScreen() {
           {`nova ${dev?.novaConn ? 'on' : 'off'} · tel ${dev ? dev.hz.toFixed(1) : '0'} Hz · rate ${devRate}\n`}
           {`pitch ${dev ? dev.pitch.toFixed(1) : '—'}°  roll ${dev ? dev.roll.toFixed(1) : '—'}°  (smoothed ${dev ? dev.sPitch.toFixed(0) : '—'}/${dev ? dev.sRoll.toFixed(0) : '—'})\n`}
           {`push ${dev?.pushing ? 'YES' : 'no'} · pressure ${dev ? dev.pressure : 0}\n`}
-          {`carr ${dev ? Math.round(dev.carrier) : 0} · beat ${dev ? dev.beat.toFixed(1) : 0} · bal ${dev ? dev.balance.toFixed(2) : 0}\n`}
+          {`carr ${dev ? Math.round(dev.carrier) : 0} · beat ${dev ? dev.beat.toFixed(1) : 0} (bend ${dev ? (dev.bend >= 0 ? '+' : '') + dev.bend.toFixed(1) : 0}) · bal ${dev ? dev.balance.toFixed(2) : 0}\n`}
           {`lp ${dev?.lpConn ? 'on' : 'off'} · ${dev ? dev.evt : ''}`}
         </Text>
         <View style={styles.devRates}>
