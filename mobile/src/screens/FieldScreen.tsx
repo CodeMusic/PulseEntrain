@@ -286,7 +286,7 @@ export default function FieldScreen() {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
         fromFinger();
-        startBiphoticFade(); // ANY touch begins easing the eyes back to sync
+        if (!pushingRef.current) startBiphoticFade(); // a touch eases to sync — but not a retrigger mid-press (that would fight the roll)
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL;
         fromFinger();
@@ -367,6 +367,7 @@ export default function FieldScreen() {
         hz: hzRef.current, pitch: rawHeadRef.current.pitch, roll: rawHeadRef.current.roll,
         sPitch: h.pitch, sRoll: h.roll, pushing: pushingRef.current, pressure: lastPressureRef.current,
         carrier: baseCarrierRef.current + carrierBendRef.current, beat: baseBeatRef.current + beatBendRef.current, balance: balanceRef.current, bend: beatBendRef.current,
+        biphotic: Math.abs(balanceRef.current) * (baseBeatRef.current + beatBendRef.current - FIELD_BEAT_MIN),
         evt: lastEvtRef.current, novaConn: nova.connected, lpConn: lightpad.connected,
       });
     }, 200);
@@ -477,6 +478,7 @@ export default function FieldScreen() {
     devMode ? (
       <View>
         <Text style={styles.devTxt}>
+          {`coord ( x ${dev ? Math.round(dev.carrier) : 0} · y ${dev ? dev.beat.toFixed(1) : 0} · z ${dev ? dev.biphotic.toFixed(1) : 0} )\n`}
           {`nova ${dev?.novaConn ? 'on' : 'off'} · tel ${dev ? dev.hz.toFixed(1) : '0'} Hz · rate ${devRate}\n`}
           {`pitch ${dev ? dev.pitch.toFixed(1) : '—'}°  roll ${dev ? dev.roll.toFixed(1) : '—'}°  (smoothed ${dev ? dev.sPitch.toFixed(0) : '—'}/${dev ? dev.sRoll.toFixed(0) : '—'})\n`}
           {`push ${dev?.pushing ? 'YES' : 'no'} · pressure ${dev ? dev.pressure : 0}\n`}
@@ -576,11 +578,6 @@ export default function FieldScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Field coordinate: x = carrier · y = binaural beat · z = biphotic beat. */}
-      <Text style={styles.coords}>
-        ( x {Math.round(carrier)}  ·  y {beat.toFixed(1)}  ·  z {biphotic.toFixed(1)} )
-      </Text>
-
       {/* Bottom: a subtle cue (hidden while paused — controls live in the circle). */}
       {!paused ? (
         <Text style={styles.hint}>
@@ -635,7 +632,6 @@ const styles = StyleSheet.create({
   stopCircleBtn: { backgroundColor: 'rgba(20,10,14,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
   circleBtnTxt: { fontSize: 14, fontWeight: '800', color: '#0B0E13' },
   stopBtnTxt: { color: '#FFFFFF' },
-  coords: { color: '#9FB2C6', fontSize: 13, fontWeight: '700', fontFamily: 'Courier', textAlign: 'center', letterSpacing: 0.5, marginBottom: 8 },
   hint: { color: COLORS.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18, minHeight: 34 },
   devTxt: { color: '#8FE3C2', fontSize: 11, lineHeight: 16, fontFamily: 'Courier' },
   devRates: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 },
