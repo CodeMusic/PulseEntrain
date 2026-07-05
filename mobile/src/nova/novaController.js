@@ -27,6 +27,7 @@ export class NovaController {
     this.strobeChar = null;
     this.strobing = false;
     this.targetBeat = 8;
+    this.balance = 0; // −1 left … 0 both … +1 right flicker bias (Field mode)
     this.values = DEFAULT_VALUES(8);
     this.master = 1; // master brightness multiplier (0..1)
     this.tickTimer = null;
@@ -206,7 +207,10 @@ export class NovaController {
   }
 
   // Continuously stream the current frame (~every 250ms) — the device needs the
-  // frame streamed to keep cycling. Both eyes ramp toward the target beat (§6).
+  // frame streamed to keep cycling. Both eyes ramp toward the target beat (§6),
+  // biased left/right by `balance` (−1 left … 0 both … +1 right) so head-roll can
+  // slow one side's flicker independently (Field mode). Ramp is proportional so
+  // the light tracks head/touch changes in ~1 s instead of crawling.
   startStrobe(beatHz) {
     if (beatHz != null) this.targetBeat = clampStrobe(beatHz);
     this.values = { ...this.values, lFreq: Math.min(2, this.targetBeat), rFreq: Math.min(2, this.targetBeat) };
@@ -215,14 +219,13 @@ export class NovaController {
     this._clearTick();
     this.tickTimer = setInterval(() => {
       if (!this.strobing || !this.strobeChar) return;
-      const ramp = cur =>
-        cur < this.targetBeat
-          ? Math.min(this.targetBeat, cur + 0.5)
-          : cur > this.targetBeat
-          ? Math.max(this.targetBeat, cur - 0.5)
-          : cur;
-      this.values.lFreq = ramp(this.values.lFreq);
-      this.values.rFreq = ramp(this.values.rFreq);
+      const RATE_MIN = 0.5; // the leaned-toward eye slows to ~0.5 Hz (≈ stopped)
+      const b = this.balance || 0;
+      const lTarget = b < 0 ? this.targetBeat + b * (this.targetBeat - RATE_MIN) : this.targetBeat;
+      const rTarget = b > 0 ? this.targetBeat - b * (this.targetBeat - RATE_MIN) : this.targetBeat;
+      const ramp = (cur, tgt) => (Math.abs(tgt - cur) < 0.05 ? tgt : cur + (tgt - cur) * 0.35);
+      this.values.lFreq = ramp(this.values.lFreq, lTarget);
+      this.values.rFreq = ramp(this.values.rFreq, rTarget);
       const { b64, hex } = this._frame();
       if (hex !== this._lastHex) {
         this._lastHex = hex;
@@ -235,6 +238,13 @@ export class NovaController {
   // Entrainment: keep both eyes following the audio beat.
   setFrequency(hz) {
     this.targetBeat = clampStrobe(hz);
+  }
+
+  // Field mode: bias the flicker left/right. −1 slows the left eye toward stop,
+  // +1 the right, 0 keeps both in sync. Applied by the strobe tick, no BLE write.
+  setBalance(b) {
+    const v = Number(b);
+    this.balance = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
   }
 
   // Explorer: merge per-eye pattern params (brightness / phase / duty) live.

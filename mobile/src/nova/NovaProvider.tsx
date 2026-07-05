@@ -22,6 +22,7 @@ export function NovaProvider({ children }) {
       disconnect: () => ctrl.disconnect(),
       startStrobe: hz => ctrl.startStrobe(hz),
       setFrequency: hz => ctrl.setFrequency(hz),
+      setBalance: b => ctrl.setBalance(b),
       setSyncedValues: patch => ctrl.setSyncedValues(patch),
       setMasterBrightness: m => ctrl.setMasterBrightness(m),
       setMotionListener: fn => ctrl.setMotionListener(fn),

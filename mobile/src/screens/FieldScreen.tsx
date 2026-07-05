@@ -8,32 +8,53 @@ import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
-import { LP_COLS, LP_ROWS, LP_ROW_OFFSET, LP_BASE, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
+import { useSessions } from '../wellness/SessionsProvider';
+import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
-// Field Meditation Mode — an immersive, eyes-closed frame around the same engine
-// as Manual. Wearing beats + Nova (light) + Pulsetto, you "feel around" a ROLI
-// Lightpad Block and one touch moves the whole *field* at once (synesthetic):
-//   left↔right  → carrier frequency, and the Nova flash pans toward your finger
-//   up↔down     → beat frequency (drags the Nova flash rate with it)
-//   press (Z)   → field intensity: audio volume + light brightness + stim
-// It holds where you lift off, so you can rest in a spot of the field.
+// Field Meditation Mode — an immersive, eyes-closed frame around the Manual
+// engine. Wearing beats + Nova (light) + Pulsetto, you "feel around" a ROLI
+// Lightpad Block and one touch moves the whole *field*:
+//   left↔right (glide) → carrier frequency
+//   up↔down    (slide) → beat / flash rate
+//   press (Z)          → field intensity: volume + light brightness + gentle stim
+//
+// PUSH + HEAD (Nova accelerometer): while you're actively pressing on the block,
+// your head takes over the light rhythm (the block has no motion sensor, the Nova
+// does):
+//   head pitch (look up/down) → flash + beat rate for BOTH eyes (down ≈ 0.5 Hz,
+//                               far up ≈ 40 Hz)
+//   head roll  (tilt L/R)     → flash balance: centred = both in sync; lean left
+//                               slows the left eye toward stop, lean right the
+//                               right eye.
+// These engage only during a firm press; carrier (X) and loudness (Z) keep
+// working. Lift and the rhythm returns to your touch position.
 const CARR_MIN = 80, CARR_MAX = 500; // full carrier sweep across the pad's width
 const BEAT_MIN = 1, BEAT_MAX = 40; // beat / flash-rate sweep across its height
-const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9); press nudges around it
-const FIELD_LIGHT_PAN = true; // pan the Nova flash left/right with carrier X (tune on device)
+const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
+// Head control (tune on device — accelerometer sign depends on how the Nova sits):
+const PUSH_THRESHOLD = 40; // pressure (0–127) above which head control engages
+const PITCH_DOWN_DEG = -40, PITCH_UP_DEG = 40; // head-pitch span → rate 0.5…40 Hz
+const ROLL_MAX_DEG = 35; // head-roll span → full left/right flash balance
+const FIELD_PITCH_SIGN = 1; // flip to -1 if looking up slows instead of speeds
+const FIELD_ROLL_SIGN = 1; // flip to -1 if leaning left slows the wrong eye
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
+const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.max(0, s % 60)).padStart(2, '0')}`;
 
 export default function FieldScreen() {
   const nova = useNova();
   const pulsetto = usePulsetto();
   const lightpad = useLightpad();
+  const sessions = useSessions();
 
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
   const [intensity, setIntensity] = useState(0.7); // 0..1 field intensity (volume/brightness)
+  const [timerMin, setTimerMin] = useState(15);
+  const [remaining, setRemaining] = useState(0);
   const [running, setRunning] = useState(false);
+  const [pushing, setPushing] = useState(false); // for the UI cue
 
   const engineRef = useRef(null);
   const runningRef = useRef(false);
@@ -44,14 +65,30 @@ export default function FieldScreen() {
   const rowRef = useRef(2);
   const bendRef = useRef(0);
   const slideRef = useRef(0);
+  const yBeatRef = useRef(10); // last touch-derived beat (restored when a push ends)
+  const pushingRef = useRef(false);
+  const headRef = useRef(null); // latest { pitch, roll } sample
   const uiRef = useRef(0);
-  const novaPanRef = useRef(0); // throttle Nova pan BLE writes
-  const novaBrightRef = useRef(0); // throttle Nova brightness BLE writes
-  const pulseRef = useRef(0); // throttle Pulsetto intensity BLE writes
+  const novaBrightRef = useRef(0);
+  const pulseRef = useRef(0);
+
+  // Timer / goal tracking.
+  const endRef = useRef(0);
+  const startRef = useRef(null); // { time, plannedSeconds }
+  const tickRef = useRef(null);
 
   const ensureEngine = () => {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
     return engineRef.current;
+  };
+
+  const uiTick = fn => {
+    const now = Date.now();
+    if (now - uiRef.current > 66) { uiRef.current = now; fn(); }
+  };
+  const throttle = (ref, ms, fn) => {
+    const now = Date.now();
+    if (now - ref.current > ms) { ref.current = now; fn(); }
   };
 
   // Slow "breathing" of the field orb — calm, not at the beat rate (a screen
@@ -68,9 +105,24 @@ export default function FieldScreen() {
     return () => loop.stop();
   }, [breathe]);
 
-  // Tear down on unmount (leaving the screen ends the session).
+  const logIfCounted = () => {
+    if (!startRef.current || !sessions) return;
+    const planned = startRef.current.plannedSeconds;
+    const actual = Math.min(planned, Math.round((Date.now() - startRef.current.time) / 1000));
+    sessions.logSession({
+      plannedSeconds: planned,
+      actualSeconds: actual,
+      strength: pulsetto.connected ? FIELD_PULSE_INTENSITY : null,
+      kind: 'field',
+    });
+    startRef.current = null;
+  };
+
+  // Tear down on unmount (leaving the screen ends + logs the session).
   useEffect(
     () => () => {
+      logIfCounted();
+      if (tickRef.current) clearInterval(tickRef.current);
       try { engineRef.current?.stop(); } catch (e) {}
       try { nova.stopStrobe(); } catch (e) {}
       if (pulsetto.sessionActive) { try { pulsetto.stopSession(); } catch (e) {} }
@@ -80,50 +132,35 @@ export default function FieldScreen() {
     [],
   );
 
-  const uiTick = fn => {
-    const now = Date.now();
-    if (now - uiRef.current > 66) { uiRef.current = now; fn(); }
-  };
-  const throttle = (ref, ms, fn) => {
-    const now = Date.now();
-    if (now - ref.current > ms) { ref.current = now; fn(); }
-  };
-
-  // The synesthetic mapping. Registered whenever a Lightpad is connected; device
-  // writes are gated on a running session, but the readouts update either way so
-  // you can see where a touch lands before you start.
+  // Lightpad → carrier (X) always; beat (Y) only when NOT pushing (a firm press
+  // hands the rhythm to the head). Press → field intensity + the push gate.
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
     const applyField = () => {
       const xN = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
-      const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
       const c = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
+      if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(c, 0.12);
+      const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
       const b = BEAT_MIN + yN * (BEAT_MAX - BEAT_MIN);
-      if (runningRef.current && engineRef.current) {
-        engineRef.current.glideCarrier(c, 0.12);
-        engineRef.current.glideBeat(b, 0.12);
+      yBeatRef.current = b;
+      if (!pushingRef.current) {
+        if (runningRef.current && engineRef.current) engineRef.current.glideBeat(b, 0.12);
+        if (runningRef.current && nova.connected) nova.setFrequency(b);
+        uiTick(() => setBeat(Math.round(b * 10) / 10));
       }
-      if (runningRef.current && nova.connected) {
-        nova.setFrequency(b); // flash rate follows the beat (cheap — no BLE write here)
-        if (FIELD_LIGHT_PAN) {
-          throttle(novaPanRef, 120, () => {
-            // Pan the flash toward the finger: the near eye flashes (level 0),
-            // the far eye holds steady (level up = washes its flicker out).
-            const leftBias = clamp(1 - 2 * xN, 0, 1);
-            const rightBias = clamp(2 * xN - 1, 0, 1);
-            nova.setSyncedValues({ lLevel: rightBias, rLevel: leftBias });
-          });
-        }
-      }
-      uiTick(() => { setCarrier(Math.round(c)); setBeat(Math.round(b * 10) / 10); });
+      uiTick(() => setCarrier(Math.round(c)));
+    };
+    const endPush = () => {
+      if (!pushingRef.current) return;
+      pushingRef.current = false;
+      setPushing(false);
+      if (runningRef.current && nova.connected) { nova.setBalance(0); nova.setFrequency(yBeatRef.current); }
+      if (runningRef.current && engineRef.current) engineRef.current.glideBeat(yBeatRef.current, 0.25);
     };
     lightpad.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
-        colRef.current = col;
-        rowRef.current = row;
-        bendRef.current = 0;
-        slideRef.current = 0;
+        colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
         applyField();
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL; // glide → carrier columns (X)
@@ -134,33 +171,68 @@ export default function FieldScreen() {
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field intensity
         if (runningRef.current && engineRef.current) engineRef.current.setVolume(i);
-        if (runningRef.current && nova.connected) {
-          throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
-        }
+        if (runningRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
         if (runningRef.current && pulsetto.sessionActive) {
-          // Gently nudge stim around the base — heavily throttled so we don't
-          // flood the vagus device, and kept in a modest range for comfort.
           throttle(pulseRef, 1000, () => pulsetto.setIntensity(Math.round(mapRange(i, 0.2, 1, 2, 6))));
         }
         uiTick(() => setIntensity(i));
+        // Push gate: a firm press hands the flash rhythm to the head.
+        const nowPushing = ev.value >= PUSH_THRESHOLD;
+        if (nowPushing && !pushingRef.current) { pushingRef.current = true; setPushing(true); }
+        else if (!nowPushing) endPush();
+      } else if (ev.type === 'noteOff') {
+        endPush();
       }
-      // noteOff: hold where you left off — rest in that spot of the field.
     });
     return () => lightpad.setNoteListener(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightpad.connected]);
 
+  // Nova head motion → light rhythm, but only while pushing on the block.
+  useEffect(() => {
+    if (!running || !nova.connected || !nova.setMotionListener) return;
+    nova.setTelemetryRate(1); // wake the accelerometer stream
+    const applyHead = () => {
+      if (!pushingRef.current || !runningRef.current) return;
+      const s = headRef.current;
+      if (!s) return;
+      const rate = clamp(
+        mapRange(FIELD_PITCH_SIGN * s.pitch, PITCH_DOWN_DEG, PITCH_UP_DEG, BEAT_MIN, BEAT_MAX),
+        BEAT_MIN, BEAT_MAX,
+      );
+      const bal = clamp((FIELD_ROLL_SIGN * s.roll) / ROLL_MAX_DEG, -1, 1);
+      nova.setFrequency(rate); // both eyes' base rate (balance biases per eye)
+      nova.setBalance(bal);
+      if (engineRef.current) engineRef.current.glideBeat(rate, 0.15);
+      uiTick(() => setBeat(Math.round(rate * 10) / 10));
+    };
+    nova.setMotionListener(s => { headRef.current = s; applyHead(); });
+    return () => { try { nova.setMotionListener(null); } catch (e) {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, nova.connected]);
+
   const start = async () => {
     const e = ensureEngine();
     e.start({ carrier, beat, volume: intensity, background: 'none' });
     e.fadeIn(1.2); // ease into the field
-    if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); }
+    if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); nova.setBalance(0); }
     if (pulsetto.connected) { try { await pulsetto.startSession(FIELD_PULSE_INTENSITY); } catch (er) {} }
+    startRef.current = { time: Date.now(), plannedSeconds: timerMin * 60 };
+    endRef.current = Date.now() + timerMin * 60 * 1000;
+    setRemaining(timerMin * 60);
     setRunning(true);
     KeepAwake.activate();
+    if (tickRef.current) clearInterval(tickRef.current);
+    tickRef.current = setInterval(() => {
+      const rem = Math.round((endRef.current - Date.now()) / 1000);
+      setRemaining(Math.max(0, rem));
+      if (rem <= 0) stop();
+    }, 1000);
   };
 
   const stop = async () => {
+    if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+    logIfCounted();
     const eng = engineRef.current;
     if (eng) {
       try { eng.fadeOut(1.0); } catch (e) {}
@@ -168,7 +240,10 @@ export default function FieldScreen() {
     }
     try { nova.stopStrobe(); } catch (e) {}
     if (pulsetto.sessionActive) { try { await pulsetto.stopSession(); } catch (e) {} }
+    pushingRef.current = false;
+    setPushing(false);
     setRunning(false);
+    setRemaining(0);
     KeepAwake.deactivate();
   };
 
@@ -212,22 +287,34 @@ export default function FieldScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Setup chips — hidden once you enter the field for a clean, dark space. */}
+      {/* Setup — hidden once you enter the field for a clean, dark space. */}
       {!running ? (
         <View style={styles.setup}>
-          <Text style={styles.setupTitle}>Wear your devices, then feel around the block.</Text>
+          <Text style={styles.setupTitle}>Wear your devices, set a time, then feel around the block.</Text>
           <View style={styles.chips}>
             <Chip label="Beats" on hint="always on" />
             <Chip label="Lightpad" on={lightpad.connected} onPress={toggleLightpad}
               hint={IS_WEB ? 'app only' : lightpad.connected ? 'the field controller' : lightpad.status === 'scanning' ? 'searching…' : 'tap to connect'} />
             <Chip label="Light" on={nova.connected} onPress={toggleNova}
-              hint={IS_WEB ? 'app only' : nova.connected ? 'Nova' : 'tap to connect'} />
+              hint={IS_WEB ? 'app only' : nova.connected ? 'Nova · head control' : 'tap to connect'} />
             <Chip label="Stim" on={pulsetto.connected} onPress={togglePulsetto}
               hint={IS_WEB ? 'app only' : pulsetto.connected ? 'Pulsetto' : pulsetto.scanning ? 'searching…' : 'tap to connect'} />
           </View>
+          <View style={styles.timerRow}>
+            <TouchableOpacity style={styles.timerBtn} onPress={() => setTimerMin(m => Math.max(1, m - 5))}>
+              <Text style={styles.timerBtnTxt}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.timerVal}>{timerMin} min</Text>
+            <TouchableOpacity style={styles.timerBtn} onPress={() => setTimerMin(m => Math.min(120, m + 5))}>
+              <Text style={styles.timerBtnTxt}>+</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
-        <View style={styles.setup} />
+        <View style={styles.setupRunning}>
+          <Text style={styles.countdown}>{fmtTime(remaining)}</Text>
+          {pushing ? <Text style={styles.pushCue}>◉ head control — pitch = rate · roll = balance</Text> : null}
+        </View>
       )}
 
       {/* The field. */}
@@ -245,7 +332,9 @@ export default function FieldScreen() {
           ? 'Field visuals + audio preview. Connect a Lightpad on the phone to steer it.'
           : lightpad.connected
           ? running
-            ? '← → carrier   ↑ ↓ beat   press = intensity   · lift to rest'
+            ? nova.connected
+              ? '← → carrier   ↑ ↓ beat   press = intensity   ·   push + move head: pitch = rate, roll = balance'
+              : '← → carrier   ↑ ↓ beat   press = intensity   · lift to rest'
             : 'Ready — press Enter, then feel around the Lightpad.'
           : 'Connect a Lightpad Block above to steer the field by touch.'}
       </Text>
@@ -259,7 +348,8 @@ export default function FieldScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#070A0F', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28 },
-  setup: { minHeight: 92 },
+  setup: { minHeight: 150 },
+  setupRunning: { minHeight: 150, alignItems: 'center', justifyContent: 'center' },
   setupTitle: { color: COLORS.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111722', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#1B2430' },
@@ -269,6 +359,12 @@ const styles = StyleSheet.create({
   chipTxt: { color: COLORS.textMuted, fontSize: 13, fontWeight: '700' },
   chipTxtOn: { color: COLORS.textPrimary },
   chipHint: { color: COLORS.textMuted, fontSize: 11, marginLeft: 6 },
+  timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14, gap: 18 },
+  timerBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#141C28', alignItems: 'center', justifyContent: 'center' },
+  timerBtnTxt: { color: COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
+  timerVal: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '700', minWidth: 84, textAlign: 'center' },
+  countdown: { color: COLORS.textPrimary, fontSize: 34, fontWeight: '800', letterSpacing: 1 },
+  pushCue: { color: COLORS.accentGreen, fontSize: 12, fontWeight: '600', marginTop: 6 },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   halo: { position: 'absolute', width: 300, height: 300, borderRadius: 150 },
   orb: {
