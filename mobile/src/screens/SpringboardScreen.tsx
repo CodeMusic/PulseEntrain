@@ -30,7 +30,17 @@ export default function SpringboardScreen({ navigation }) {
           onPress={() => navigation.navigate('Manual')}
         />
         <View style={{ width: 12 }} />
+        <SpringboardCard
+          title="Field Meditation"
+          subtitle="Feel around the field · Lightpad"
+          accent={COLORS.accentGreen}
+          onPress={() => navigation.navigate('Field')}
+        />
+      </View>
+      <View style={styles.row}>
         <SpringboardCard title="AI Session" subtitle="Prompt → program" disabled />
+        <View style={{ width: 12 }} />
+        <View style={{ flex: 1 }} />
       </View>
 
       <Text style={styles.h2}>Programs</Text>

@@ -3,7 +3,7 @@ import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { imageSource } from '../catalog/data';
 
-export default function SpringboardCard({ title, subtitle, imageName, disabled, onPress, accent }) {
+export default function SpringboardCard({ title, subtitle, imageName, disabled, onPress, accent }: any) {
   const img = imageName ? imageSource(imageName) : null;
   return (
     <TouchableOpacity

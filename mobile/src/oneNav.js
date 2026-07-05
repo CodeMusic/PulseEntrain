@@ -11,6 +11,8 @@ export function pathFor(screen, params = {}) {
       return '/springboard';
     case 'Manual':
       return '/manual';
+    case 'Field':
+      return '/field';
     case 'Studio':
       return params && params.load ? `/studio?load=${encodeURIComponent(params.load)}` : '/studio';
     case 'About':
