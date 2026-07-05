@@ -27,7 +27,10 @@ const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
 const FIELD_BEAT_MIN = 0.5, FIELD_BEAT_MAX = 40; // binaural beat = audio + flash rate
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
 const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
-const HEAD_PITCH_SPAN = 40, HEAD_ROLL_SPAN = 35; // degrees of head travel for full swing
+// Tuned to a real Nova on a head: pitch swings ~±26° from where you start a push,
+// roll ~±25° from level. Spans are set so a comfortable tilt reaches the extremes
+// (full effect at ≈ span + dead-zone degrees). Retune if your range differs.
+const HEAD_PITCH_SPAN = 18, HEAD_ROLL_SPAN = 18; // degrees of head travel for full swing
 const HEAD_DEADZONE = 5; // degrees of slack — jitter/settle is ignored
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = 1; // flip to -1 if looking up slows instead of speeds
