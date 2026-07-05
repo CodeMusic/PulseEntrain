@@ -195,11 +195,9 @@ export default function PlayerScreen({ route, navigation }) {
         await TrackPlayer.reset();
       } catch (e) {}
     }
-    if (pulsetto.sessionActive) {
-      try {
-        await pulsetto.stopSession();
-      } catch (e) {}
-    }
+    try {
+      await pulsetto.stopSession(); // unconditional — provider uses live refs
+    } catch (e) {}
     try {
       nova.stopStrobe();
     } catch (e) {}
@@ -241,7 +239,7 @@ export default function PlayerScreen({ route, navigation }) {
           onEnded: () => {
             setSynthPlaying(false);
             logCompletion(synth.duration);
-            if (pulsetto.sessionActive) pulsetto.stopSession();
+            pulsetto.stopSession(); // unconditional — provider uses live refs
             if (wantNova && nova.connected) nova.stopStrobe();
           },
         });
@@ -332,7 +330,7 @@ export default function PlayerScreen({ route, navigation }) {
     if (playbackState?.state === State.Ended && !endedRef.current) {
       endedRef.current = true;
       logCompletion(tp.duration);
-      if (pulsetto.sessionActive) pulsetto.stopSession();
+      pulsetto.stopSession(); // unconditional — provider uses live refs
       if (wantNova && nova.connected) nova.stopStrobe();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

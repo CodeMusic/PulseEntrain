@@ -177,7 +177,7 @@ export default function ManualScreen() {
       setTimeout(() => { try { eng.stop(); } catch (e) {} }, 850);
     }
     try { nova.stopStrobe(); } catch (e) {}
-    if (pulsetto.sessionActive) { try { await pulsetto.stopSession(); } catch (e) {} }
+    try { await pulsetto.stopSession(); } catch (e) {} // unconditional — provider uses live refs
     logIfCounted();
     setRunning(false);
     setRemaining(0);

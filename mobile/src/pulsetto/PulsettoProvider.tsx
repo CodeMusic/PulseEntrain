@@ -315,11 +315,18 @@ export function PulsettoProvider({ children }) {
     return true;
   };
 
+  // Idempotent + safe to call unconditionally. Callers used to guard this with the
+  // React `sessionActive` STATE, but a stop fired from a stale closure (e.g. a
+  // session timer that completes minutes after start) saw that state as false and
+  // skipped the stop — leaving the stimulator buzzing (the keepalive kept
+  // re-asserting it). We instead gate on the LIVE ref here: if a session is truly
+  // active we ramp the device down; if not, it's a no-op (no stray stim blip).
   const stopSession = async () => {
+    const wasActive = sessionActiveRef.current;
     setSession(false);
     stopKeepalive();
     const device = connectedRef.current;
-    if (device) {
+    if (device && wasActive) {
       await sendCommand(CMD.rampUp, device);
       await sendCommand(CMD.rampDown, device);
       await sendCommand(CMD.rampDown, device); // endSession

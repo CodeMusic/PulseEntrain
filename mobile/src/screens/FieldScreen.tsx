@@ -136,7 +136,7 @@ export default function FieldScreen() {
       if (tickRef.current) clearInterval(tickRef.current);
       try { engineRef.current?.stop(); } catch (e) {}
       try { nova.stopStrobe(); } catch (e) {}
-      if (pulsetto.sessionActive) { try { pulsetto.stopSession(); } catch (e) {} }
+      try { pulsetto.stopSession(); } catch (e) {} // unconditional — always stop the stimulator
       KeepAwake.deactivate();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,7 +296,7 @@ export default function FieldScreen() {
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
     try { engineRef.current?.fadeOut(0.6); } catch (e) {}
     try { nova.stopStrobe(); } catch (e) {}
-    if (pulsetto.sessionActive) { try { await pulsetto.stopSession(); } catch (e) {} }
+    try { await pulsetto.stopSession(); } catch (e) {} // unconditional — provider uses live refs
     KeepAwake.deactivate();
   };
 
@@ -319,7 +319,7 @@ export default function FieldScreen() {
       setTimeout(() => { try { eng.stop(); } catch (e) {} }, 1050);
     }
     try { nova.stopStrobe(); } catch (e) {}
-    if (pulsetto.sessionActive) { try { await pulsetto.stopSession(); } catch (e) {} }
+    try { await pulsetto.stopSession(); } catch (e) {} // unconditional — provider uses live refs
     pushingRef.current = false;
     setPushing(false);
     setPaused(false);
