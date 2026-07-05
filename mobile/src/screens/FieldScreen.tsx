@@ -135,13 +135,14 @@ export default function FieldScreen() {
     return () => loop.stop();
   }, [breathe]);
 
-  // The outer ring pulses at the set binaural beat. Restart only when the beat
-  // changes by a step (so dragging doesn't thrash it). The half-period is floored
-  // at 50 ms (~10 Hz) so fast beats stay a gentle shimmer, not a strobe — unless
-  // Full frequency range is enabled in Settings (then it tracks the whole band).
+  // The outer ring pulses at the set binaural beat — but ONLY while a session is
+  // running (before you enter the field it sits still). Half-period floored at
+  // 50 ms (~10 Hz) so fast beats shimmer rather than strobe, unless Full frequency
+  // range is enabled in Settings (then it tracks the whole band).
   const pulse = useRef(new Animated.Value(0)).current;
   const pulseKey = Math.max(0.5, Math.round(beat * 2) / 2);
   useEffect(() => {
+    if (!running) { pulse.stopAnimation(); pulse.setValue(0); return; }
     const half = Math.max(fullBand ? 8 : 50, 1000 / pulseKey / 2);
     const loop = Animated.loop(
       Animated.sequence([
@@ -151,7 +152,25 @@ export default function FieldScreen() {
     );
     loop.start();
     return () => loop.stop();
-  }, [pulseKey, fullBand, pulse]);
+  }, [pulseKey, fullBand, running, pulse]);
+
+  // Inner circle breathes at the biphotic beat rate, but only when one is set
+  // (a left/right flash difference). Subtle — it just swells a little.
+  const innerPulse = useRef(new Animated.Value(0)).current;
+  const biphActive = running && biphotic >= 0.5;
+  const biphKey = Math.max(0.5, Math.round(biphotic * 2) / 2);
+  useEffect(() => {
+    if (!biphActive) { innerPulse.stopAnimation(); innerPulse.setValue(0); return; }
+    const half = Math.max(fullBand ? 8 : 50, 1000 / biphKey / 2);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(innerPulse, { toValue: 1, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(innerPulse, { toValue: 0, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [biphActive, biphKey, fullBand, innerPulse]);
 
   const logIfCounted = () => {
     if (!startRef.current || !sessions) return;
@@ -474,8 +493,12 @@ export default function FieldScreen() {
 
   const core = carrierColorVibrant(carrier);
   const halo = carrierColor(carrier);
-  const orbScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.06] });
-  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.14] }); // beats
+  // Outer ring: still until running, then pulses out at the beat. Inner orb: a
+  // slight swell at the biphotic rate when set, else a slow calm breath.
+  const haloScale = running ? pulse.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.14] }) : 1;
+  const orbScale = biphActive
+    ? innerPulse.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.03] })
+    : breathe.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.04] });
   const haloOpacity = 0.2 + 0.55 * intensity;
   const band = bandFor(beat);
 
