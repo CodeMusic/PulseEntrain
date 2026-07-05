@@ -1,5 +1,9 @@
 # Field Mode — next phase plan (draft)
 
+> **This is the internal engineering plan.** For the *concept* of Field Meditation
+> Mode — the binaural field, resonance, and how to use it — see
+> **[FIELD_MEDITATION.md](FIELD_MEDITATION.md)**.
+
 Two additions to Field Meditation Mode:
 1. **Draw to the Lightpad Block LEDs** (visual feedback on the pad itself).
 2. **On-screen "simulated Lightpad"** for people without the hardware.

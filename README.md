@@ -24,8 +24,8 @@ Build your own session by hand:
 ### 3. Field Meditation Mode *(mobile)*
 An immersive, eyes-closed mode where you **feel around** a binaural *field* instead of setting sliders. A glowing circle shows the carrier (colour + centre), the binaural beat, and the "biphotic" (left/right light) beat. With the devices on, one gesture moves the whole field:
 - **Touch** a **ROLI Lightpad Block** — left↔right = carrier, up↔down = beat, press = intensity.
-- **Gaze** — press and move your head; the **Lumenate Nova**'s accelerometer reads pitch (→ beat/flash rate) and roll (→ per-eye "biphotic" balance).
-- **Release** and the tuning **locks in place** to absorb, reflect, and emit.
+- **Gaze** — press and move your head; the **Lumenate Nova**'s accelerometer reads pitch (→ *bends* the beat a few Hz) and roll (→ opens the per-eye "biphotic" beat, re-syncing when you move to a new spot).
+- **Release** and the beat/carrier **lock in place** to absorb, reflect, and emit.
 
 It has a timer, counts toward your daily goal, and blends light + audio + gentle Pulsetto. → **Read the full guide: [docs/FIELD_MEDITATION.md](docs/FIELD_MEDITATION.md)** — the science of carrier / binaural / biphotic beats, written with a bit of flair.
 

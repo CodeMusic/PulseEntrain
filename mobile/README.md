@@ -23,9 +23,10 @@ See the platform overview in the [root README](../README.md), the authoring tool
 - **[Field Meditation Mode](../docs/FIELD_MEDITATION.md)** — immersive, eyes-closed. A glowing circle
   shows carrier (colour) / binaural beat / **biphotic beat**; the circle *is* the control (tap to
   enter, tap to pause → Resume/Stop). Press a **Lightpad** and feel around (x = carrier, y = beat,
-  press = intensity); or press + move your head and the **Nova accelerometer** steers it (pitch →
-  beat/flash rate, roll → per-eye biphotic balance) — release and the tuning locks. Has a timer and
-  logs toward the daily goal. See the [full guide](../docs/FIELD_MEDITATION.md).
+  press = intensity); or press + move your head and the **Nova accelerometer** sculpts it (pitch
+  *bends* the beat a few Hz from where your finger set it, roll opens the per-eye **biphotic beat**,
+  re-syncing on a finger move / release) — release and the beat/carrier lock. Has a timer and logs
+  toward the daily goal. See the [full guide](../docs/FIELD_MEDITATION.md).
 - **Devices (BLE)** — **Pulsetto** intensity tracks the session (and always ramps down when a session
   ends, even on a timer completion); **Lumenate Nova** strobes in sync with the live beat (clamped to
   `nova.maxHz`, default 60 Hz — delta→gamma), per-eye, and can also feed head-motion into Field mode.
