@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, Text, TextInput, Switch, Alert, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { useSettings } from '../settings/SettingsProvider';
 
@@ -7,7 +7,7 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength } = s;
 
   // Turning the safety off requires an explicit acknowledgement; turning it back
   // on is immediate.
@@ -78,6 +78,28 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <Text style={styles.section}>Devices</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Pulsetto strength</Text>
+            <Text style={styles.hint}>
+              Default vagus-nerve intensity a session starts at (1–7). In Field mode, pressing the
+              block adds +2 on top (up to 9) while you hold.
+            </Text>
+          </View>
+          <View style={styles.stepper}>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => setPulsettoStrength((pulsettoStrength || 4) - 1)}>
+              <Text style={styles.stepTxt}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.stepVal}>{pulsettoStrength || 4}</Text>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => setPulsettoStrength((pulsettoStrength || 4) + 1)}>
+              <Text style={styles.stepTxt}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
       <Text style={styles.section}>Field mode</Text>
       <View style={styles.card}>
         <View style={styles.row}>
@@ -135,5 +157,9 @@ const styles = StyleSheet.create({
   label: { color: COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
   input: { backgroundColor: COLORS.bgCardLight, color: COLORS.textPrimary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, marginTop: 10 },
   hint: { color: COLORS.textMuted, fontSize: 12, lineHeight: 17, marginTop: 8 },
+  stepper: { flexDirection: 'row', alignItems: 'center' },
+  stepBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bgCardLight, alignItems: 'center', justifyContent: 'center' },
+  stepTxt: { color: COLORS.textPrimary, fontSize: 22, fontWeight: '700' },
+  stepVal: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '700', minWidth: 30, textAlign: 'center' },
   foot: { color: COLORS.textMuted, fontSize: 12, lineHeight: 18, marginTop: 22 },
 });

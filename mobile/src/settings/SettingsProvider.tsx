@@ -11,6 +11,7 @@ const KEY_MIX = '@pulseentrain/mixWithOthers';
 const KEY_DEV = '@pulseentrain/devMode';
 const KEY_FULLBAND = '@pulseentrain/fullBand'; // opt out of photosensitivity safeties
 const KEY_RELATIVE = '@pulseentrain/relativeControl'; // Field: relative (drag-delta) vs absolute pad
+const KEY_STIM = '@pulseentrain/pulsettoStrength'; // default Pulsetto session strength (1–7)
 
 const SettingsContext = createContext(null);
 export const useSettings = () => useContext(SettingsContext);
@@ -21,6 +22,7 @@ export function SettingsProvider({ children }) {
   const [devMode, setDevState] = useState(false); // show on-screen diagnostics
   const [fullBand, setFullBandState] = useState(false); // opt out: full pulse range, no photo prompts
   const [relativeControl, setRelState] = useState(false); // Field: drag-delta control vs absolute pad
+  const [pulsettoStrength, setStimState] = useState(4); // default session strength (1–7); push adds +2
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -38,6 +40,8 @@ export function SettingsProvider({ children }) {
         setFullBandState(fb === '1');
         const rc = await AsyncStorage.getItem(KEY_RELATIVE);
         setRelState(rc === '1');
+        const st = parseInt(await AsyncStorage.getItem(KEY_STIM), 10);
+        if (Number.isFinite(st)) setStimState(Math.max(1, Math.min(7, st)));
       } catch (e) {
       } finally {
         setLoaded(true);
@@ -71,8 +75,14 @@ export function SettingsProvider({ children }) {
     AsyncStorage.setItem(KEY_RELATIVE, on ? '1' : '0').catch(() => {});
   };
 
+  const setPulsettoStrength = v => {
+    const n = Math.max(1, Math.min(7, Math.round(Number(v) || 1)));
+    setStimState(n);
+    AsyncStorage.setItem(KEY_STIM, String(n)).catch(() => {});
+  };
+
   return (
-    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, loaded }}>
+    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, loaded }}>
       {children}
     </SettingsContext.Provider>
   );

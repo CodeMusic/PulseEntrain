@@ -34,7 +34,7 @@ const LP_FLIP_Y = true; // block Y reads inverted for beat
 const FIELD_BEAT_MIN = 0.5; // near-zero binaural beat / flash floor
 const FIELD_BEAT_SAFE = 15; // beat/flash ceiling with photosensitivity safeties on
 const FIELD_BEAT_FULL = 30; // ceiling with Full frequency range (safeties off)
-const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
+const PUSH_STIM_BOOST = 2; // pressing the block adds this to the Pulsetto strength (capped at 9)
 const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
 // Head control (Nova accelerometer, while pressing). Roll opens the biphotic beat;
 // pitch only *bends* the finger-set beat. Both are relative to your pose when the
@@ -81,6 +81,9 @@ export default function FieldScreen() {
   relativeRef.current = !!(settings && settings.relativeControl);
   const lastXNRef = useRef(null); // previous finger position (relative-mode delta); null = fresh touch
   const lastYNRef = useRef(null);
+  // Default Pulsetto session strength (Settings); pressing the block adds +2 while held.
+  const pulseStrengthRef = useRef(4);
+  pulseStrengthRef.current = (settings && settings.pulsettoStrength) || 4;
 
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
@@ -117,7 +120,6 @@ export default function FieldScreen() {
   const headRef = useRef(null); // smoothed { pitch, roll }
   const uiRef = useRef(0);
   const novaBrightRef = useRef(0);
-  const pulseRef = useRef(0);
 
   const endRef = useRef(0);
   const startRef = useRef(null);
@@ -204,7 +206,7 @@ export default function FieldScreen() {
     sessions.logSession({
       plannedSeconds: planned,
       actualSeconds: actual,
-      strength: pulsetto.connected ? FIELD_PULSE_INTENSITY : null,
+      strength: pulsetto.connected ? pulseStrengthRef.current : null,
       kind: 'field',
     });
     startRef.current = null;
@@ -325,6 +327,8 @@ export default function FieldScreen() {
       baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
       beatBendRef.current = 0;
       carrierBendRef.current = 0;
+      // Release the +2 stim boost back to the base strength.
+      if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) pulsetto.setIntensity(pulseStrengthRef.current);
       applyField();
     };
     lightpad.setNoteListener(ev => {
@@ -346,14 +350,15 @@ export default function FieldScreen() {
         const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1);
         if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(i);
         if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
-        if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) {
-          throttle(pulseRef, 1000, () => pulsetto.setIntensity(Math.round(mapRange(i, 0.2, 1, 2, 6))));
-        }
         uiTick(() => setIntensity(i));
         const nowPushing = ev.value >= PUSH_THRESHOLD;
         if (nowPushing && !pushingRef.current) {
           pushingRef.current = true; setPushing(true);
           cancelFade(); // pressing to edit stops the auto-sync so roll can set the biphotic
+          // Pressing boosts the vagus stim by +2 (up to 9) while held.
+          if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) {
+            pulsetto.setIntensity(Math.min(9, pulseStrengthRef.current + PUSH_STIM_BOOST));
+          }
           const h = headRef.current;
           centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
           centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
@@ -439,7 +444,7 @@ export default function FieldScreen() {
     e.start({ carrier, beat, volume: intensity, background: 'none' });
     e.fadeIn(1.2);
     if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); nova.setBalance(0); }
-    if (pulsetto.connected) { try { await pulsetto.startSession(FIELD_PULSE_INTENSITY); } catch (er) {} }
+    if (pulsetto.connected) { try { await pulsetto.startSession(pulseStrengthRef.current); } catch (er) {} }
     startRef.current = { time: Date.now(), plannedSeconds: timerMin * 60 };
     endRef.current = Date.now() + timerMin * 60 * 1000;
     setRemaining(timerMin * 60);
@@ -465,7 +470,7 @@ export default function FieldScreen() {
     try { engineRef.current?.fadeIn(0.6); } catch (e) {}
     const liveBeat = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
     if (nova.connected) { nova.startStrobe(liveBeat); nova.setMasterBrightness(intensity); nova.setBalance(balanceRef.current); }
-    if (pulsetto.connected) { try { await pulsetto.startSession(FIELD_PULSE_INTENSITY); } catch (e) {} }
+    if (pulsetto.connected) { try { await pulsetto.startSession(pulseStrengthRef.current); } catch (e) {} }
     endRef.current = Date.now() + remaining * 1000;
     KeepAwake.activate();
     startTimerTick();
