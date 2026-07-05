@@ -29,6 +29,8 @@ import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 //                   |left − right| shown). It LOCKS on release, and ANY touch of the
 //                   block eases the eyes back to sync over ~5 s (press+roll re-opens).
 const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
+const LP_FLIP_X = true; // block X reads inverted for carrier (flip either if an axis feels backwards)
+const LP_FLIP_Y = true; // block Y reads inverted for beat
 const FIELD_BEAT_MIN = 0.5; // near-zero binaural beat / flash floor
 const FIELD_BEAT_SAFE = 15; // beat/flash ceiling with photosensitivity safeties on
 const FIELD_BEAT_FULL = 30; // ceiling with Full frequency range (safeties off)
@@ -248,10 +250,12 @@ export default function FieldScreen() {
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
     const fromFinger = () => {
-      const xN = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
-      const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
+      const xR = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
+      const yR = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
+      const xN = LP_FLIP_X ? 1 - xR : xR;
+      const yN = LP_FLIP_Y ? 1 - yR : yR;
       const newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-      const newB = FIELD_BEAT_MIN + (1 - yN) * (beatMaxRef.current - FIELD_BEAT_MIN); // block Y reads inverted
+      const newB = FIELD_BEAT_MIN + yN * (beatMaxRef.current - FIELD_BEAT_MIN);
       // A meaningful move (not MPE jitter) re-syncs the biphotic beat: roll is a
       // fine-tune *at* a position, so a new position starts balanced. Re-anchor the
       // roll centre to the current head so rolling from here re-opens it.
@@ -450,7 +454,8 @@ export default function FieldScreen() {
 
   const toggleLightpad = () => {
     if (IS_WEB) return nativeOnlyNotice('Lightpad Block');
-    lightpad.connected ? lightpad.disconnect() : lightpad.connect();
+    if (lightpad.connected) lightpad.disconnect();
+    else if (lightpad.status !== 'scanning') lightpad.connect(); // don't restart a scan in progress
   };
   const togglePulsetto = () => {
     if (IS_WEB) return nativeOnlyNotice('Pulsetto');
@@ -461,6 +466,7 @@ export default function FieldScreen() {
   const toggleNova = () => {
     if (IS_WEB) return nativeOnlyNotice('Lumenate Nova');
     if (nova.connected) { nova.disconnect(); return; }
+    if (nova.status === 'scanning') return; // already trying — let the scan finish
     if (fullBand) return void connectNova(); // safeties opted out in Settings — skip the prompt
     Alert.alert(
       '⚠️ Photosensitivity warning',
@@ -510,7 +516,7 @@ export default function FieldScreen() {
   const band = bandFor(beat);
 
   const Chip = ({ label, on, onPress, hint }: any) => (
-    <TouchableOpacity style={[styles.chip, on && styles.chipOn]} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={[styles.chip, on && styles.chipOn]} onPress={onPress} activeOpacity={0.8} hitSlop={10}>
       <Text style={[styles.chipDot, on && styles.chipDotOn]}>●</Text>
       <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{label}</Text>
       {hint ? <Text style={styles.chipHint}>{hint}</Text> : null}
