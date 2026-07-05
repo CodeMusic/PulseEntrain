@@ -246,7 +246,7 @@ export default function FieldScreen() {
       const xN = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
       const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
       const newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-      const newB = FIELD_BEAT_MIN + yN * (FIELD_BEAT_MAX - FIELD_BEAT_MIN);
+      const newB = FIELD_BEAT_MIN + (1 - yN) * (FIELD_BEAT_MAX - FIELD_BEAT_MIN); // block Y reads inverted
       // A meaningful move (not MPE jitter) re-syncs the biphotic beat: roll is a
       // fine-tune *at* a position, so a new position starts balanced. Re-anchor the
       // roll centre to the current head so rolling from here re-opens it.
@@ -571,6 +571,11 @@ export default function FieldScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Field coordinate: x = carrier · y = binaural beat · z = biphotic beat. */}
+      <Text style={styles.coords}>
+        ( x {Math.round(carrier)}  ·  y {beat.toFixed(1)}  ·  z {biphotic.toFixed(1)} )
+      </Text>
+
       {/* Bottom: a subtle cue (hidden while paused — controls live in the circle). */}
       {!paused ? (
         <Text style={styles.hint}>
@@ -625,6 +630,7 @@ const styles = StyleSheet.create({
   stopCircleBtn: { backgroundColor: 'rgba(20,10,14,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
   circleBtnTxt: { fontSize: 14, fontWeight: '800', color: '#0B0E13' },
   stopBtnTxt: { color: '#FFFFFF' },
+  coords: { color: '#9FB2C6', fontSize: 13, fontWeight: '700', fontFamily: 'Courier', textAlign: 'center', letterSpacing: 0.5, marginBottom: 8 },
   hint: { color: COLORS.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18, minHeight: 34 },
   devTxt: { color: '#8FE3C2', fontSize: 11, lineHeight: 16, fontFamily: 'Courier' },
   devRates: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 },
