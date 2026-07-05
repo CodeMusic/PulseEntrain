@@ -14,28 +14,29 @@ import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 // Field Meditation Mode — an immersive, eyes-closed frame around the Manual
 // engine. Wearing beats + Nova (light) + Pulsetto, you "feel around" a ROLI
-// Lightpad Block and one touch moves the whole *field*:
+// Lightpad Block; one touch moves the whole *field*:
 //   left↔right (glide) → carrier frequency
 //   up↔down    (slide) → beat / flash rate
 //   press (Z)          → field intensity: volume + light brightness + gentle stim
 //
-// PUSH + HEAD (Nova accelerometer): while you're actively pressing on the block,
-// your head takes over the light rhythm (the block has no motion sensor, the Nova
-// does):
-//   head pitch (look up/down) → flash + beat rate for BOTH eyes (down ≈ 0.5 Hz,
-//                               far up ≈ 40 Hz)
-//   head roll  (tilt L/R)     → flash balance: centred = both in sync; lean left
-//                               slows the left eye toward stop, lean right the
-//                               right eye.
-// These engage only during a firm press; carrier (X) and loudness (Z) keep
-// working. Lift and the rhythm returns to your touch position.
-const CARR_MIN = 80, CARR_MAX = 500; // full carrier sweep across the pad's width
-const BEAT_MIN = 1, BEAT_MAX = 40; // beat / flash-rate sweep across its height
+// PRESS-TO-ENGAGE HEAD CONTROL (the block has no motion sensor — the Nova does):
+// while you are actively pressing, you can EITHER drag your finger (carrier/beat
+// as usual) OR move your head to sculpt the LIGHT:
+//   head pitch (up/down) → common flash rate for both eyes (0.5 Hz … max)
+//   head roll  (tilt L/R) → slows the LED bank you lean toward (per-eye rate);
+//                           the other side keeps its rate
+// The light decouples from the audio beat while you do this; the audio only
+// *bends subtly* (a small beat/carrier nudge) so the head move feels like an
+// effect. Everything PERSISTS after you release — you've set the light. Dragging
+// your finger keeps steering carrier/beat throughout.
+const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
+const BEAT_MIN = 1, BEAT_MAX = 40; // touch beat / audio range
+const LIGHT_RATE_MIN = 0.5, LIGHT_RATE_MAX = 40; // head-driven flash-rate range
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
-// Head control (tune on device — accelerometer sign depends on how the Nova sits):
 const PUSH_THRESHOLD = 40; // pressure (0–127) above which head control engages
-const PITCH_DOWN_DEG = -40, PITCH_UP_DEG = 40; // head-pitch span → rate 0.5…40 Hz
-const ROLL_MAX_DEG = 35; // head-roll span → full left/right flash balance
+const HEAD_PITCH_SPAN = 40, HEAD_ROLL_SPAN = 35; // degrees of head travel for full swing
+const HEAD_DEADZONE = 4; // degrees before head control engages (ignore jitter)
+const BEAT_BEND = 2.5, CARR_BEND = 6; // subtle, persistent audio bend (Hz) from head
 const FIELD_PITCH_SIGN = 1; // flip to -1 if looking up slows instead of speeds
 const FIELD_ROLL_SIGN = 1; // flip to -1 if leaning left slows the wrong eye
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -49,39 +50,48 @@ export default function FieldScreen() {
   const sessions = useSessions();
 
   const [carrier, setCarrier] = useState(200);
-  const [beat, setBeat] = useState(10);
-  const [intensity, setIntensity] = useState(0.7); // 0..1 field intensity (volume/brightness)
+  const [beat, setBeat] = useState(10); // shown value: audio beat, or light rate while head-driven
+  const [intensity, setIntensity] = useState(0.7);
   const [timerMin, setTimerMin] = useState(15);
   const [remaining, setRemaining] = useState(0);
   const [running, setRunning] = useState(false);
-  const [pushing, setPushing] = useState(false); // for the UI cue
+  const [pushing, setPushing] = useState(false);
 
   const engineRef = useRef(null);
   const runningRef = useRef(false);
   runningRef.current = running;
 
-  // Lightpad decode state: base cell + fine bend/slide offsets (see Manual mode).
+  // Lightpad decode + field state.
   const colRef = useRef(2);
   const rowRef = useRef(2);
   const bendRef = useRef(0);
   const slideRef = useRef(0);
-  const yBeatRef = useRef(10); // last touch-derived beat (restored when a push ends)
+  const carrierBaseRef = useRef(200); // finger-derived carrier before head bend
+  const yBeatRef = useRef(10); // finger-derived beat before head bend
+  const beatBendRef = useRef(0); // persistent subtle audio-beat bend from head
+  const carrierBendRef = useRef(0); // persistent subtle carrier bend from head
   const pushingRef = useRef(false);
-  const headRef = useRef(null); // latest { pitch, roll } sample
+  // Light rhythm (may be head-driven, decoupled from the audio beat, and persists).
+  const lightHeadRef = useRef(false); // has the head taken over the light this session?
+  const lightRateRef = useRef(10);
+  const balanceRef = useRef(0);
+  const centerRef = useRef({ pitch: 0, roll: 0 }); // head pose captured at push-engage
+  const anchorRateRef = useRef(10); // light rate at push-engage (deltas move from here)
+  const anchorBalRef = useRef(0);
+  const headRef = useRef(null); // latest { pitch, roll }
   const uiRef = useRef(0);
   const novaBrightRef = useRef(0);
   const pulseRef = useRef(0);
 
-  // Timer / goal tracking.
+  // Timer / goal.
   const endRef = useRef(0);
-  const startRef = useRef(null); // { time, plannedSeconds }
+  const startRef = useRef(null);
   const tickRef = useRef(null);
 
   const ensureEngine = () => {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
     return engineRef.current;
   };
-
   const uiTick = fn => {
     const now = Date.now();
     if (now - uiRef.current > 66) { uiRef.current = now; fn(); }
@@ -91,8 +101,6 @@ export default function FieldScreen() {
     if (now - ref.current > ms) { ref.current = now; fn(); }
   };
 
-  // Slow "breathing" of the field orb — calm, not at the beat rate (a screen
-  // flashing at the beat would be both useless and seizure-adjacent).
   const breathe = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -118,7 +126,6 @@ export default function FieldScreen() {
     startRef.current = null;
   };
 
-  // Tear down on unmount (leaving the screen ends + logs the session).
   useEffect(
     () => () => {
       logIfCounted();
@@ -132,42 +139,46 @@ export default function FieldScreen() {
     [],
   );
 
-  // Lightpad → carrier (X) always; beat (Y) only when NOT pushing (a firm press
-  // hands the rhythm to the head). Press → field intensity + the push gate.
+  // Drive the audio (and, when not head-driven, the light) from the current
+  // finger position + any persistent head bend.
+  const applyAudio = () => {
+    const c = clamp(carrierBaseRef.current + carrierBendRef.current, 60, 1100);
+    const b = clamp(yBeatRef.current + beatBendRef.current, BEAT_MIN, BEAT_MAX);
+    if (runningRef.current && engineRef.current) {
+      engineRef.current.glideCarrier(c, 0.12);
+      engineRef.current.glideBeat(b, 0.12);
+    }
+    if (runningRef.current && nova.connected && !lightHeadRef.current) {
+      nova.setFrequency(b); // light follows the beat until the head takes over
+      lightRateRef.current = b;
+    }
+    uiTick(() => {
+      setCarrier(Math.round(c));
+      if (!lightHeadRef.current) setBeat(Math.round(b * 10) / 10);
+    });
+  };
+
+  // Lightpad touch → carrier/beat/intensity + the push gate.
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
-    const applyField = () => {
+    const fromFinger = () => {
       const xN = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
-      const c = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-      if (runningRef.current && engineRef.current) engineRef.current.glideCarrier(c, 0.12);
       const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
-      const b = BEAT_MIN + yN * (BEAT_MAX - BEAT_MIN);
-      yBeatRef.current = b;
-      if (!pushingRef.current) {
-        if (runningRef.current && engineRef.current) engineRef.current.glideBeat(b, 0.12);
-        if (runningRef.current && nova.connected) nova.setFrequency(b);
-        uiTick(() => setBeat(Math.round(b * 10) / 10));
-      }
-      uiTick(() => setCarrier(Math.round(c)));
-    };
-    const endPush = () => {
-      if (!pushingRef.current) return;
-      pushingRef.current = false;
-      setPushing(false);
-      if (runningRef.current && nova.connected) { nova.setBalance(0); nova.setFrequency(yBeatRef.current); }
-      if (runningRef.current && engineRef.current) engineRef.current.glideBeat(yBeatRef.current, 0.25);
+      carrierBaseRef.current = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
+      yBeatRef.current = BEAT_MIN + yN * (BEAT_MAX - BEAT_MIN);
+      applyAudio();
     };
     lightpad.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
-        applyField();
+        fromFinger();
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL; // glide → carrier columns (X)
-        applyField();
+        fromFinger();
       } else if (ev.type === 'cc' && ev.controller === 74) {
         slideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1); // slide → beat rows (Y)
-        applyField();
+        fromFinger();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field intensity
         if (runningRef.current && engineRef.current) engineRef.current.setVolume(i);
@@ -176,19 +187,28 @@ export default function FieldScreen() {
           throttle(pulseRef, 1000, () => pulsetto.setIntensity(Math.round(mapRange(i, 0.2, 1, 2, 6))));
         }
         uiTick(() => setIntensity(i));
-        // Push gate: a firm press hands the flash rhythm to the head.
+        // Push gate — a firm press lets the head sculpt the light (see motion effect).
         const nowPushing = ev.value >= PUSH_THRESHOLD;
-        if (nowPushing && !pushingRef.current) { pushingRef.current = true; setPushing(true); }
-        else if (!nowPushing) endPush();
+        if (nowPushing && !pushingRef.current) {
+          pushingRef.current = true; setPushing(true);
+          const h = headRef.current;
+          centerRef.current = { pitch: h ? h.pitch : 0, roll: h ? h.roll : 0 };
+          anchorRateRef.current = lightRateRef.current; // move light from where it is now
+          anchorBalRef.current = balanceRef.current;
+        } else if (!nowPushing && pushingRef.current) {
+          pushingRef.current = false; setPushing(false); // release: everything PERSISTS
+        }
       } else if (ev.type === 'noteOff') {
-        endPush();
+        if (pushingRef.current) { pushingRef.current = false; setPushing(false); }
       }
     });
     return () => lightpad.setNoteListener(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightpad.connected]);
 
-  // Nova head motion → light rhythm, but only while pushing on the block.
+  // Nova head motion → LIGHT rhythm, only while pressing. Deltas from the head
+  // pose captured at push-engage, applied on top of the anchored light rate, so
+  // there's no jump. Audio only bends subtly. All of it persists after release.
   useEffect(() => {
     if (!running || !nova.connected || !nova.setMotionListener) return;
     nova.setTelemetryRate(1); // wake the accelerometer stream
@@ -196,15 +216,28 @@ export default function FieldScreen() {
       if (!pushingRef.current || !runningRef.current) return;
       const s = headRef.current;
       if (!s) return;
-      const rate = clamp(
-        mapRange(FIELD_PITCH_SIGN * s.pitch, PITCH_DOWN_DEG, PITCH_UP_DEG, BEAT_MIN, BEAT_MAX),
-        BEAT_MIN, BEAT_MAX,
-      );
-      const bal = clamp((FIELD_ROLL_SIGN * s.roll) / ROLL_MAX_DEG, -1, 1);
-      nova.setFrequency(rate); // both eyes' base rate (balance biases per eye)
+      const dPitch = (s.pitch - centerRef.current.pitch) * FIELD_PITCH_SIGN;
+      const dRoll = (s.roll - centerRef.current.roll) * FIELD_ROLL_SIGN;
+      if (!lightHeadRef.current && Math.abs(dPitch) < HEAD_DEADZONE && Math.abs(dRoll) < HEAD_DEADZONE) return;
+      lightHeadRef.current = true; // head owns the light from here on (persists)
+      // Common flash rate from pitch — full 0.5…max reachable by tilting; anchored
+      // so a still head holds the current rate.
+      const swing = LIGHT_RATE_MAX - LIGHT_RATE_MIN;
+      const rate = clamp(anchorRateRef.current + mapRange(dPitch, -HEAD_PITCH_SPAN, HEAD_PITCH_SPAN, -swing, swing), LIGHT_RATE_MIN, LIGHT_RATE_MAX);
+      // Per-eye balance from roll — leaning slows the near side toward stop.
+      const bal = clamp(anchorBalRef.current + dRoll / HEAD_ROLL_SPAN, -1, 1);
+      lightRateRef.current = rate;
+      balanceRef.current = bal;
+      nova.setFrequency(rate);
       nova.setBalance(bal);
-      if (engineRef.current) engineRef.current.glideBeat(rate, 0.15);
-      uiTick(() => setBeat(Math.round(rate * 10) / 10));
+      // Subtle, persistent audio bend so the head move is audible as an effect.
+      beatBendRef.current = mapRange(dPitch, -HEAD_PITCH_SPAN, HEAD_PITCH_SPAN, -BEAT_BEND, BEAT_BEND);
+      carrierBendRef.current = mapRange(dRoll, -HEAD_ROLL_SPAN, HEAD_ROLL_SPAN, -CARR_BEND, CARR_BEND);
+      if (engineRef.current) {
+        engineRef.current.glideBeat(clamp(yBeatRef.current + beatBendRef.current, BEAT_MIN, BEAT_MAX), 0.15);
+        engineRef.current.glideCarrier(clamp(carrierBaseRef.current + carrierBendRef.current, 60, 1100), 0.15);
+      }
+      uiTick(() => setBeat(Math.round(rate * 10) / 10)); // show the light rate you're sculpting
     };
     nova.setMotionListener(s => { headRef.current = s; applyHead(); });
     return () => { try { nova.setMotionListener(null); } catch (e) {} };
@@ -214,7 +247,15 @@ export default function FieldScreen() {
   const start = async () => {
     const e = ensureEngine();
     e.start({ carrier, beat, volume: intensity, background: 'none' });
-    e.fadeIn(1.2); // ease into the field
+    e.fadeIn(1.2);
+    // Fresh session: light re-links to the beat, bends cleared.
+    lightHeadRef.current = false;
+    balanceRef.current = 0;
+    beatBendRef.current = 0;
+    carrierBendRef.current = 0;
+    lightRateRef.current = beat;
+    yBeatRef.current = beat;
+    carrierBaseRef.current = carrier;
     if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); nova.setBalance(0); }
     if (pulsetto.connected) { try { await pulsetto.startSession(FIELD_PULSE_INTENSITY); } catch (er) {} }
     startRef.current = { time: Date.now(), plannedSeconds: timerMin * 60 };
@@ -247,7 +288,6 @@ export default function FieldScreen() {
     KeepAwake.deactivate();
   };
 
-  // Device connect toggles (mirror Manual's, minus the sliders).
   const toggleLightpad = () => {
     if (IS_WEB) return nativeOnlyNotice('Lightpad Block');
     lightpad.connected ? lightpad.disconnect() : lightpad.connect();
@@ -287,7 +327,6 @@ export default function FieldScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Setup — hidden once you enter the field for a clean, dark space. */}
       {!running ? (
         <View style={styles.setup}>
           <Text style={styles.setupTitle}>Wear your devices, set a time, then feel around the block.</Text>
@@ -313,11 +352,10 @@ export default function FieldScreen() {
       ) : (
         <View style={styles.setupRunning}>
           <Text style={styles.countdown}>{fmtTime(remaining)}</Text>
-          {pushing ? <Text style={styles.pushCue}>◉ head control — pitch = rate · roll = balance</Text> : null}
+          {pushing ? <Text style={styles.pushCue}>◉ pushing — drag to steer, or move your head to sculpt the light</Text> : null}
         </View>
       )}
 
-      {/* The field. */}
       <View style={styles.stage}>
         <Animated.View style={[styles.halo, { backgroundColor: halo, opacity: haloOpacity, transform: [{ scale: orbScale }] }]} />
         <Animated.View style={[styles.orb, { backgroundColor: core, shadowColor: core, transform: [{ scale: orbScale }] }]} />
@@ -333,8 +371,8 @@ export default function FieldScreen() {
           : lightpad.connected
           ? running
             ? nova.connected
-              ? '← → carrier   ↑ ↓ beat   press = intensity   ·   push + move head: pitch = rate, roll = balance'
-              : '← → carrier   ↑ ↓ beat   press = intensity   · lift to rest'
+              ? 'drag: ← → carrier · ↑ ↓ beat · press = intensity   ·   push + head: pitch = flash rate, roll = side balance'
+              : 'drag: ← → carrier · ↑ ↓ beat · press = intensity'
             : 'Ready — press Enter, then feel around the Lightpad.'
           : 'Connect a Lightpad Block above to steer the field by touch.'}
       </Text>
@@ -364,7 +402,7 @@ const styles = StyleSheet.create({
   timerBtnTxt: { color: COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
   timerVal: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '700', minWidth: 84, textAlign: 'center' },
   countdown: { color: COLORS.textPrimary, fontSize: 34, fontWeight: '800', letterSpacing: 1 },
-  pushCue: { color: COLORS.accentGreen, fontSize: 12, fontWeight: '600', marginTop: 6 },
+  pushCue: { color: COLORS.accentGreen, fontSize: 12, fontWeight: '600', marginTop: 6, textAlign: 'center' },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   halo: { position: 'absolute', width: 300, height: 300, borderRadius: 150 },
   orb: {
