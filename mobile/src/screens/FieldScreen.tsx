@@ -26,8 +26,8 @@ import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 //                   touch too). Bends bake into the base on release.
 //           roll  → the BIPHOTIC beat: while pressing, rolling from your entry pose
 //                   slows the eye you lean toward (±5° balanced … ±30° to 0.5 Hz;
-//                   |left − right| shown). It LOCKS on release; a quick tap of the
-//                   block gently re-syncs the eyes over ~5 s.
+//                   |left − right| shown). It LOCKS on release, and ANY touch of the
+//                   block eases the eyes back to sync over ~5 s (press+roll re-opens).
 const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
 const FIELD_BEAT_MIN = 0.5, FIELD_BEAT_MAX = 40; // binaural beat = audio + flash rate
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
@@ -39,8 +39,7 @@ const ROLL_DEADZONE = 5, ROLL_MAX = 30; // roll: ±5° = balanced, ±30° slows 
 const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for a full bend
 const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
 const CARR_BEND_MAX = 12; // Hz — carrier bend alongside it, big enough to actually hear
-const TAP_MS = 350; // a touch shorter than this that never pressed = a "tap"
-const BIPHOTIC_FADE_MS = 5000; // a tap re-syncs the eyes gently over this long
+const BIPHOTIC_FADE_MS = 5000; // any touch eases the eyes back to sync over this long
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
 const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
@@ -88,10 +87,6 @@ export default function FieldScreen() {
   const pushingRef = useRef(false);
   const centerPitchRef = useRef(0); // head pitch captured at push-engage (bend anchor)
   const centerRollRef = useRef(0); // head roll captured at push / finger-move (biphotic zero)
-  const touchStartRef = useRef(0); // time of the current touch's noteOn (tap detection)
-  const touchPushedRef = useRef(false); // did this touch cross the press threshold?
-  const preTapBeatRef = useRef(10); // base beat/carrier before the touch (restored on a tap)
-  const preTapCarrierRef = useRef(200);
   const fadeRef = useRef(null); // interval id for the gentle biphotic re-sync
   const headRef = useRef(null); // smoothed { pitch, roll }
   const uiRef = useRef(0);
@@ -126,6 +121,7 @@ export default function FieldScreen() {
     if (now - ref.current > ms) { ref.current = now; fn(); }
   };
 
+  // Inner orb: a slow, calm breath. Outer ring: breathes at the binaural beat rate.
   const breathe = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -137,6 +133,23 @@ export default function FieldScreen() {
     loop.start();
     return () => loop.stop();
   }, [breathe]);
+
+  // The outer ring pulses at the set binaural beat. Restart only when the beat
+  // changes by a step (so dragging doesn't thrash it), and floor the half-period
+  // at 50 ms (~10 Hz) so fast beats stay a gentle shimmer, not a strobe.
+  const pulse = useRef(new Animated.Value(0)).current;
+  const pulseKey = Math.max(0.5, Math.round(beat * 2) / 2);
+  useEffect(() => {
+    const half = Math.max(50, 1000 / pulseKey / 2);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseKey, pulse]);
 
   const logIfCounted = () => {
     if (!startRef.current || !sessions) return;
@@ -244,14 +257,10 @@ export default function FieldScreen() {
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
       if (ev.type === 'noteOn') {
-        cancelFade(); // a fresh touch cancels any in-progress re-sync
-        touchStartRef.current = Date.now();
-        touchPushedRef.current = false;
-        preTapBeatRef.current = baseBeatRef.current;
-        preTapCarrierRef.current = baseCarrierRef.current;
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
         fromFinger();
+        startBiphoticFade(); // ANY touch begins easing the eyes back to sync
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL;
         fromFinger();
@@ -270,8 +279,7 @@ export default function FieldScreen() {
         const nowPushing = ev.value >= PUSH_THRESHOLD;
         if (nowPushing && !pushingRef.current) {
           pushingRef.current = true; setPushing(true);
-          touchPushedRef.current = true;
-          cancelFade();
+          cancelFade(); // pressing to edit stops the auto-sync so roll can set the biphotic
           const h = headRef.current;
           centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
           centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
@@ -279,16 +287,7 @@ export default function FieldScreen() {
           releasePush();
         }
       } else if (ev.type === 'noteOff') {
-        if (pushingRef.current) {
-          releasePush();
-        } else if (Date.now() - touchStartRef.current < TAP_MS) {
-          // A quick tap that never pressed: don't retune (restore the base), just
-          // gently re-sync the eyes over ~5 s.
-          baseBeatRef.current = preTapBeatRef.current;
-          baseCarrierRef.current = preTapCarrierRef.current;
-          applyField();
-          startBiphoticFade();
-        }
+        if (pushingRef.current) releasePush();
       }
     });
     return () => lightpad.setNoteListener(null);
@@ -472,6 +471,7 @@ export default function FieldScreen() {
   const core = carrierColorVibrant(carrier);
   const halo = carrierColor(carrier);
   const orbScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.06] });
+  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.14] }); // beats
   const haloOpacity = 0.2 + 0.55 * intensity;
   const band = bandFor(beat);
 
@@ -516,7 +516,7 @@ export default function FieldScreen() {
 
       {/* The circle IS the button. */}
       <View style={styles.stage}>
-        <Animated.View pointerEvents="none" style={[styles.halo, { backgroundColor: halo, opacity: haloOpacity, transform: [{ scale: orbScale }] }]} />
+        <Animated.View pointerEvents="none" style={[styles.halo, { backgroundColor: halo, opacity: haloOpacity, transform: [{ scale: haloScale }] }]} />
         <TouchableOpacity activeOpacity={0.9} onPress={onCircle} style={styles.orbTouch}>
           <Animated.View pointerEvents="none" style={[styles.orb, { backgroundColor: core, shadowColor: core, transform: [{ scale: orbScale }] }]} />
           <View style={styles.readout} pointerEvents={paused ? 'box-none' : 'none'}>
