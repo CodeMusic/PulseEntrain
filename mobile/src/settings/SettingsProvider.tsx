@@ -10,6 +10,7 @@ const KEY_NAME = '@pulseentrain/profileName';
 const KEY_MIX = '@pulseentrain/mixWithOthers';
 const KEY_DEV = '@pulseentrain/devMode';
 const KEY_FULLBAND = '@pulseentrain/fullBand'; // opt out of photosensitivity safeties
+const KEY_RELATIVE = '@pulseentrain/relativeControl'; // Field: relative (drag-delta) vs absolute pad
 
 const SettingsContext = createContext(null);
 export const useSettings = () => useContext(SettingsContext);
@@ -19,6 +20,7 @@ export function SettingsProvider({ children }) {
   const [mixWithOthers, setMixState] = useState(true); // blend with other apps' audio
   const [devMode, setDevState] = useState(false); // show on-screen diagnostics
   const [fullBand, setFullBandState] = useState(false); // opt out: full pulse range, no photo prompts
+  const [relativeControl, setRelState] = useState(false); // Field: drag-delta control vs absolute pad
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -34,6 +36,8 @@ export function SettingsProvider({ children }) {
         setDevState(d === '1');
         const fb = await AsyncStorage.getItem(KEY_FULLBAND);
         setFullBandState(fb === '1');
+        const rc = await AsyncStorage.getItem(KEY_RELATIVE);
+        setRelState(rc === '1');
       } catch (e) {
       } finally {
         setLoaded(true);
@@ -62,8 +66,13 @@ export function SettingsProvider({ children }) {
     AsyncStorage.setItem(KEY_FULLBAND, on ? '1' : '0').catch(() => {});
   };
 
+  const setRelativeControl = on => {
+    setRelState(on);
+    AsyncStorage.setItem(KEY_RELATIVE, on ? '1' : '0').catch(() => {});
+  };
+
   return (
-    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, loaded }}>
+    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, loaded }}>
       {children}
     </SettingsContext.Provider>
   );

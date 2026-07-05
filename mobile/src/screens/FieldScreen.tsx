@@ -49,9 +49,20 @@ const EYE_RATE_MIN = 0.5; // matches the Nova controller's per-eye floor
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
 const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
+const REL_SENS_C = 1.0, REL_SENS_B = 1.0; // relative mode: a full-pad drag ≈ one full range sweep
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
+// Fold a value into [lo,hi] by reflecting at the edges (triangle wave), so the
+// relative space repeats smoothly instead of clamping — cross a boundary and you
+// glide back the other way.
+const reflect = (v, lo, hi) => {
+  const span = hi - lo;
+  if (span <= 0) return lo;
+  let t = (v - lo) % (2 * span);
+  if (t < 0) t += 2 * span;
+  return t <= span ? lo + t : lo + (2 * span - t);
+};
 const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.max(0, s % 60)).padStart(2, '0')}`;
 
 export default function FieldScreen() {
@@ -65,6 +76,11 @@ export default function FieldScreen() {
   // The block's full Y axis spans 0 → this max. Safeties on = 15 Hz, off = 30 Hz.
   const beatMaxRef = useRef(FIELD_BEAT_SAFE);
   beatMaxRef.current = fullBand ? FIELD_BEAT_FULL : FIELD_BEAT_SAFE;
+  // Relative (drag-delta) vs absolute controller; ref so the touch listener reads it live.
+  const relativeRef = useRef(false);
+  relativeRef.current = !!(settings && settings.relativeControl);
+  const lastXNRef = useRef(null); // previous finger position (relative-mode delta); null = fresh touch
+  const lastYNRef = useRef(null);
 
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
@@ -272,15 +288,24 @@ export default function FieldScreen() {
       const yR = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
       const xN = LP_FLIP_X ? 1 - xR : xR;
       const yN = LP_FLIP_Y ? 1 - yR : yR;
-      const newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-      const newB = FIELD_BEAT_MIN + yN * (beatMaxRef.current - FIELD_BEAT_MIN);
-      // A meaningful move (not MPE jitter) re-syncs the biphotic beat: roll is a
-      // fine-tune *at* a position, so a new position starts balanced. Re-anchor the
-      // roll centre to the current head so rolling from here re-opens it.
+      const prevC = baseCarrierRef.current, prevB = baseBeatRef.current;
+      let newC, newB;
+      if (relativeRef.current) {
+        // Trackpad: the block position isn't a coordinate, its MOVEMENT is a delta.
+        // Accumulate onto the current value and reflect at the edges (repeating space).
+        if (lastXNRef.current == null) { lastXNRef.current = xN; lastYNRef.current = yN; }
+        const dxN = xN - lastXNRef.current, dyN = yN - lastYNRef.current;
+        lastXNRef.current = xN; lastYNRef.current = yN;
+        newC = reflect(prevC + dxN * (CARR_MAX - CARR_MIN) * REL_SENS_C, CARR_MIN, CARR_MAX);
+        newB = reflect(prevB + dyN * (beatMaxRef.current - FIELD_BEAT_MIN) * REL_SENS_B, FIELD_BEAT_MIN, beatMaxRef.current);
+      } else {
+        // Absolute map: each spot is a fixed carrier/beat.
+        newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
+        newB = FIELD_BEAT_MIN + yN * (beatMaxRef.current - FIELD_BEAT_MIN);
+      }
       // A meaningful move WHILE PRESSING re-syncs the biphotic (roll is a fine-tune
-      // at a spot); moving to a new spot re-anchors the roll centre. A light touch
-      // that isn't a press leaves the locked biphotic alone.
-      const moved = Math.abs(newB - baseBeatRef.current) > 0.5 || Math.abs(newC - baseCarrierRef.current) > 8;
+      // at a spot); a light touch leaves a locked biphotic alone.
+      const moved = Math.abs(newB - prevB) > 0.5 || Math.abs(newC - prevC) > 8;
       baseCarrierRef.current = newC;
       baseBeatRef.current = newB;
       if (moved && pushingRef.current) {
@@ -307,6 +332,7 @@ export default function FieldScreen() {
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
+        lastXNRef.current = null; // fresh touch: relative delta starts from here (no jump)
         fromFinger();
         if (!pushingRef.current) startBiphoticFade(); // a touch eases to sync — but not a retrigger mid-press (that would fight the roll)
       } else if (ev.type === 'pitchBend') {

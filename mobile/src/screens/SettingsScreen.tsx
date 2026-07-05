@@ -7,7 +7,7 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl } = s;
 
   // Turning the safety off requires an explicit acknowledgement; turning it back
   // on is immediate.
@@ -73,6 +73,26 @@ export default function SettingsScreen() {
             value={!!fullBand}
             onValueChange={onToggleFullBand}
             trackColor={{ true: COLORS.accentOrange, false: COLORS.bgCardLight }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+
+      <Text style={styles.section}>Field mode</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Relative control</Text>
+            <Text style={styles.hint}>
+              Off: the block is an absolute map — each spot is a fixed carrier/beat. On: it's a
+              trackpad — drag to nudge carrier/beat by how far you move, and the space wraps back on
+              itself at the edges so you can keep exploring smoothly.
+            </Text>
+          </View>
+          <Switch
+            value={!!relativeControl}
+            onValueChange={setRelativeControl}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.bgCardLight }}
             thumbColor="#fff"
           />
         </View>
