@@ -8,7 +8,7 @@ import { LightpadProvider } from './lightpad/LightpadProvider';
 import { SessionsProvider } from './wellness/SessionsProvider';
 import { SettingsProvider } from './settings/SettingsProvider';
 import { MenuProvider } from './components/Menu';
-import { DevPanelProvider, DevPanel } from './dev/DevPanel';
+import { DevPanelProvider, DevPanel, DevContentInset } from './dev/DevPanel';
 
 // App-wide context tree. Previously lived in App.js; under One it wraps the
 // file-based <Stack> from app/_layout.tsx instead of a NavigationContainer
@@ -24,7 +24,9 @@ export function Providers({ children }) {
             <SettingsProvider>
               <StatusBar barStyle="light-content" />
               <DevPanelProvider>
-                <MenuProvider>{children}</MenuProvider>
+                <DevContentInset>
+                  <MenuProvider>{children}</MenuProvider>
+                </DevContentInset>
                 <DevPanel />
               </DevPanelProvider>
             </SettingsProvider>
