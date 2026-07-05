@@ -17,6 +17,7 @@ import { registerImportedDose } from '../catalog/importDose';
 import { pickImedxFile } from '../catalog/pickImedx';
 import { useRouter } from 'one';
 import { useNav } from '../oneNav';
+import { useSessionGuard } from '../session/SessionGuard';
 
 const PANEL_WIDTH = 290;
 const MenuContext = createContext(null);
@@ -25,11 +26,16 @@ export const useMenu = () => useContext(MenuContext);
 export function MenuProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
   const nav = useNav();
+  const guard = useSessionGuard();
   const open = () => setIsOpen(true);
   const close = () => setIsOpen(false);
   const go = (screen, params) => {
     setIsOpen(false);
-    nav.navigate(screen, params);
+    // Leaving Home ends the current screen; confirm first if a session is running.
+    // Pushing to another screen (Settings, a category…) leaves the session mounted.
+    const nav2 = () => nav.navigate(screen, params);
+    if (screen === 'Springboard' && guard) guard.confirmExit(nav2);
+    else nav2();
   };
 
   return (
@@ -111,12 +117,29 @@ export function HeaderMenuButton() {
 
 // Center header title: shows the screen's title (default "PulseEntrain"); tapping
 // it returns Home. Uses router.navigate (pops back to the existing Springboard so
-// the player/dose screens unmount and stop) rather than pushing a new one.
+// the player/dose screens unmount and stop) rather than pushing a new one — and
+// confirms first if a session is running (the nav isn't dispatched until then).
 export function HeaderTitle({ children }: any) {
   const router = useRouter();
+  const guard = useSessionGuard();
+  const goHome = () => router.navigate('/springboard');
   return (
-    <TouchableOpacity onPress={() => router.navigate('/springboard')} hitSlop={10}>
+    <TouchableOpacity onPress={() => (guard ? guard.confirmExit(goHome) : goHome())} hitSlop={10}>
       <Text style={styles.headerTitle}>{children || 'PulseEntrain'}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Guarded header back button (replaces the native back so we can intercept the tap
+// BEFORE any navigation animates). Only shown when there's somewhere to go back to.
+export function HeaderBackButton({ canGoBack }: any) {
+  const router = useRouter();
+  const guard = useSessionGuard();
+  if (!canGoBack) return null;
+  const back = () => router.back();
+  return (
+    <TouchableOpacity onPress={() => (guard ? guard.confirmExit(back) : back())} hitSlop={12} style={styles.headerBtn}>
+      <Text style={styles.headerBack}>‹</Text>
     </TouchableOpacity>
   );
 }
@@ -149,5 +172,6 @@ const styles = StyleSheet.create({
   itemSmall: { fontSize: 16, fontWeight: '500', color: COLORS.textSecondary },
   headerBtn: { paddingHorizontal: 6 },
   headerIcon: { color: COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
+  headerBack: { color: COLORS.textPrimary, fontSize: 34, fontWeight: '500', marginTop: -4 },
   headerTitle: { color: COLORS.textPrimary, fontSize: 17, fontWeight: '700' },
 });

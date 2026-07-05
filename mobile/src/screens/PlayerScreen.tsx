@@ -18,7 +18,7 @@ import { Stack } from 'one';
 import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
 import { carrierColorVibrant } from '../shared/entrainment';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
-import { useSessionExitGuard } from '../session/useSessionExitGuard';
+import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
 import { useDevLines } from '../dev/DevPanel';
 import { useNova } from '../nova/NovaProvider';
@@ -103,7 +103,7 @@ export default function PlayerScreen({ route, navigation }) {
 
   const tpPlaying = playbackState?.state === State.Playing;
   const isPlaying = isSynth ? synthPlaying : tpPlaying;
-  useSessionExitGuard(isPlaying); // confirm before an accidental tap leaves a playing program
+  useSessionActive(isPlaying); // confirm before an accidental tap leaves a playing program
   const devMode = !!(useSettings() || {}).devMode;
   useDevLines(
     devMode ? [

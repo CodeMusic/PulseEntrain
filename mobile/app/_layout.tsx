@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import '../src/audio/registerPlaybackService';
 import { Providers } from '../src/Providers';
 import { COLORS } from '../src/theme';
-import { HeaderMenuButton, HeaderTitle } from '../src/components/Menu';
+import { HeaderMenuButton, HeaderTitle, HeaderBackButton } from '../src/components/Menu';
 
 function Navigator() {
   return (
@@ -17,6 +17,9 @@ function Navigator() {
         // Center title shows the app name (tap → Home); screens that set a title
         // (Manual, Category, …) show that instead, still tappable to Home.
         headerTitle: ({ children }) => <HeaderTitle>{children}</HeaderTitle>,
+        // Replace the native back with a guarded one so an active session confirms
+        // BEFORE the pop is dispatched (native beforeRemove animates first).
+        headerLeft: ({ canGoBack }) => <HeaderBackButton canGoBack={canGoBack} />,
         headerRight: () => <HeaderMenuButton />,
       }}
     >

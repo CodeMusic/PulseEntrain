@@ -15,7 +15,7 @@ import { useSessions } from '../wellness/SessionsProvider';
 import NovaExplorer from '../components/NovaExplorer';
 import { usePhoneOrientation, PHONE_SUPPORTED } from '../sensors/usePhoneOrientation';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
-import { useSessionExitGuard } from '../session/useSessionExitGuard';
+import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
 import { useDevLines } from '../dev/DevPanel';
 
@@ -81,7 +81,7 @@ export default function ManualScreen() {
   const explore = trackMode !== 'off';
   const runningRef = useRef(false);
   runningRef.current = running;
-  useSessionExitGuard(running); // confirm before an accidental tap leaves a live session
+  useSessionActive(running); // confirm before an accidental tap leaves a live session
   const uiSettings: any = useSettings() || {};
   const devMode = !!uiSettings.devMode;
   const fullBand = !!uiSettings.fullBand;
