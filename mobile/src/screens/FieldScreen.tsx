@@ -10,6 +10,7 @@ import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { useSessions } from '../wellness/SessionsProvider';
 import { useSettings } from '../settings/SettingsProvider';
+import { useSessionExitGuard } from '../session/useSessionExitGuard';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -63,6 +64,7 @@ export default function FieldScreen() {
   runningRef.current = running;
   const pausedRef = useRef(false);
   pausedRef.current = paused;
+  useSessionExitGuard(running); // confirm before an accidental tap leaves a live session
 
   // Field state.
   const colRef = useRef(2);

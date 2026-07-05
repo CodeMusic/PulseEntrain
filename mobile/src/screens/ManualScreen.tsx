@@ -15,6 +15,7 @@ import { useSessions } from '../wellness/SessionsProvider';
 import NovaExplorer from '../components/NovaExplorer';
 import { usePhoneOrientation, PHONE_SUPPORTED } from '../sensors/usePhoneOrientation';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
+import { useSessionExitGuard } from '../session/useSessionExitGuard';
 
 // Unified Manual mode: one screen, one Start/Stop that runs audio (binaural +
 // noise) plus — when connected — Lumenate Nova light and Pulsetto stim together,
@@ -78,6 +79,7 @@ export default function ManualScreen() {
   const explore = trackMode !== 'off';
   const runningRef = useRef(false);
   runningRef.current = running;
+  useSessionExitGuard(running); // confirm before an accidental tap leaves a live session
   const baseBeatRef = useRef(10); // the "settled" beat; black-key bend offsets around it
   const baseCarrierNoteRef = useRef(60); // last white key's MIDI note; white-key bend offsets ±1 semitone
   const lastKeyTypeRef = useRef('white'); // route pitch-bend: white → carrier, black → beat
