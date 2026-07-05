@@ -9,6 +9,7 @@ import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { useSessions } from '../wellness/SessionsProvider';
+import { useSettings } from '../settings/SettingsProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -41,6 +42,8 @@ export default function FieldScreen() {
   const pulsetto = usePulsetto();
   const lightpad = useLightpad();
   const sessions = useSessions();
+  const settings = useSettings();
+  const devMode = !!(settings && settings.devMode);
 
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
@@ -77,6 +80,17 @@ export default function FieldScreen() {
   const endRef = useRef(0);
   const startRef = useRef(null);
   const tickRef = useRef(null);
+
+  // Diagnostics (devMode): live values + a telemetry-rate to experiment with,
+  // since the Nova's faster rates are unconfirmed. `dev` is a periodic snapshot so
+  // the overlay doesn't re-render on every sample.
+  const [devRate, setDevRate] = useState(20);
+  const [dev, setDev] = useState(null);
+  const rawHeadRef = useRef({ pitch: 0, roll: 0 });
+  const hzRef = useRef(0);
+  const lastTsRef = useRef(0);
+  const lastPressureRef = useRef(0);
+  const lastEvtRef = useRef('');
 
   const ensureEngine = () => {
     if (!engineRef.current) engineRef.current = new BinauralEngine();
@@ -160,6 +174,7 @@ export default function FieldScreen() {
       applyField();
     };
     lightpad.setNoteListener(ev => {
+      lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
@@ -171,6 +186,7 @@ export default function FieldScreen() {
         slideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
         fromFinger();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
+        lastPressureRef.current = ev.value;
         const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1);
         if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(i);
         if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
@@ -199,7 +215,7 @@ export default function FieldScreen() {
   // roll → per-eye slowdown (absolute from level). Smoothed + dead-zoned.
   useEffect(() => {
     if (!running || !nova.connected || !nova.setMotionListener) return;
-    nova.setTelemetryRate(1);
+    nova.setTelemetryRate(devRate);
     const applyHead = () => {
       if (!pushingRef.current || !runningRef.current || pausedRef.current) return;
       const s = headRef.current;
@@ -214,6 +230,10 @@ export default function FieldScreen() {
       applyField();
     };
     nova.setMotionListener(s => {
+      rawHeadRef.current = { pitch: s.pitch, roll: s.roll };
+      const now = Date.now();
+      if (lastTsRef.current) { const d = now - lastTsRef.current; if (d > 0 && d < 5000) hzRef.current = 1000 / d; }
+      lastTsRef.current = now;
       const p = headRef.current;
       headRef.current = p
         ? { pitch: p.pitch + (s.pitch - p.pitch) * HEAD_SMOOTH_ALPHA, roll: p.roll + (s.roll - p.roll) * HEAD_SMOOTH_ALPHA }
@@ -223,6 +243,27 @@ export default function FieldScreen() {
     return () => { try { nova.setMotionListener(null); } catch (e) {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, nova.connected]);
+
+  // Re-request the telemetry rate when experimenting with it in devMode.
+  useEffect(() => {
+    if (running && nova.connected && nova.setTelemetryRate) nova.setTelemetryRate(devRate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devRate, running, nova.connected]);
+
+  // Periodic snapshot for the devMode overlay (avoids per-sample re-renders).
+  useEffect(() => {
+    if (!devMode) { setDev(null); return; }
+    const id = setInterval(() => {
+      const h = headRef.current || { pitch: 0, roll: 0 };
+      setDev({
+        hz: hzRef.current, pitch: rawHeadRef.current.pitch, roll: rawHeadRef.current.roll,
+        sPitch: h.pitch, sRoll: h.roll, pushing: pushingRef.current, pressure: lastPressureRef.current,
+        carrier: carrierRef.current, beat: beatRef.current, balance: balanceRef.current,
+        evt: lastEvtRef.current, novaConn: nova.connected, lpConn: lightpad.connected,
+      });
+    }, 200);
+    return () => clearInterval(id);
+  }, [devMode, nova.connected, lightpad.connected]);
 
   const startTimerTick = () => {
     if (tickRef.current) clearInterval(tickRef.current);
@@ -366,11 +407,19 @@ export default function FieldScreen() {
         <Animated.View pointerEvents="none" style={[styles.halo, { backgroundColor: halo, opacity: haloOpacity, transform: [{ scale: orbScale }] }]} />
         <TouchableOpacity activeOpacity={0.9} onPress={onCircle} style={styles.orbTouch}>
           <Animated.View pointerEvents="none" style={[styles.orb, { backgroundColor: core, shadowColor: core, transform: [{ scale: orbScale }] }]} />
-          <View style={styles.readout} pointerEvents="none">
+          <View style={styles.readout} pointerEvents={paused ? 'box-none' : 'none'}>
             {!running ? (
               <Text style={styles.enterInOrb}>Enter{'\n'}the field</Text>
             ) : paused ? (
-              <Text style={styles.enterInOrb}>Paused</Text>
+              <>
+                <Text style={styles.pausedLabel}>Paused</Text>
+                <TouchableOpacity style={[styles.circleBtn, styles.resumeBtn]} onPress={resume} activeOpacity={0.85}>
+                  <Text style={styles.circleBtnTxt}>Resume</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.circleBtn, styles.stopCircleBtn]} onPress={stop} activeOpacity={0.85}>
+                  <Text style={[styles.circleBtnTxt, styles.stopBtnTxt]}>Stop</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <>
                 {biphotic > 0.1 ? <Text style={styles.biphoticTxt}>◑ {biphotic.toFixed(1)} Hz</Text> : <Text style={styles.biphoticTxt}> </Text>}
@@ -383,17 +432,8 @@ export default function FieldScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom: paused controls, or a subtle cue. */}
-      {running && paused ? (
-        <View style={styles.pausedRow}>
-          <TouchableOpacity style={[styles.pausedBtn, styles.resumeBtn]} onPress={resume} activeOpacity={0.85}>
-            <Text style={styles.pausedBtnTxt}>Resume</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pausedBtn, styles.stopBtn]} onPress={stop} activeOpacity={0.85}>
-            <Text style={styles.pausedBtnTxt}>Stop</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
+      {/* Bottom: a subtle cue (hidden while paused — controls live in the circle). */}
+      {!paused ? (
         <Text style={styles.hint}>
           {IS_WEB
             ? 'Field visuals + audio preview. Connect a Lightpad on the phone to steer it.'
@@ -403,7 +443,29 @@ export default function FieldScreen() {
             ? 'sculpting — finger: ← → carrier, ↑ ↓ beat · head: pitch = beat, roll = balance'
             : 'press & hold the block to edit · tap the circle to pause'}
         </Text>
-      )}
+      ) : null}
+
+      {/* devMode diagnostics overlay — live Nova head data + Lightpad values, and a
+          telemetry-rate experiment (the faster Nova rates are unconfirmed). */}
+      {devMode ? (
+        <View style={styles.devPanel} pointerEvents="box-none">
+          <Text style={styles.devTxt}>
+            {`nova ${dev?.novaConn ? 'on' : 'off'} · tel ${dev ? dev.hz.toFixed(1) : '0'} Hz · rate ${devRate}\n`}
+            {`pitch ${dev ? dev.pitch.toFixed(1) : '—'}°  roll ${dev ? dev.roll.toFixed(1) : '—'}°  (smoothed ${dev ? dev.sPitch.toFixed(0) : '—'}/${dev ? dev.sRoll.toFixed(0) : '—'})\n`}
+            {`push ${dev?.pushing ? 'YES' : 'no'} · pressure ${dev ? dev.pressure : 0}\n`}
+            {`carr ${dev ? Math.round(dev.carrier) : 0} · beat ${dev ? dev.beat.toFixed(1) : 0} · bal ${dev ? dev.balance.toFixed(2) : 0}\n`}
+            {`lp ${dev?.lpConn ? 'on' : 'off'} · ${dev ? dev.evt : ''}`}
+          </Text>
+          <View style={styles.devRates}>
+            <Text style={styles.devRatesLabel}>tel rate</Text>
+            {[1, 5, 10, 20, 40].map(r => (
+              <TouchableOpacity key={r} onPress={() => setDevRate(r)} style={[styles.devRateBtn, devRate === r && styles.devRateOn]}>
+                <Text style={styles.devRateTxt}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -439,10 +501,18 @@ const styles = StyleSheet.create({
   carrierTxt: { color: '#FFFFFF', fontSize: 40, fontWeight: '900', opacity: 0.95, lineHeight: 44 },
   carrierUnit: { color: '#DCE6F2', fontSize: 11, fontWeight: '600', opacity: 0.7, marginTop: -2, marginBottom: 4 },
   beatTxt: { color: '#E6EDF5', fontSize: 14, fontWeight: '700', opacity: 0.82 },
-  pausedRow: { flexDirection: 'row', gap: 12 },
-  pausedBtn: { flex: 1, borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  resumeBtn: { backgroundColor: COLORS.accentBlue },
-  stopBtn: { backgroundColor: '#3A2530' },
-  pausedBtnTxt: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  pausedLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', opacity: 0.9, marginBottom: 8 },
+  circleBtn: { width: 116, borderRadius: 999, paddingVertical: 9, alignItems: 'center', marginTop: 6 },
+  resumeBtn: { backgroundColor: 'rgba(255,255,255,0.92)' },
+  stopCircleBtn: { backgroundColor: 'rgba(20,10,14,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
+  circleBtnTxt: { fontSize: 14, fontWeight: '800', color: '#0B0E13' },
+  stopBtnTxt: { color: '#FFFFFF' },
   hint: { color: COLORS.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18, minHeight: 34 },
+  devPanel: { position: 'absolute', top: 6, left: 8, right: 8, backgroundColor: 'rgba(4,8,14,0.86)', borderRadius: 10, borderWidth: 1, borderColor: '#1D2836', paddingHorizontal: 10, paddingVertical: 8 },
+  devTxt: { color: '#8FE3C2', fontSize: 11, lineHeight: 16, fontFamily: 'Courier' },
+  devRates: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 },
+  devRatesLabel: { color: COLORS.textMuted, fontSize: 11, marginRight: 2 },
+  devRateBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#141C28' },
+  devRateOn: { backgroundColor: COLORS.accentGreen },
+  devRateTxt: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 });

@@ -7,7 +7,7 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode } = s;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -37,6 +37,25 @@ export default function SettingsScreen() {
           <Switch
             value={mixWithOthers}
             onValueChange={setMix}
+            trackColor={{ true: COLORS.accentGreen, false: COLORS.bgCardLight }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+
+      <Text style={styles.section}>Developer</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Developer mode</Text>
+            <Text style={styles.hint}>
+              Show live diagnostics — e.g. in Field mode, the Nova head pitch/roll and telemetry rate,
+              and the Lightpad's raw touch values — for tuning and debugging.
+            </Text>
+          </View>
+          <Switch
+            value={!!devMode}
+            onValueChange={setDevMode}
             trackColor={{ true: COLORS.accentGreen, false: COLORS.bgCardLight }}
             thumbColor="#fff"
           />

@@ -8,6 +8,7 @@ import { setMixWithOthers } from '../audio/binauralEngine';
 // art is always the signature donut, so there's no track-style setting.)
 const KEY_NAME = '@pulseentrain/profileName';
 const KEY_MIX = '@pulseentrain/mixWithOthers';
+const KEY_DEV = '@pulseentrain/devMode';
 
 const SettingsContext = createContext(null);
 export const useSettings = () => useContext(SettingsContext);
@@ -15,6 +16,7 @@ export const useSettings = () => useContext(SettingsContext);
 export function SettingsProvider({ children }) {
   const [name, setNameState] = useState('');
   const [mixWithOthers, setMixState] = useState(true); // blend with other apps' audio
+  const [devMode, setDevState] = useState(false); // show on-screen diagnostics
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -26,6 +28,8 @@ export function SettingsProvider({ children }) {
         const on = m == null ? true : m === '1'; // default on
         setMixState(on);
         setMixWithOthers(on); // apply the stored preference to the audio engine
+        const d = await AsyncStorage.getItem(KEY_DEV);
+        setDevState(d === '1');
       } catch (e) {
       } finally {
         setLoaded(true);
@@ -44,8 +48,13 @@ export function SettingsProvider({ children }) {
     AsyncStorage.setItem(KEY_MIX, on ? '1' : '0').catch(() => {});
   };
 
+  const setDevMode = on => {
+    setDevState(on);
+    AsyncStorage.setItem(KEY_DEV, on ? '1' : '0').catch(() => {});
+  };
+
   return (
-    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, loaded }}>
+    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, loaded }}>
       {children}
     </SettingsContext.Provider>
   );
