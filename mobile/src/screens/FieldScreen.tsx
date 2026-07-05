@@ -35,7 +35,9 @@ const LIGHT_RATE_MIN = 0.5, LIGHT_RATE_MAX = 40; // head-driven flash-rate range
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
 const PUSH_THRESHOLD = 40; // pressure (0–127) above which head control engages
 const HEAD_PITCH_SPAN = 40, HEAD_ROLL_SPAN = 35; // degrees of head travel for full swing
-const HEAD_DEADZONE = 4; // degrees before head control engages (ignore jitter)
+const HEAD_DEADZONE = 5; // degrees of slack around neutral — jitter/settle is ignored
+const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother/heavier)
+const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z); // subtract the dead-zone
 const BEAT_BEND = 2.5, CARR_BEND = 6; // subtle, persistent audio bend (Hz) from head
 const FIELD_PITCH_SIGN = 1; // flip to -1 if looking up slows instead of speeds
 const FIELD_ROLL_SIGN = 1; // flip to -1 if leaning left slows the wrong eye
@@ -216,9 +218,11 @@ export default function FieldScreen() {
       if (!pushingRef.current || !runningRef.current) return;
       const s = headRef.current;
       if (!s) return;
-      const dPitch = (s.pitch - centerRef.current.pitch) * FIELD_PITCH_SIGN;
-      const dRoll = (s.roll - centerRef.current.roll) * FIELD_ROLL_SIGN;
-      if (!lightHeadRef.current && Math.abs(dPitch) < HEAD_DEADZONE && Math.abs(dRoll) < HEAD_DEADZONE) return;
+      // Continuous dead-zone: a slack band around the push-start pose so small
+      // head movement/settle produces nothing (the head equivalent of finger jitter).
+      const dPitch = dz((s.pitch - centerRef.current.pitch) * FIELD_PITCH_SIGN, HEAD_DEADZONE);
+      const dRoll = dz((s.roll - centerRef.current.roll) * FIELD_ROLL_SIGN, HEAD_DEADZONE);
+      if (!lightHeadRef.current && dPitch === 0 && dRoll === 0) return;
       lightHeadRef.current = true; // head owns the light from here on (persists)
       // Common flash rate from pitch — full 0.5…max reachable by tilting; anchored
       // so a still head holds the current rate.
@@ -239,7 +243,14 @@ export default function FieldScreen() {
       }
       uiTick(() => setBeat(Math.round(rate * 10) / 10)); // show the light rate you're sculpting
     };
-    nova.setMotionListener(s => { headRef.current = s; applyHead(); });
+    nova.setMotionListener(s => {
+      // Low-pass the raw accelerometer pose so shaky micro-movements are damped.
+      const p = headRef.current;
+      headRef.current = p
+        ? { pitch: p.pitch + (s.pitch - p.pitch) * HEAD_SMOOTH_ALPHA, roll: p.roll + (s.roll - p.roll) * HEAD_SMOOTH_ALPHA }
+        : { pitch: s.pitch, roll: s.roll };
+      applyHead();
+    });
     return () => { try { nova.setMotionListener(null); } catch (e) {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, nova.connected]);
