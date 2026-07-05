@@ -44,6 +44,8 @@ const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for
 const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
 const CARR_BEND_MAX = 12; // Hz — carrier bend alongside it, big enough to actually hear
 const BIPHOTIC_FADE_MS = 5000; // any touch eases the eyes back to sync over this long
+const EAR_CROSS_DEPTH = 0.5; // cross-modal: pulse each ear at the CONTRALATERAL eye's flash rate
+const EYE_RATE_MIN = 0.5; // matches the Nova controller's per-eye floor
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
 const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
@@ -206,6 +208,20 @@ export default function FieldScreen() {
     [],
   );
 
+  // Cross-modal ears: with the eyes at different rates (biphotic), pulse each ear
+  // in sync with the CONTRALATERAL eye — left ear ↔ right eye, right ear ↔ left
+  // eye — since audition is crossed (each ear is processed by the far hemisphere).
+  // Depth fades in with the roll; balanced = no pulse (pure binaural).
+  const applyEars = () => {
+    const eng = engineRef.current;
+    if (!eng || !eng.setEarPulse || !runningRef.current || pausedRef.current) return;
+    const base = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
+    const b = balanceRef.current;
+    const fEyeL = b < 0 ? base + b * (base - EYE_RATE_MIN) : base; // left eye slows when b<0
+    const fEyeR = b > 0 ? base - b * (base - EYE_RATE_MIN) : base; // right eye slows when b>0
+    eng.setEarPulse(fEyeR, fEyeL, EAR_CROSS_DEPTH * Math.min(1, Math.abs(b)));
+  };
+
   // Effective values = finger-set base + head-pitch bend. Push to audio/light/UI.
   const applyField = () => {
     const c = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
@@ -218,6 +234,7 @@ export default function FieldScreen() {
       nova.setFrequency(b);
       nova.setBalance(balanceRef.current);
     }
+    applyEars();
     // Biphotic beat = |left flash − right flash|, in 0.5 Hz steps (roll slows one
     // eye from b toward 0.5, so the gap is |balance|·(b − 0.5)).
     const biph = Math.round(Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN) * 2) / 2;
@@ -242,7 +259,8 @@ export default function FieldScreen() {
       if (runningRef.current && !pausedRef.current) nova.setBalance(balanceRef.current);
       const b = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
       setBiphotic(Math.round(Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN) * 2) / 2);
-      if (k >= 1) { balanceRef.current = 0; cancelFade(); }
+      applyEars(); // ease the cross-ear pulse out with the biphotic
+      if (k >= 1) { balanceRef.current = 0; cancelFade(); applyEars(); }
     }, 120);
   };
 

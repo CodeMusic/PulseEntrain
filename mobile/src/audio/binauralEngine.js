@@ -75,29 +75,80 @@ export class BinauralEngine {
     master.connect(ctx.destination);
     this.master = master;
 
+    // Each ear passes through a "tremolo" gain that an LFO can pulse — used by
+    // Field mode's cross-modal effect (pulse a tone in sync with an eye's flicker).
+    // Default depth 0 = transparent, so normal binaural playback is unaffected.
     const leftOsc = ctx.createOscillator();
     leftOsc.type = 'sine';
     leftOsc.frequency.value = carrier;
+    const leftTrem = ctx.createGain();
+    leftTrem.gain.value = 1;
     const leftPan = ctx.createStereoPanner();
     leftPan.pan.value = -1;
-    leftOsc.connect(leftPan);
+    leftOsc.connect(leftTrem);
+    leftTrem.connect(leftPan);
     leftPan.connect(master);
 
     const rightOsc = ctx.createOscillator();
     rightOsc.type = 'sine';
     rightOsc.frequency.value = carrier + beat;
+    const rightTrem = ctx.createGain();
+    rightTrem.gain.value = 1;
     const rightPan = ctx.createStereoPanner();
     rightPan.pan.value = 1;
-    rightOsc.connect(rightPan);
+    rightOsc.connect(rightTrem);
+    rightTrem.connect(rightPan);
     rightPan.connect(master);
 
     leftOsc.start();
     rightOsc.start();
     this.leftOsc = leftOsc;
     this.rightOsc = rightOsc;
+    this.leftTrem = leftTrem;
+    this.rightTrem = rightTrem;
+    this._buildEarPulse();
 
     this._startNoise(background);
     this.running = true;
+  }
+
+  // Attach a per-ear LFO (osc → depth gain → tremolo gain param). Off until
+  // setEarPulse() gives it a non-zero depth.
+  _buildEarPulse() {
+    if (!this.ctx) return;
+    const mk = trem => {
+      try {
+        const lfo = this.ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 1;
+        const depth = this.ctx.createGain();
+        depth.gain.value = 0; // silent until setEarPulse raises it
+        lfo.connect(depth);
+        depth.connect(trem.gain);
+        lfo.start();
+        return { lfo, depth };
+      } catch (e) {
+        return null;
+      }
+    };
+    this.leftPulse = mk(this.leftTrem);
+    this.rightPulse = mk(this.rightTrem);
+  }
+
+  // Field cross-modal: pulse each ear's tone at a given Hz, `depth` 0..1 (0 = off).
+  // The caller decides the pairing (e.g. left ear ↔ right eye's flash rate).
+  setEarPulse(leftHz, rightHz, depth = 0) {
+    const d = Math.max(0, Math.min(1, Number(depth) || 0));
+    const apply = (pulse, trem, hz) => {
+      if (!pulse || !trem) return;
+      try {
+        pulse.lfo.frequency.value = Math.max(0.1, Math.min(60, Number(hz) || 1));
+        pulse.depth.gain.value = d / 2; // ±d/2 around the tremolo baseline
+        trem.gain.value = 1 - d / 2; // so gain swings between (1−d) and 1
+      } catch (e) {}
+    };
+    apply(this.leftPulse, this.leftTrem, leftHz);
+    apply(this.rightPulse, this.rightTrem, rightHz);
   }
 
   // Build a looping noise source (gain 0, caller ramps it). Returns {src, g}.
@@ -285,8 +336,11 @@ export class BinauralEngine {
     this.running = false;
     try { this.leftOsc && this.leftOsc.stop(); } catch (e) {}
     try { this.rightOsc && this.rightOsc.stop(); } catch (e) {}
+    try { this.leftPulse && this.leftPulse.lfo.stop(); } catch (e) {}
+    try { this.rightPulse && this.rightPulse.lfo.stop(); } catch (e) {}
     try { this.noiseSrc && this.noiseSrc.stop(); } catch (e) {}
     try { this.ctx && this.ctx.close && this.ctx.close(); } catch (e) {}
     this.leftOsc = this.rightOsc = this.noiseSrc = this.noiseGain = this.master = this.ctx = null;
+    this.leftTrem = this.rightTrem = this.leftPulse = this.rightPulse = null;
   }
 }
