@@ -17,10 +17,27 @@ See the platform overview in the [root README](../README.md), the authoring tool
     (carrier ± beat, interpolated) plus the noise bed, by
     [`SessionSynth`](src/audio/sessionSynth.js) driving [`BinauralEngine`](src/audio/binauralEngine.js)
     — the embedded base64 cover renders directly. No MP3 needed.
-- **Manual mode** — dial a beat frequency + noise bed live (same `BinauralEngine`).
-- **Devices (BLE)** — **Pulsetto** intensity tracks the session; **Lumenate Nova** strobes in
-  sync with the live beat (clamped to `nova.maxHz`, default 60 Hz — delta→gamma). Both are optional; binaural-only works on any headphones. On web (no BLE) the player shows these as disabled with a hint to get the native app.
+- **Manual mode** — dial a beat frequency + noise bed live (same `BinauralEngine`); unified Start/Stop
+  drives audio + Nova + Pulsetto together, with a session timer and per-session **Session volume**
+  (scales only our tones, so it can sit under a blended app).
+- **[Field Meditation Mode](../docs/FIELD_MEDITATION.md)** — immersive, eyes-closed. A glowing circle
+  shows carrier (colour) / binaural beat / **biphotic beat**; the circle *is* the control (tap to
+  enter, tap to pause → Resume/Stop). Press a **Lightpad** and feel around (x = carrier, y = beat,
+  press = intensity); or press + move your head and the **Nova accelerometer** steers it (pitch →
+  beat/flash rate, roll → per-eye biphotic balance) — release and the tuning locks. Has a timer and
+  logs toward the daily goal. See the [full guide](../docs/FIELD_MEDITATION.md).
+- **Devices (BLE)** — **Pulsetto** intensity tracks the session (and always ramps down when a session
+  ends, even on a timer completion); **Lumenate Nova** strobes in sync with the live beat (clamped to
+  `nova.maxHz`, default 60 Hz — delta→gamma), per-eye, and can also feed head-motion into Field mode.
+  Both optional; binaural-only works on any headphones. Playing audio uses `mixWithOthers`, so a
+  guided meditation from another app layers on top. On web (no BLE) devices show disabled.
 - **ROLI controllers (BLE-MIDI)** *(experimental)* — a **LUMI Keys** keyboard or a **Lightpad Block / Block M** pad can play Manual mode live. Both share one transport ([`LumiController`](src/lumi/LumiController.js) + shared [`lumiProtocol`](src/shared/lumiProtocol.js)), picked apart by name: LUMI → carrier/beat from notes; Lightpad → XY pad (glide = carrier, slide = beat, press = volume). Receive-only; the pads use their own touch-glow (custom LED colour would need ROLI's proprietary BLOCKS protocol).
+- **Settings** — a general settings page: profile name, **Blend with other apps** (`mixWithOthers`),
+  and **Developer mode**. Dev mode shows a collapsible **dev panel** docked to the bottom of every
+  screen (device connections, and per-screen diagnostics — e.g. in Field, live Nova pitch/roll +
+  telemetry-Hz with a rate experiment, and the Lightpad's raw events).
+- **Session guard** — leaving a running session (back gesture, header, Home) asks to confirm first,
+  so an accidental tap can't silently end a session (or leave a vagus-nerve device running).
 - **Open a file** — pick a saved `.imedx` from the hamburger menu and play it (your own
   creation or one shared with you). Validated against the session contract.
 - **Studio** *(web)* — author `.imedx` in the browser: an interactive beat-over-time graph
@@ -52,6 +69,8 @@ npm install
 
 ```bash
 ./start.sh             # = npm run dev:native (sync-catalog + ONE_METRO_MODE=1 one dev)
+./start.sh --pair      # first install / new device / new Wi-Fi: build + install to the USB-connected
+                       #   iOS device (xcodebuild → devicectl), then serve. Bakes in the current IP.
 ```
 
 The device/simulator must be on the **same Wi-Fi** as this machine (a phone on cellular can't reach

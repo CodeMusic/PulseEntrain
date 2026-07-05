@@ -21,7 +21,15 @@ Build your own session by hand:
 - **Lumenate Nova option** *(mobile)* — enable synchronized light, strobing in time with the beat, with master brightness control.
 - **ROLI controller option** *(mobile)* — play the binaural space from a **ROLI LUMI Keys** keyboard (a note sets the carrier; black keys set the beat) or a **ROLI Lightpad Block / Block M** touch pad (glide left↔right for carrier, up↔down for beat, press for volume). Both connect over standard BLE-MIDI.
 
-### 3. AI-generated sessions *(planned)*
+### 3. Field Meditation Mode *(mobile)*
+An immersive, eyes-closed mode where you **feel around** a binaural *field* instead of setting sliders. A glowing circle shows the carrier (colour + centre), the binaural beat, and the "biphotic" (left/right light) beat. With the devices on, one gesture moves the whole field:
+- **Touch** a **ROLI Lightpad Block** — left↔right = carrier, up↔down = beat, press = intensity.
+- **Gaze** — press and move your head; the **Lumenate Nova**'s accelerometer reads pitch (→ beat/flash rate) and roll (→ per-eye "biphotic" balance).
+- **Release** and the tuning **locks in place** to absorb, reflect, and emit.
+
+It has a timer, counts toward your daily goal, and blends light + audio + gentle Pulsetto. → **Read the full guide: [docs/FIELD_MEDITATION.md](docs/FIELD_MEDITATION.md)** — the science of carrier / binaural / biphotic beats, written with a bit of flair.
+
+### 4. AI-generated sessions *(planned)*
 Describe what you want in a prompt, and PulseEntrain will:
 - generate a matching **binaural program**, and
 - optionally generate **background instrumental music** to accompany it.
@@ -40,6 +48,8 @@ Generated sessions can be **saved and reused** later.
 | Advanced pulse-envelope mode (desktop) | ✅ Available |
 | Program catalog (sessions by category) | ✅ Available (mobile) |
 | Manual mode (frequency + noise + Pulsetto / Nova) | ✅ Available (mobile) |
+| **Field Meditation Mode** — immersive XY(Z) binaural field; feel around by touch + gaze ([guide](docs/FIELD_MEDITATION.md)) | ✅ Available (mobile) |
+| General **Settings** page (profile, blend-with-other-apps, developer mode) | ✅ Available (mobile) |
 | **Admin** authoring app (extract / create / edit sessions) | ✅ Available (desktop) |
 | Self-contained `.imedx` sessions (programmatic beats + embedded art) | ✅ Available |
 | **Lumenate Nova** visual (light) entrainment | ✅ Available (mobile) |
@@ -47,6 +57,9 @@ Generated sessions can be **saved and reused** later.
 | Head/phone **motion** mode — orientation steers carrier/beat | 🧪 Experimental |
 | **ROLI LUMI** keyboard (Manual) — play a note → set the carrier (binaural piano); black keys set the beat. Standard BLE-MIDI | 🧪 Experimental (mobile) |
 | **ROLI Lightpad Block / Block M** (Manual) — XY touch pad: glide → carrier, slide → beat, press → volume. Same BLE-MIDI transport | 🧪 Experimental (mobile) |
+| Field Meditation — gaze control (Nova accelerometer: pitch → beat, roll → biphotic balance) | 🧪 Experimental (mobile) |
+| Field Meditation — on-screen "simulated Lightpad" for phones without a block | 🔜 Planned |
+| Field Meditation — phone accelerometer as a stand-in for the Nova's | 💡 Idea |
 | Custom carrier-colour LEDs on the Lightpad (ROLI BLOCKS protocol) | 💡 Idea |
 | LUMI tempo → beat, and beat-synced key lighting | 💡 Idea |
 | AI-generated sessions (n8n + image gen, saveable) | 🔜 Planned |
@@ -99,20 +112,21 @@ Rhythmic flickering light can drive a brain-rhythm response of its own (*photic 
 PulseEntrain is two apps built around one shared **session format**:
 
 - **[Admin](desktop/README.md)** — `desktop/` — a [Kivy](https://kivy.org/) desktop app for **authoring content**: extract a rendered binaural MP3 into its components, or create/edit a session on a timeline (beat curve, noise, cover, duration), preview it live, and save a self-contained `.imedx`. It also still includes the original Pulsetto device controller. → **[desktop/README.md](desktop/README.md)**
-- **[Main app](mobile/README.md)** — `mobile/` — the cross-platform **player** (web + iOS + Android via [One](https://onestack.dev/)). Browse the catalog, play sessions, open a saved `.imedx`, and pair **Pulsetto** (vagus nerve) and **Lumenate Nova** (light) over BLE, plus a Manual mode. On the **web** it also hosts **Studio** — a browser `.imedx` editor (interactive beat graph, live preview, undo/redo, save) that reuses the player's own synth, so the site doubles as authoring + a preview that funnels to the native apps. → **[mobile/README.md](mobile/README.md)**
+- **[Main app](mobile/README.md)** — `mobile/` — the cross-platform **player** (web + iOS + Android via [One](https://onestack.dev/)). Browse the catalog, play sessions, open a saved `.imedx`, pair **Pulsetto** (vagus nerve), **Lumenate Nova** (light), and **ROLI LUMI / Lightpad** (BLE-MIDI) devices, and use **Manual mode** or the immersive **[Field Meditation Mode](docs/FIELD_MEDITATION.md)**. On the **web** it also hosts **Studio** — a browser `.imedx` editor (interactive beat graph, live preview, undo/redo, save) that reuses the player's own synth, so the site doubles as authoring + a preview that funnels to the native apps. → **[mobile/README.md](mobile/README.md)**
 
-The two BLE protocols were reverse-engineered: [docs/PULSETTO_PROTOCOL.md](docs/PULSETTO_PROTOCOL.md), [docs/LUMENATE_NOVA_PROTOCOL.md](docs/LUMENATE_NOVA_PROTOCOL.md).
+Device protocols: [Pulsetto](docs/PULSETTO_PROTOCOL.md) and [Lumenate Nova](docs/LUMENATE_NOVA_PROTOCOL.md) were reverse-engineered; the [ROLI LUMI / Lightpad](docs/LUMI_PROTOCOL.md) input uses standard BLE-MIDI, and drawing to the Lightpad's LEDs is speced (unverified) in [docs/LIGHTPAD_DISPLAY_PROTOCOL.md](docs/LIGHTPAD_DISPLAY_PROTOCOL.md).
 
 ### Quick start
 
 Each app has a `./start.sh` (run after the one-time install in its README):
 
 ```bash
-cd desktop && ./start.sh    # Admin (Kivy) — poetry run python main.py
-cd mobile  && ./start.sh    # Player native bundler — npm run dev:native (One Metro)
+cd desktop && ./start.sh          # Admin (Kivy) — poetry run python main.py
+cd mobile  && ./start.sh          # Player native bundler — npm run dev:native (One Metro)
+cd mobile  && ./start.sh --pair   # …first install / new Wi-Fi: build + install to the USB device, then serve
 ```
 
-For the mobile app, the device/simulator must be on the **same Wi-Fi** as this machine. See each app's README for first-time setup (`poetry install` / `npm install`) and the web target.
+The mobile `./start.sh` **auto-adapts to your current Wi-Fi** (it detects this Mac's LAN IP and tells the bundler to advertise it). The device/simulator must be on the **same Wi-Fi**; on a new network either repoint the app once from its dev menu or use `--pair` to rebuild + install over USB so the fresh IP is baked in. See each app's README for first-time setup (`poetry install` / `npm install`) and the web target.
 
 ---
 
