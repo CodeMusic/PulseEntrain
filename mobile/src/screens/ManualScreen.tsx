@@ -82,7 +82,9 @@ export default function ManualScreen() {
   const runningRef = useRef(false);
   runningRef.current = running;
   useSessionExitGuard(running); // confirm before an accidental tap leaves a live session
-  const devMode = !!(useSettings() || {}).devMode;
+  const uiSettings: any = useSettings() || {};
+  const devMode = !!uiSettings.devMode;
+  const fullBand = !!uiSettings.fullBand;
   useDevLines(
     devMode ? [
       `manual · ${running ? 'running' : 'idle'} · carrier ${Math.round(carrier)} · beat ${beat.toFixed(1)}`,
@@ -374,21 +376,20 @@ export default function ManualScreen() {
     }
   };
 
+  const connectNova = async () => { const ok = await nova.connect(); if (ok && running) nova.startStrobe(beat); };
   const toggleNova = val => {
     if (val && IS_WEB) return nativeOnlyNotice('Lumenate Nova');
-    if (val) {
-      Alert.alert(
-        '⚠️ Photosensitivity warning',
-        `The Lumenate Nova flashes light, which can trigger seizures in people with photosensitive epilepsy. Capped at ${MAX_NOVA_STROBE_HZ} Hz. Don't use if you (or anyone who can see it) may be photosensitive; stop if you feel unwell.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'I understand — connect', onPress: async () => { const ok = await nova.connect(); if (ok && running) nova.startStrobe(beat); } },
-        ],
-        { cancelable: true },
-      );
-    } else {
-      nova.disconnect();
-    }
+    if (!val) return nova.disconnect();
+    if (fullBand) return void connectNova(); // safeties opted out in Settings — skip the prompt
+    Alert.alert(
+      '⚠️ Photosensitivity warning',
+      `The Lumenate Nova flashes light, which can trigger seizures in people with photosensitive epilepsy. Capped at ${MAX_NOVA_STROBE_HZ} Hz. Don't use if you (or anyone who can see it) may be photosensitive; stop if you feel unwell.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'I understand — connect', onPress: connectNova },
+      ],
+      { cancelable: true },
+    );
   };
 
   const novaSub =

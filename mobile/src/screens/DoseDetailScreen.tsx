@@ -10,6 +10,7 @@ import StrengthBadge from '../components/StrengthBadge';
 import NovaExplorer from '../components/NovaExplorer';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
+import { useSettings } from '../settings/SettingsProvider';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -114,21 +115,20 @@ export default function DoseDetailScreen({ route, navigation }) {
     });
   };
 
+  const fullBand = !!((useSettings() as any) || {}).fullBand;
   const toggleNova = val => {
     if (val && IS_WEB) return nativeOnlyNotice('Lumenate Nova');
-    if (val) {
-      Alert.alert(
-        '⚠️ Photosensitivity warning',
-        `The Lumenate Nova flashes light. Flashing light can trigger seizures in people with photosensitive epilepsy. The light is capped at ${MAX_NOVA_STROBE_HZ} Hz. Do not use if you (or anyone nearby who can see it) may be photosensitive, and stop immediately if you feel unwell.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'I understand — connect', onPress: () => tryNova() },
-        ],
-        { cancelable: true },
-      );
-    } else {
-      nova.disconnect();
-    }
+    if (!val) return nova.disconnect();
+    if (fullBand) return void tryNova(); // safeties opted out in Settings — skip the prompt
+    Alert.alert(
+      '⚠️ Photosensitivity warning',
+      `The Lumenate Nova flashes light. Flashing light can trigger seizures in people with photosensitive epilepsy. The light is capped at ${MAX_NOVA_STROBE_HZ} Hz. Do not use if you (or anyone nearby who can see it) may be photosensitive, and stop immediately if you feel unwell.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'I understand — connect', onPress: () => tryNova() },
+      ],
+      { cancelable: true },
+    );
   };
 
   const novaSub =

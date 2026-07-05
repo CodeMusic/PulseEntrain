@@ -55,6 +55,7 @@ export default function FieldScreen() {
   const sessions = useSessions();
   const settings = useSettings();
   const devMode = !!(settings && settings.devMode);
+  const fullBand = !!(settings && settings.fullBand); // opt-out of photosensitivity safeties
 
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
@@ -135,12 +136,13 @@ export default function FieldScreen() {
   }, [breathe]);
 
   // The outer ring pulses at the set binaural beat. Restart only when the beat
-  // changes by a step (so dragging doesn't thrash it), and floor the half-period
-  // at 50 ms (~10 Hz) so fast beats stay a gentle shimmer, not a strobe.
+  // changes by a step (so dragging doesn't thrash it). The half-period is floored
+  // at 50 ms (~10 Hz) so fast beats stay a gentle shimmer, not a strobe — unless
+  // Full frequency range is enabled in Settings (then it tracks the whole band).
   const pulse = useRef(new Animated.Value(0)).current;
   const pulseKey = Math.max(0.5, Math.round(beat * 2) / 2);
   useEffect(() => {
-    const half = Math.max(50, 1000 / pulseKey / 2);
+    const half = Math.max(fullBand ? 8 : 50, 1000 / pulseKey / 2);
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: half, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -149,7 +151,7 @@ export default function FieldScreen() {
     );
     loop.start();
     return () => loop.stop();
-  }, [pulseKey, pulse]);
+  }, [pulseKey, fullBand, pulse]);
 
   const logIfCounted = () => {
     if (!startRef.current || !sessions) return;
@@ -430,15 +432,17 @@ export default function FieldScreen() {
     if (pulsetto.connected) pulsetto.disconnect();
     else if (!pulsetto.scanning) pulsetto.scanForDevices();
   };
+  const connectNova = async () => { const ok = await nova.connect(); if (ok && runningRef.current) nova.startStrobe(baseBeatRef.current + beatBendRef.current); };
   const toggleNova = () => {
     if (IS_WEB) return nativeOnlyNotice('Lumenate Nova');
     if (nova.connected) { nova.disconnect(); return; }
+    if (fullBand) return void connectNova(); // safeties opted out in Settings — skip the prompt
     Alert.alert(
       '⚠️ Photosensitivity warning',
       `The Lumenate Nova flashes light, which can trigger seizures in people with photosensitive epilepsy. Capped at ${MAX_NOVA_STROBE_HZ} Hz. Don't use if you (or anyone who can see it) may be photosensitive; stop if you feel unwell.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'I understand — connect', onPress: async () => { const ok = await nova.connect(); if (ok && runningRef.current) nova.startStrobe(baseBeatRef.current + beatBendRef.current); } },
+        { text: 'I understand — connect', onPress: connectNova },
       ],
       { cancelable: true },
     );

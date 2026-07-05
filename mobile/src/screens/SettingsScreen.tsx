@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, Text, TextInput, Switch, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, Alert, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { useSettings } from '../settings/SettingsProvider';
 
@@ -7,7 +7,22 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix, devMode, setDevMode } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand } = s;
+
+  // Turning the safety off requires an explicit acknowledgement; turning it back
+  // on is immediate.
+  const onToggleFullBand = on => {
+    if (!on) return setFullBand(false);
+    Alert.alert(
+      '⚠️ Remove photosensitivity safeties?',
+      'This lets the light and the on-screen pulse run at the full frequency range — including the 15–25 Hz band that most readily provokes photosensitive seizures — and stops the per-use warning from appearing.\n\nOnly enable this if you are certain neither you nor anyone who can see the light is photosensitive or has any seizure history. Stop immediately if you feel unwell.',
+      [
+        { text: 'Keep safeties on', style: 'cancel' },
+        { text: 'I understand — remove', style: 'destructive', onPress: () => setFullBand(true) },
+      ],
+      { cancelable: true },
+    );
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -38,6 +53,26 @@ export default function SettingsScreen() {
             value={mixWithOthers}
             onValueChange={setMix}
             trackColor={{ true: COLORS.accentGreen, false: COLORS.bgCardLight }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+
+      <Text style={styles.section}>Safety</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Full frequency range</Text>
+            <Text style={styles.hint}>
+              Off (recommended): the light/visual pulse is capped out of the highest-risk flicker band
+              and a photosensitivity warning appears when you connect the Nova. Turn on — with
+              confirmation — to unlock the full range and skip that warning.
+            </Text>
+          </View>
+          <Switch
+            value={!!fullBand}
+            onValueChange={onToggleFullBand}
+            trackColor={{ true: COLORS.accentOrange, false: COLORS.bgCardLight }}
             thumbColor="#fff"
           />
         </View>

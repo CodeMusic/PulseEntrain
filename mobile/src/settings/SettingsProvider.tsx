@@ -9,6 +9,7 @@ import { setMixWithOthers } from '../audio/binauralEngine';
 const KEY_NAME = '@pulseentrain/profileName';
 const KEY_MIX = '@pulseentrain/mixWithOthers';
 const KEY_DEV = '@pulseentrain/devMode';
+const KEY_FULLBAND = '@pulseentrain/fullBand'; // opt out of photosensitivity safeties
 
 const SettingsContext = createContext(null);
 export const useSettings = () => useContext(SettingsContext);
@@ -17,6 +18,7 @@ export function SettingsProvider({ children }) {
   const [name, setNameState] = useState('');
   const [mixWithOthers, setMixState] = useState(true); // blend with other apps' audio
   const [devMode, setDevState] = useState(false); // show on-screen diagnostics
+  const [fullBand, setFullBandState] = useState(false); // opt out: full pulse range, no photo prompts
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -30,6 +32,8 @@ export function SettingsProvider({ children }) {
         setMixWithOthers(on); // apply the stored preference to the audio engine
         const d = await AsyncStorage.getItem(KEY_DEV);
         setDevState(d === '1');
+        const fb = await AsyncStorage.getItem(KEY_FULLBAND);
+        setFullBandState(fb === '1');
       } catch (e) {
       } finally {
         setLoaded(true);
@@ -53,8 +57,13 @@ export function SettingsProvider({ children }) {
     AsyncStorage.setItem(KEY_DEV, on ? '1' : '0').catch(() => {});
   };
 
+  const setFullBand = on => {
+    setFullBandState(on);
+    AsyncStorage.setItem(KEY_FULLBAND, on ? '1' : '0').catch(() => {});
+  };
+
   return (
-    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, loaded }}>
+    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, loaded }}>
       {children}
     </SettingsContext.Provider>
   );
