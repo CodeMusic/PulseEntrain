@@ -16,6 +16,8 @@ import NovaExplorer from '../components/NovaExplorer';
 import { usePhoneOrientation, PHONE_SUPPORTED } from '../sensors/usePhoneOrientation';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 import { useSessionExitGuard } from '../session/useSessionExitGuard';
+import { useSettings } from '../settings/SettingsProvider';
+import { useDevLines } from '../dev/DevPanel';
 
 // Unified Manual mode: one screen, one Start/Stop that runs audio (binaural +
 // noise) plus — when connected — Lumenate Nova light and Pulsetto stim together,
@@ -80,6 +82,14 @@ export default function ManualScreen() {
   const runningRef = useRef(false);
   runningRef.current = running;
   useSessionExitGuard(running); // confirm before an accidental tap leaves a live session
+  const devMode = !!(useSettings() || {}).devMode;
+  useDevLines(
+    devMode ? [
+      `manual · ${running ? 'running' : 'idle'} · carrier ${Math.round(carrier)} · beat ${beat.toFixed(1)}`,
+      `nova ${nova.connected ? 'on' : 'off'} · stim ${pulsetto.connected ? 'on' : 'off'} · lumi ${lumiKeys.connected ? 'on' : 'off'} · pad ${lightpad.connected ? 'on' : 'off'}`,
+    ] : null,
+    [devMode, running, carrier, beat, nova.connected, pulsetto.connected, lumiKeys.connected, lightpad.connected],
+  );
   const baseBeatRef = useRef(10); // the "settled" beat; black-key bend offsets around it
   const baseCarrierNoteRef = useRef(60); // last white key's MIDI note; white-key bend offsets ±1 semitone
   const lastKeyTypeRef = useRef('white'); // route pitch-bend: white → carrier, black → beat

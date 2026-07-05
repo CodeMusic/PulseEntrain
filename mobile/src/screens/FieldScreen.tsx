@@ -11,6 +11,7 @@ import { useLightpad } from '../lightpad/LightpadProvider';
 import { useSessions } from '../wellness/SessionsProvider';
 import { useSettings } from '../settings/SettingsProvider';
 import { useSessionExitGuard } from '../session/useSessionExitGuard';
+import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -362,6 +363,30 @@ export default function FieldScreen() {
     );
   };
 
+  // Feed the shared dev panel (docked at the bottom, collapsible) when devMode is on.
+  useDevPanelContent(
+    devMode ? (
+      <View>
+        <Text style={styles.devTxt}>
+          {`nova ${dev?.novaConn ? 'on' : 'off'} · tel ${dev ? dev.hz.toFixed(1) : '0'} Hz · rate ${devRate}\n`}
+          {`pitch ${dev ? dev.pitch.toFixed(1) : '—'}°  roll ${dev ? dev.roll.toFixed(1) : '—'}°  (smoothed ${dev ? dev.sPitch.toFixed(0) : '—'}/${dev ? dev.sRoll.toFixed(0) : '—'})\n`}
+          {`push ${dev?.pushing ? 'YES' : 'no'} · pressure ${dev ? dev.pressure : 0}\n`}
+          {`carr ${dev ? Math.round(dev.carrier) : 0} · beat ${dev ? dev.beat.toFixed(1) : 0} · bal ${dev ? dev.balance.toFixed(2) : 0}\n`}
+          {`lp ${dev?.lpConn ? 'on' : 'off'} · ${dev ? dev.evt : ''}`}
+        </Text>
+        <View style={styles.devRates}>
+          <Text style={styles.devRatesLabel}>tel rate</Text>
+          {[1, 5, 10, 20, 40].map(r => (
+            <TouchableOpacity key={r} onPress={() => setDevRate(r)} style={[styles.devRateBtn, devRate === r && styles.devRateOn]}>
+              <Text style={styles.devRateTxt}>{r}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    ) : null,
+    [devMode, dev, devRate],
+  );
+
   const core = carrierColorVibrant(carrier);
   const halo = carrierColor(carrier);
   const orbScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.06] });
@@ -450,27 +475,6 @@ export default function FieldScreen() {
         </Text>
       ) : null}
 
-      {/* devMode diagnostics overlay — live Nova head data + Lightpad values, and a
-          telemetry-rate experiment (the faster Nova rates are unconfirmed). */}
-      {devMode ? (
-        <View style={styles.devPanel} pointerEvents="box-none">
-          <Text style={styles.devTxt}>
-            {`nova ${dev?.novaConn ? 'on' : 'off'} · tel ${dev ? dev.hz.toFixed(1) : '0'} Hz · rate ${devRate}\n`}
-            {`pitch ${dev ? dev.pitch.toFixed(1) : '—'}°  roll ${dev ? dev.roll.toFixed(1) : '—'}°  (smoothed ${dev ? dev.sPitch.toFixed(0) : '—'}/${dev ? dev.sRoll.toFixed(0) : '—'})\n`}
-            {`push ${dev?.pushing ? 'YES' : 'no'} · pressure ${dev ? dev.pressure : 0}\n`}
-            {`carr ${dev ? Math.round(dev.carrier) : 0} · beat ${dev ? dev.beat.toFixed(1) : 0} · bal ${dev ? dev.balance.toFixed(2) : 0}\n`}
-            {`lp ${dev?.lpConn ? 'on' : 'off'} · ${dev ? dev.evt : ''}`}
-          </Text>
-          <View style={styles.devRates}>
-            <Text style={styles.devRatesLabel}>tel rate</Text>
-            {[1, 5, 10, 20, 40].map(r => (
-              <TouchableOpacity key={r} onPress={() => setDevRate(r)} style={[styles.devRateBtn, devRate === r && styles.devRateOn]}>
-                <Text style={styles.devRateTxt}>{r}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -513,7 +517,6 @@ const styles = StyleSheet.create({
   circleBtnTxt: { fontSize: 14, fontWeight: '800', color: '#0B0E13' },
   stopBtnTxt: { color: '#FFFFFF' },
   hint: { color: COLORS.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18, minHeight: 34 },
-  devPanel: { position: 'absolute', top: 6, left: 8, right: 8, backgroundColor: 'rgba(4,8,14,0.86)', borderRadius: 10, borderWidth: 1, borderColor: '#1D2836', paddingHorizontal: 10, paddingVertical: 8 },
   devTxt: { color: '#8FE3C2', fontSize: 11, lineHeight: 16, fontFamily: 'Courier' },
   devRates: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 6 },
   devRatesLabel: { color: COLORS.textMuted, fontSize: 11, marginRight: 2 },
