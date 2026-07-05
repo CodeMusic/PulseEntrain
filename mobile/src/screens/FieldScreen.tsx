@@ -24,8 +24,10 @@ import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 //   HEAD    pitch → gently BENDS the finger-set beat (± a few Hz), measured from your
 //                   entry pitch, so a still head doesn't change it (carrier bends a
 //                   touch too). Bends bake into the base on release.
-//           roll  → the BIPHOTIC beat: ±5° balanced, then slows the eye you lean
-//                   toward down to 0.5 Hz by ±30°. |left − right| flash is shown.
+//           roll  → the BIPHOTIC beat, a per-position fine-tune: while pressing,
+//                   rolling from your entry pose slows the eye you lean toward
+//                   (±5° balanced … ±30° down to 0.5 Hz; |left − right| shown).
+//                   Moving your finger to a new spot, or releasing, re-syncs it.
 const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
 const FIELD_BEAT_MIN = 0.5, FIELD_BEAT_MAX = 40; // binaural beat = audio + flash rate
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
@@ -83,6 +85,7 @@ export default function FieldScreen() {
   const balanceRef = useRef(0); // roll: −1 left … 0 balanced … +1 right (biphotic)
   const pushingRef = useRef(false);
   const centerPitchRef = useRef(0); // head pitch captured at push-engage (bend anchor)
+  const centerRollRef = useRef(0); // head roll captured at push / finger-move (biphotic zero)
   const headRef = useRef(null); // smoothed { pitch, roll }
   const uiRef = useRef(0);
   const novaBrightRef = useRef(0);
@@ -182,12 +185,23 @@ export default function FieldScreen() {
     const fromFinger = () => {
       const xN = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
       const yN = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
-      baseCarrierRef.current = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-      baseBeatRef.current = FIELD_BEAT_MIN + yN * (FIELD_BEAT_MAX - FIELD_BEAT_MIN);
+      const newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
+      const newB = FIELD_BEAT_MIN + yN * (FIELD_BEAT_MAX - FIELD_BEAT_MIN);
+      // A meaningful move (not MPE jitter) re-syncs the biphotic beat: roll is a
+      // fine-tune *at* a position, so a new position starts balanced. Re-anchor the
+      // roll centre to the current head so rolling from here re-opens it.
+      const moved = Math.abs(newB - baseBeatRef.current) > 0.5 || Math.abs(newC - baseCarrierRef.current) > 8;
+      baseCarrierRef.current = newC;
+      baseBeatRef.current = newB;
+      if (moved) {
+        balanceRef.current = 0;
+        centerRollRef.current = headRef.current ? headRef.current.roll : 0;
+      }
       applyField();
     };
-    // On release, bake any live pitch bend into the base so the tuning locks in
-    // place (the roll/biphotic balance already persists on its own).
+    // On release: bake any live pitch bend into the base so the beat/carrier lock
+    // in place, and re-sync the eyes (the biphotic beat only lives while you're
+    // pressing — roll is a fine-tune, not a persisted setting).
     const releasePush = () => {
       if (!pushingRef.current) return;
       pushingRef.current = false;
@@ -196,6 +210,9 @@ export default function FieldScreen() {
       baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
       beatBendRef.current = 0;
       carrierBendRef.current = 0;
+      balanceRef.current = 0;
+      if (runningRef.current && nova.connected) nova.setBalance(0);
+      applyField();
     };
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
@@ -223,6 +240,7 @@ export default function FieldScreen() {
           pushingRef.current = true; setPushing(true);
           const h = headRef.current;
           centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
+          centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
         } else if (!nowPushing && pushingRef.current) {
           releasePush();
         }
@@ -247,7 +265,7 @@ export default function FieldScreen() {
       const p = clamp(dz((s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN, PITCH_DEADZONE), -PITCH_BEND_SPAN, PITCH_BEND_SPAN);
       beatBendRef.current = (p / PITCH_BEND_SPAN) * BEAT_BEND_MAX;
       carrierBendRef.current = (p / PITCH_BEND_SPAN) * CARR_BEND_MAX;
-      const dRoll = dz(s.roll * FIELD_ROLL_SIGN, ROLL_DEADZONE);
+      const dRoll = dz((s.roll - centerRollRef.current) * FIELD_ROLL_SIGN, ROLL_DEADZONE);
       balanceRef.current = clamp(dRoll / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±5° balanced, ±30° full
       applyField();
     };
