@@ -24,10 +24,10 @@ import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 //   HEAD    pitch → gently BENDS the finger-set beat (± a few Hz), measured from your
 //                   entry pitch, so a still head doesn't change it (carrier bends a
 //                   touch too). Bends bake into the base on release.
-//           roll  → the BIPHOTIC beat, a per-position fine-tune: while pressing,
-//                   rolling from your entry pose slows the eye you lean toward
-//                   (±5° balanced … ±30° down to 0.5 Hz; |left − right| shown).
-//                   Moving your finger to a new spot, or releasing, re-syncs it.
+//           roll  → the BIPHOTIC beat: while pressing, rolling from your entry pose
+//                   slows the eye you lean toward (±5° balanced … ±30° to 0.5 Hz;
+//                   |left − right| shown). It LOCKS on release; a quick tap of the
+//                   block gently re-syncs the eyes over ~5 s.
 const CARR_MIN = 80, CARR_MAX = 500; // carrier sweep across the pad width
 const FIELD_BEAT_MIN = 0.5, FIELD_BEAT_MAX = 40; // binaural beat = audio + flash rate
 const FIELD_PULSE_INTENSITY = 4; // Pulsetto session base (1–9)
@@ -38,7 +38,9 @@ const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
 const ROLL_DEADZONE = 5, ROLL_MAX = 30; // roll: ±5° = balanced, ±30° slows one eye to 0.5 Hz
 const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for a full bend
 const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
-const CARR_BEND_MAX = 3; // Hz — a very subtle carrier bend alongside it
+const CARR_BEND_MAX = 12; // Hz — carrier bend alongside it, big enough to actually hear
+const TAP_MS = 350; // a touch shorter than this that never pressed = a "tap"
+const BIPHOTIC_FADE_MS = 5000; // a tap re-syncs the eyes gently over this long
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
 const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
@@ -86,6 +88,11 @@ export default function FieldScreen() {
   const pushingRef = useRef(false);
   const centerPitchRef = useRef(0); // head pitch captured at push-engage (bend anchor)
   const centerRollRef = useRef(0); // head roll captured at push / finger-move (biphotic zero)
+  const touchStartRef = useRef(0); // time of the current touch's noteOn (tap detection)
+  const touchPushedRef = useRef(false); // did this touch cross the press threshold?
+  const preTapBeatRef = useRef(10); // base beat/carrier before the touch (restored on a tap)
+  const preTapCarrierRef = useRef(200);
+  const fadeRef = useRef(null); // interval id for the gentle biphotic re-sync
   const headRef = useRef(null); // smoothed { pitch, roll }
   const uiRef = useRef(0);
   const novaBrightRef = useRef(0);
@@ -148,6 +155,7 @@ export default function FieldScreen() {
     () => () => {
       logIfCounted();
       if (tickRef.current) clearInterval(tickRef.current);
+      if (fadeRef.current) clearInterval(fadeRef.current);
       try { engineRef.current?.stop(); } catch (e) {}
       try { nova.stopStrobe(); } catch (e) {}
       try { pulsetto.stopSession(); } catch (e) {} // unconditional — always stop the stimulator
@@ -179,6 +187,24 @@ export default function FieldScreen() {
     });
   };
 
+  const cancelFade = () => { if (fadeRef.current) { clearInterval(fadeRef.current); fadeRef.current = null; } };
+  // A quick tap gently re-syncs the eyes: ramp the locked biphotic balance → 0
+  // over BIPHOTIC_FADE_MS so the asymmetry dissolves naturally rather than snapping.
+  const startBiphoticFade = () => {
+    cancelFade();
+    const startBal = balanceRef.current;
+    if (Math.abs(startBal) < 0.02) return;
+    const t0 = Date.now();
+    fadeRef.current = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / BIPHOTIC_FADE_MS);
+      balanceRef.current = startBal * (1 - k);
+      if (runningRef.current && !pausedRef.current) nova.setBalance(balanceRef.current);
+      const b = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, FIELD_BEAT_MAX);
+      setBiphotic(Math.round(Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN) * 2) / 2);
+      if (k >= 1) { balanceRef.current = 0; cancelFade(); }
+    }, 120);
+  };
+
   // Lightpad touch → carrier (X), beat (Y), intensity (Z) + the push gate.
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
@@ -190,18 +216,21 @@ export default function FieldScreen() {
       // A meaningful move (not MPE jitter) re-syncs the biphotic beat: roll is a
       // fine-tune *at* a position, so a new position starts balanced. Re-anchor the
       // roll centre to the current head so rolling from here re-opens it.
+      // A meaningful move WHILE PRESSING re-syncs the biphotic (roll is a fine-tune
+      // at a spot); moving to a new spot re-anchors the roll centre. A light touch
+      // that isn't a press leaves the locked biphotic alone.
       const moved = Math.abs(newB - baseBeatRef.current) > 0.5 || Math.abs(newC - baseCarrierRef.current) > 8;
       baseCarrierRef.current = newC;
       baseBeatRef.current = newB;
-      if (moved) {
+      if (moved && pushingRef.current) {
         balanceRef.current = 0;
         centerRollRef.current = headRef.current ? headRef.current.roll : 0;
       }
       applyField();
     };
-    // On release: bake any live pitch bend into the base so the beat/carrier lock
-    // in place, and re-sync the eyes (the biphotic beat only lives while you're
-    // pressing — roll is a fine-tune, not a persisted setting).
+    // On release from a press: bake the pitch bend into the base so beat/carrier
+    // lock, and LOCK the biphotic balance in place too (it persists until you
+    // press+re-roll, or tap to gently re-sync).
     const releasePush = () => {
       if (!pushingRef.current) return;
       pushingRef.current = false;
@@ -210,13 +239,16 @@ export default function FieldScreen() {
       baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
       beatBendRef.current = 0;
       carrierBendRef.current = 0;
-      balanceRef.current = 0;
-      if (runningRef.current && nova.connected) nova.setBalance(0);
       applyField();
     };
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
       if (ev.type === 'noteOn') {
+        cancelFade(); // a fresh touch cancels any in-progress re-sync
+        touchStartRef.current = Date.now();
+        touchPushedRef.current = false;
+        preTapBeatRef.current = baseBeatRef.current;
+        preTapCarrierRef.current = baseCarrierRef.current;
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
         fromFinger();
@@ -238,6 +270,8 @@ export default function FieldScreen() {
         const nowPushing = ev.value >= PUSH_THRESHOLD;
         if (nowPushing && !pushingRef.current) {
           pushingRef.current = true; setPushing(true);
+          touchPushedRef.current = true;
+          cancelFade();
           const h = headRef.current;
           centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
           centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
@@ -245,7 +279,16 @@ export default function FieldScreen() {
           releasePush();
         }
       } else if (ev.type === 'noteOff') {
-        releasePush();
+        if (pushingRef.current) {
+          releasePush();
+        } else if (Date.now() - touchStartRef.current < TAP_MS) {
+          // A quick tap that never pressed: don't retune (restore the base), just
+          // gently re-sync the eyes over ~5 s.
+          baseBeatRef.current = preTapBeatRef.current;
+          baseCarrierRef.current = preTapCarrierRef.current;
+          applyField();
+          startBiphoticFade();
+        }
       }
     });
     return () => lightpad.setNoteListener(null);
@@ -316,6 +359,7 @@ export default function FieldScreen() {
 
   const start = async () => {
     const e = ensureEngine();
+    cancelFade();
     baseCarrierRef.current = carrier; baseBeatRef.current = beat;
     beatBendRef.current = 0; carrierBendRef.current = 0; balanceRef.current = 0;
     e.start({ carrier, beat, volume: intensity, background: 'none' });
@@ -334,6 +378,7 @@ export default function FieldScreen() {
 
   const pause = async () => {
     setPaused(true);
+    cancelFade();
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
     try { engineRef.current?.fadeOut(0.6); } catch (e) {}
     try { nova.stopStrobe(); } catch (e) {}
@@ -354,6 +399,7 @@ export default function FieldScreen() {
 
   const stop = async () => {
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+    cancelFade();
     logIfCounted();
     const eng = engineRef.current;
     if (eng) {
