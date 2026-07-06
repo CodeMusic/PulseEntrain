@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Animated, Easing, Alert, StyleSheet } from 'react-native';
+import Slider from '@react-native-community/slider';
 import KeepAwake from 'react-native-keep-awake';
 import { COLORS } from '../theme';
 import { BinauralEngine } from '../audio/binauralEngine';
@@ -88,7 +89,8 @@ export default function FieldScreen() {
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
   const [biphotic, setBiphotic] = useState(0); // emergent left/right flash difference (Hz)
-  const [intensity, setIntensity] = useState(0.7);
+  const [intensity, setIntensity] = useState(0.7); // press-driven field brightness (light/visual)
+  const [volume, setVolume] = useState(0.8); // session audio level — scales only our tones (mixable)
   const [timerMin, setTimerMin] = useState(15);
   const [remaining, setRemaining] = useState(0);
   const [running, setRunning] = useState(false);
@@ -347,8 +349,7 @@ export default function FieldScreen() {
         fromFinger();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         lastPressureRef.current = ev.value;
-        const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1);
-        if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(i);
+        const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field brightness (not volume)
         if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
         uiTick(() => setIntensity(i));
         const nowPushing = ev.value >= PUSH_THRESHOLD;
@@ -436,12 +437,17 @@ export default function FieldScreen() {
     }, 1000);
   };
 
+  const onVolume = v => {
+    setVolume(v);
+    if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(v);
+  };
+
   const start = async () => {
     const e = ensureEngine();
     cancelFade();
     baseCarrierRef.current = carrier; baseBeatRef.current = beat;
     beatBendRef.current = 0; carrierBendRef.current = 0; balanceRef.current = 0;
-    e.start({ carrier, beat, volume: intensity, background: 'none' });
+    e.start({ carrier, beat, volume, background: 'none' });
     e.fadeIn(1.2);
     if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); nova.setBalance(0); }
     if (pulsetto.connected) { try { await pulsetto.startSession(pulseStrengthRef.current); } catch (er) {} }
@@ -610,6 +616,21 @@ export default function FieldScreen() {
               <Text style={styles.timerBtnTxt}>+</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.volRow}>
+            <Text style={styles.volIcon}>🔈</Text>
+            <Slider
+              style={styles.volSlider}
+              minimumValue={0}
+              maximumValue={1}
+              value={volume}
+              onValueChange={onVolume}
+              minimumTrackTintColor={COLORS.accentBlue}
+              maximumTrackTintColor={COLORS.bgCardLight}
+              thumbTintColor="#fff"
+            />
+            <Text style={styles.volIcon}>🔊</Text>
+          </View>
+          <Text style={styles.volHint}>Session volume — turn down to mix under other apps.</Text>
         </View>
       ) : (
         <View style={styles.topBar}>
@@ -649,15 +670,33 @@ export default function FieldScreen() {
 
       {/* Bottom: a subtle cue (hidden while paused — controls live in the circle). */}
       {!paused ? (
-        <Text style={styles.hint}>
-          {IS_WEB
-            ? 'Field visuals + audio preview. Connect a Lightpad on the phone to steer it.'
-            : !running
-            ? lightpad.connected ? 'Tap the circle to enter, then feel around the block.' : 'Connect a Lightpad above (or just enter for audio + visuals).'
-            : pushing
-            ? 'sculpting — finger: ← → carrier, ↑ ↓ beat · head: pitch = beat, roll = balance'
-            : 'press & hold the block to edit · tap the circle to pause'}
-        </Text>
+        <>
+          {running ? (
+            <View style={styles.volRowLive}>
+              <Text style={styles.volIcon}>🔈</Text>
+              <Slider
+                style={styles.volSlider}
+                minimumValue={0}
+                maximumValue={1}
+                value={volume}
+                onValueChange={onVolume}
+                minimumTrackTintColor={COLORS.accentBlue}
+                maximumTrackTintColor={COLORS.bgCardLight}
+                thumbTintColor="#fff"
+              />
+              <Text style={styles.volIcon}>🔊</Text>
+            </View>
+          ) : null}
+          <Text style={styles.hint}>
+            {IS_WEB
+              ? 'Field visuals + audio preview. Connect a Lightpad on the phone to steer it.'
+              : !running
+              ? lightpad.connected ? 'Tap the circle to enter, then feel around the block.' : 'Connect a Lightpad above (or just enter for audio + visuals).'
+              : pushing
+              ? 'sculpting — finger: ← → carrier, ↑ ↓ beat · head: pitch = beat, roll = balance'
+              : 'press & hold the block to edit · tap the circle to pause'}
+          </Text>
+        </>
       ) : null}
 
     </View>
@@ -679,6 +718,11 @@ const styles = StyleSheet.create({
   chipTxtOn: { color: COLORS.textPrimary },
   chipHint: { color: COLORS.textMuted, fontSize: 11, marginLeft: 6 },
   timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14, gap: 18 },
+  volRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingHorizontal: 8 },
+  volRowLive: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginBottom: 6 },
+  volSlider: { flex: 1, height: 36, marginHorizontal: 8 },
+  volIcon: { fontSize: 15 },
+  volHint: { color: COLORS.textMuted, fontSize: 11, textAlign: 'center', marginTop: 2 },
   timerBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#141C28', alignItems: 'center', justifyContent: 'center' },
   timerBtnTxt: { color: COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
   timerVal: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '700', minWidth: 84, textAlign: 'center' },

@@ -10,6 +10,7 @@ declare module 'one' {
         | `/`
         | `/_sitemap`
         | `/about`
+        | `/field`
         | `/manual`
         | `/settings`
         | `/springboard`
