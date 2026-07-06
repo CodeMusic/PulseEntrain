@@ -125,9 +125,9 @@ export default function SettingsScreen() {
           <View style={styles.rowText}>
             <Text style={styles.label}>Explore Field Space</Text>
             <Text style={styles.hint}>
-              In normal programs, let your head steer like Field mode (needs the Nova): look up/down
-              to gently bend the beat &amp; flash rate, tilt to open the biphotic (one eye slows).
-              Off leaves programs playing exactly as authored.
+              In synth programs, steer like Field mode: look up/down (Nova) to bend the beat &amp;
+              flash, tilt for the biphotic — and drag on the cover to bend carrier (←→) &amp; beat (↑↓),
+              which springs back on release. Off leaves programs playing exactly as authored.
             </Text>
           </View>
           <Switch

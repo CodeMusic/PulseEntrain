@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'one';
-import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator, PanResponder, Animated } from 'react-native';
 import TrackPlayer, {
   useProgress,
   usePlaybackState,
@@ -42,6 +42,9 @@ const playCountKey = id => `@pulseentrain/playcount/${id}`;
 const EX_DEADZONE = 5, EX_PITCH_SPAN = 20, EX_ROLL_MAX = 20;
 const EX_BEAT_BEND = 3.5, EX_CARR_BEND = 12; // Hz — how far pitch bends beat / carrier
 const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = 1;
+// Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
+const TOUCH_CARR_MAX = 200, TOUCH_BEAT_MAX = 10; // Hz bend range for a full drag
+const TOUCH_TRAVEL_PX = 180; // drag distance (px) that reaches the full bend
 const exClamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const exDz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
 // Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
@@ -127,6 +130,15 @@ export default function PlayerScreen({ route, navigation }) {
   // Field mode, anchored to your head pose when it engages. Off = program as authored.
   const exHeadRef = useRef(null); // smoothed { pitch, roll }
   const exCenterRef = useRef(null); // pose captured when it engaged
+  // The program's bend = head part + touch part, summed and pushed to the synth.
+  const headBendRef = useRef({ beat: 0, carr: 0 });
+  const touchBendRef = useRef({ beat: 0, carr: 0 });
+  const applyBend = () => {
+    const s = synthRef.current;
+    if (isSynth && s && s.setBend) {
+      s.setBend(headBendRef.current.beat + touchBendRef.current.beat, headBendRef.current.carr + touchBendRef.current.carr);
+    }
+  };
   useEffect(() => {
     if (!exploreField || !nova.connected || !isPlaying || !nova.setMotionListener) return;
     if (nova.setTelemetryRate) nova.setTelemetryRate(20);
@@ -138,7 +150,8 @@ export default function PlayerScreen({ route, navigation }) {
       const c = exCenterRef.current;
       const p = exClamp(exDz((s.pitch - c.pitch) * EX_PITCH_SIGN, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
       const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_DEADZONE);
-      if (isSynth && synthRef.current && synthRef.current.setBend) synthRef.current.setBend(p * EX_BEAT_BEND, p * EX_CARR_BEND);
+      headBendRef.current = { beat: p * EX_BEAT_BEND, carr: p * EX_CARR_BEND };
+      applyBend();
       nova.setBalance(exClamp(dRoll / (EX_ROLL_MAX - EX_DEADZONE), -1, 1));
     };
     nova.setMotionListener(s => {
@@ -151,10 +164,48 @@ export default function PlayerScreen({ route, navigation }) {
     return () => {
       try { nova.setMotionListener(null); } catch (e) {}
       try { nova.setBalance(0); } catch (e) {}
-      try { if (isSynth && synthRef.current && synthRef.current.setBend) synthRef.current.setBend(0, 0); } catch (e) {}
+      headBendRef.current = { beat: 0, carr: 0 };
+      applyBend();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exploreField, nova.connected, isPlaying, isSynth]);
+
+  // Touch-drag on the art: bend carrier (X) + beat (Y) as a temporary offset that
+  // springs back (with a little bounce) on release, so the program always returns
+  // to what it authored. Taps still fall through to the graph toggle.
+  const exploreRef = useRef(false);
+  exploreRef.current = exploreField && isSynth;
+  const springVal = useRef(new Animated.Value(0)).current;
+  const springStartRef = useRef({ beat: 0, carr: 0 });
+  const springBack = () => {
+    springStartRef.current = { ...touchBendRef.current };
+    springVal.setValue(1);
+    const id = springVal.addListener(({ value }) => {
+      touchBendRef.current = { beat: springStartRef.current.beat * value, carr: springStartRef.current.carr * value };
+      applyBend();
+    });
+    Animated.spring(springVal, { toValue: 0, friction: 5, tension: 70, useNativeDriver: false }).start(() => {
+      springVal.removeListener(id);
+      touchBendRef.current = { beat: 0, carr: 0 };
+      applyBend();
+    });
+  };
+  const panRef = useRef(null);
+  if (!panRef.current) {
+    panRef.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => false, // let taps reach the graph toggle
+      onMoveShouldSetPanResponder: (e, g) => exploreRef.current && (Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8),
+      onPanResponderGrant: () => { springVal.stopAnimation(); },
+      onPanResponderMove: (e, g) => {
+        const carr = exClamp(g.dx / TOUCH_TRAVEL_PX, -1, 1) * TOUCH_CARR_MAX;
+        const beat = exClamp(-g.dy / TOUCH_TRAVEL_PX, -1, 1) * TOUCH_BEAT_MAX;
+        touchBendRef.current = { beat, carr };
+        applyBend();
+      },
+      onPanResponderRelease: () => springBack(),
+      onPanResponderTerminate: () => springBack(),
+    });
+  }
 
   const position = isSynth ? synthPos : tp.position;
   const duration = isSynth ? synthDur : tp.duration;
@@ -545,6 +596,7 @@ export default function PlayerScreen({ route, navigation }) {
       {/* Web: toggle on press-in — a quick click's onPress gets eaten by the
           ScrollView responder, so only a held click registered. Native keeps the
           on-release press so it doesn't fight scrolling. */}
+      <View {...panRef.current.panHandlers}>
       <Pressable {...(IS_WEB ? { onPressIn: onCoverTap } : { onPress: onCoverTap })}>
         {graphMode && isSynth ? (
           <View style={styles.graphBox}>
@@ -571,6 +623,7 @@ export default function PlayerScreen({ route, navigation }) {
           <ArtImage source={imageSource(dose.image)} height={260} radius={20} hpad={24} />
         )}
       </Pressable>
+      </View>
       <Text style={styles.title}>{dose.name}</Text>
       {cur ? (
         <Text style={[styles.sub, { color: carrierColor(cur.carrier) }]}>
