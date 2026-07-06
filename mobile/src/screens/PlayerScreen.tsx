@@ -42,6 +42,7 @@ const playCountKey = id => `@pulseentrain/playcount/${id}`;
 // Explore Field Space: head motion bends a program the way Field mode does. Values
 // mirror Field's head control (anchored to your pose when it engages).
 const EX_DEADZONE = 5, EX_PITCH_SPAN = 20, EX_ROLL_MAX = 20;
+const EX_ROLL_DEADZONE = 2; // roll: only ±2° stays balanced, then one eye eases to 0.5 Hz by EX_ROLL_MAX
 const EX_BEAT_BEND = 3.5, EX_CARR_BEND = 12; // Hz — how far pitch bends beat / carrier
 const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = 1;
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
@@ -158,10 +159,10 @@ export default function PlayerScreen({ route, navigation }) {
       }
       const c = exCenterRef.current;
       const p = exClamp(exDz((s.pitch - c.pitch) * EX_PITCH_SIGN, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
-      const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_DEADZONE);
+      const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_ROLL_DEADZONE);
       headBendRef.current = { beat: p * EX_BEAT_BEND, carr: p * EX_CARR_BEND };
       applyBend();
-      nova.setBalance(exClamp(dRoll / (EX_ROLL_MAX - EX_DEADZONE), -1, 1));
+      nova.setBalance(exClamp(dRoll / (EX_ROLL_MAX - EX_ROLL_DEADZONE), -1, 1));
     };
     nova.setMotionListener(s => {
       const prev = exHeadRef.current;

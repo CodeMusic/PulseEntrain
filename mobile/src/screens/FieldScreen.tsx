@@ -40,7 +40,7 @@ const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
 // Head control (Nova accelerometer, while pressing). Roll opens the biphotic beat;
 // pitch only *bends* the finger-set beat. Both are relative to your pose when the
 // push began, and both have a dead-zone so a still/settling head does nothing.
-const ROLL_DEADZONE = 5, ROLL_MAX = 20; // roll: ±5° balanced, ±20° slows one eye to 0.5 Hz
+const ROLL_DEADZONE = 2, ROLL_MAX = 20; // roll: ±2° balanced, then one eye slows gradually to 0.5 Hz by ±20°
 const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for a full bend
 const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
 const CARR_BEND_MAX = 12; // Hz — carrier bend alongside it, big enough to actually hear
@@ -397,7 +397,7 @@ export default function FieldScreen() {
       beatBendRef.current = (p / PITCH_BEND_SPAN) * BEAT_BEND_MAX;
       carrierBendRef.current = (p / PITCH_BEND_SPAN) * CARR_BEND_MAX;
       const dRoll = dz((s.roll - centerRollRef.current) * FIELD_ROLL_SIGN, ROLL_DEADZONE);
-      balanceRef.current = clamp(dRoll / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±5° balanced, ±20° full
+      balanceRef.current = clamp(dRoll / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±2° balanced, one eye eases to 0.5 Hz by ±20°
       applyField();
     };
     nova.setMotionListener(s => {
