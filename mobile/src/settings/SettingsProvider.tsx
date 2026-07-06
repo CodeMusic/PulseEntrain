@@ -12,6 +12,7 @@ const KEY_DEV = '@pulseentrain/devMode';
 const KEY_FULLBAND = '@pulseentrain/fullBand'; // opt out of photosensitivity safeties
 const KEY_RELATIVE = '@pulseentrain/relativeControl'; // Field: relative (drag-delta) vs absolute pad
 const KEY_STIM = '@pulseentrain/pulsettoStrength'; // default Pulsetto session strength (1–7)
+const KEY_EXPLORE = '@pulseentrain/exploreField'; // let head motion bend normal programs
 
 const SettingsContext = createContext(null);
 export const useSettings = () => useContext(SettingsContext);
@@ -23,6 +24,7 @@ export function SettingsProvider({ children }) {
   const [fullBand, setFullBandState] = useState(false); // opt out: full pulse range, no photo prompts
   const [relativeControl, setRelState] = useState(false); // Field: drag-delta control vs absolute pad
   const [pulsettoStrength, setStimState] = useState(4); // default session strength (1–7); push adds +2
+  const [exploreField, setExploreState] = useState(false); // head motion bends normal programs
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -42,6 +44,8 @@ export function SettingsProvider({ children }) {
         setRelState(rc === '1');
         const st = parseInt(await AsyncStorage.getItem(KEY_STIM), 10);
         if (Number.isFinite(st)) setStimState(Math.max(1, Math.min(7, st)));
+        const ex = await AsyncStorage.getItem(KEY_EXPLORE);
+        setExploreState(ex === '1');
       } catch (e) {
       } finally {
         setLoaded(true);
@@ -81,8 +85,13 @@ export function SettingsProvider({ children }) {
     AsyncStorage.setItem(KEY_STIM, String(n)).catch(() => {});
   };
 
+  const setExploreField = on => {
+    setExploreState(on);
+    AsyncStorage.setItem(KEY_EXPLORE, on ? '1' : '0').catch(() => {});
+  };
+
   return (
-    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, loaded }}>
+    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField, loaded }}>
       {children}
     </SettingsContext.Provider>
   );

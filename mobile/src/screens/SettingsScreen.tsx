@@ -7,7 +7,7 @@ import { useSettings } from '../settings/SettingsProvider';
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField } = s;
 
   // Turning the safety off requires an explicit acknowledgement; turning it back
   // on is immediate.
@@ -114,6 +114,25 @@ export default function SettingsScreen() {
           <Switch
             value={!!relativeControl}
             onValueChange={setRelativeControl}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.bgCardLight }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Explore Field Space</Text>
+            <Text style={styles.hint}>
+              In normal programs, let your head steer like Field mode (needs the Nova): look up/down
+              to gently bend the beat &amp; flash rate, tilt to open the biphotic (one eye slows).
+              Off leaves programs playing exactly as authored.
+            </Text>
+          </View>
+          <Switch
+            value={!!exploreField}
+            onValueChange={setExploreField}
             trackColor={{ true: COLORS.accentBlue, false: COLORS.bgCardLight }}
             thumbColor="#fff"
           />

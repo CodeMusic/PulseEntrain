@@ -35,6 +35,8 @@ export class SessionSynth {
     this.volume = volume;
     this.onTick = onTick;
     this.onEnded = onEnded;
+    this.beatBend = 0; // Explore Field Space: head-driven ± offset on the program's beat…
+    this.carrierBend = 0; // …and carrier. Applied on top of the scene timeline.
     this.engine = new BinauralEngine();
     this.position = 0;
     this.playing = false;
@@ -114,16 +116,25 @@ export class SessionSynth {
       return;
     }
     const a = this._activeAt(this.position);
-    this.engine.setCarrier(a.carrier);
-    this.engine.setBeat(a.beat);
+    const beat = Math.max(0.5, a.beat + this.beatBend); // Explore Field Space bend (0 normally)
+    const carrier = Math.max(40, a.carrier + this.carrierBend);
+    this.engine.setCarrier(carrier);
+    this.engine.setBeat(beat);
     const wantNoise = normalizeNoise(a.noise);
     if (wantNoise !== this._curNoise) {
       this._curNoise = wantNoise; // hold-forward noise change — crossfade, no click
       this.engine.crossfadeNoise(wantNoise);
     }
     if (this.onTick) {
-      this.onTick(this.position, a.beat, { intensity: a.intensity, flash: a.flash, flashHz: a.flashHz });
+      // Report the BENT beat so the Nova flash follows the head-bend too.
+      this.onTick(this.position, beat, { intensity: a.intensity, flash: a.flash, flashHz: a.flashHz });
     }
+  }
+
+  // Explore Field Space: a live head-driven bend added on top of the timeline.
+  setBend(beatBend = 0, carrierBend = 0) {
+    this.beatBend = Number.isFinite(beatBend) ? beatBend : 0;
+    this.carrierBend = Number.isFinite(carrierBend) ? carrierBend : 0;
   }
 
   pause() {

@@ -37,6 +37,13 @@ const fmt = s => {
   return `${m}:${sec}`;
 };
 const playCountKey = id => `@pulseentrain/playcount/${id}`;
+// Explore Field Space: head motion bends a program the way Field mode does. Values
+// mirror Field's head control (anchored to your pose when it engages).
+const EX_DEADZONE = 5, EX_PITCH_SPAN = 20, EX_ROLL_MAX = 20;
+const EX_BEAT_BEND = 3.5, EX_CARR_BEND = 12; // Hz — how far pitch bends beat / carrier
+const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = 1;
+const exClamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const exDz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
 // Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
 const defaultIntensityFor = strength => Math.min(9, Math.max(1, ((strength ?? 4) + 1)));
 
@@ -104,7 +111,9 @@ export default function PlayerScreen({ route, navigation }) {
   const tpPlaying = playbackState?.state === State.Playing;
   const isPlaying = isSynth ? synthPlaying : tpPlaying;
   useSessionActive(isPlaying); // confirm before an accidental tap leaves a playing program
-  const devMode = !!(useSettings() || {}).devMode;
+  const uiSettings: any = useSettings() || {};
+  const devMode = !!uiSettings.devMode;
+  const exploreField = !!uiSettings.exploreField;
   useDevLines(
     devMode ? [
       `program · ${isSynth ? 'synth' : 'track'} · ${isPlaying ? 'playing' : 'paused/stopped'}`,
@@ -112,6 +121,41 @@ export default function PlayerScreen({ route, navigation }) {
     ] : null,
     [devMode, isSynth, isPlaying, nova.connected, pulsetto.connected],
   );
+
+  // Explore Field Space: while a program plays, the Nova's accelerometer lets you
+  // look around — pitch bends the beat + flash rate, roll opens the biphotic — like
+  // Field mode, anchored to your head pose when it engages. Off = program as authored.
+  const exHeadRef = useRef(null); // smoothed { pitch, roll }
+  const exCenterRef = useRef(null); // pose captured when it engaged
+  useEffect(() => {
+    if (!exploreField || !nova.connected || !isPlaying || !nova.setMotionListener) return;
+    if (nova.setTelemetryRate) nova.setTelemetryRate(20);
+    exCenterRef.current = null;
+    const apply = () => {
+      const s = exHeadRef.current;
+      if (!s) return;
+      if (!exCenterRef.current) exCenterRef.current = { pitch: s.pitch, roll: s.roll };
+      const c = exCenterRef.current;
+      const p = exClamp(exDz((s.pitch - c.pitch) * EX_PITCH_SIGN, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
+      const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_DEADZONE);
+      if (isSynth && synthRef.current && synthRef.current.setBend) synthRef.current.setBend(p * EX_BEAT_BEND, p * EX_CARR_BEND);
+      nova.setBalance(exClamp(dRoll / (EX_ROLL_MAX - EX_DEADZONE), -1, 1));
+    };
+    nova.setMotionListener(s => {
+      const prev = exHeadRef.current;
+      exHeadRef.current = prev
+        ? { pitch: prev.pitch + (s.pitch - prev.pitch) * EX_ALPHA, roll: prev.roll + (s.roll - prev.roll) * EX_ALPHA }
+        : { pitch: s.pitch, roll: s.roll };
+      apply();
+    });
+    return () => {
+      try { nova.setMotionListener(null); } catch (e) {}
+      try { nova.setBalance(0); } catch (e) {}
+      try { if (isSynth && synthRef.current && synthRef.current.setBend) synthRef.current.setBend(0, 0); } catch (e) {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploreField, nova.connected, isPlaying, isSynth]);
+
   const position = isSynth ? synthPos : tp.position;
   const duration = isSynth ? synthDur : tp.duration;
   const audio = dose ? audioSource(dose.audio) : null;
