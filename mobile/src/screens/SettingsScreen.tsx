@@ -106,9 +106,10 @@ export default function SettingsScreen() {
           <View style={styles.rowText}>
             <Text style={styles.label}>Relative control</Text>
             <Text style={styles.hint}>
-              Off: the block is an absolute map — each spot is a fixed carrier/beat. On: it's a
-              trackpad — drag to nudge carrier/beat by how far you move, and the space wraps back on
-              itself at the edges so you can keep exploring smoothly.
+              Applies in Field mode and (with Explore Field Space) in programs. Off: a drag maps
+              directly — snap to a spot, or spring back. On: it's a gentle walk — each drag moves only
+              a fraction of the range and stays there, and the space wraps at the edges, so you explore
+              like real space.
             </Text>
           </View>
           <Switch

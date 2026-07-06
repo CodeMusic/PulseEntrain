@@ -47,8 +47,17 @@ const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = 1;
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
 const TOUCH_CARR_MAX = 200, TOUCH_BEAT_MAX = 10; // Hz bend range for a full drag
 const TOUCH_TRAVEL_PX = 180; // drag distance (px) that reaches the full bend
+const REL_SUB = 0.35; // relative mode: a drag moves ~a third of the range (explore gradually)
 const exClamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const exDz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
+// Fold into [lo,hi] by reflecting at the edges — the explored space repeats smoothly.
+const exReflect = (v, lo, hi) => {
+  const span = hi - lo;
+  if (span <= 0) return lo;
+  let t = (v - lo) % (2 * span);
+  if (t < 0) t += 2 * span;
+  return t <= span ? lo + t : lo + (2 * span - t);
+};
 // Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
 const defaultIntensityFor = strength => Math.min(9, Math.max(1, ((strength ?? 4) + 1)));
 
@@ -184,6 +193,10 @@ export default function PlayerScreen({ route, navigation }) {
   // to what it authored. Taps still fall through to the graph toggle.
   const exploreRef = useRef(false);
   exploreRef.current = exploreField && isSynth;
+  const relativeRef = useRef(false);
+  relativeRef.current = !!uiSettings.relativeControl; // gradual "walk" the space vs snap-to-drag
+  const lastDxRef = useRef(0);
+  const lastDyRef = useRef(0);
   const springVal = useRef(new Animated.Value(0)).current;
   const springStartRef = useRef({ beat: 0, carr: 0 });
   const springBack = () => {
@@ -204,15 +217,27 @@ export default function PlayerScreen({ route, navigation }) {
     panRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => false, // let taps reach the graph toggle
       onMoveShouldSetPanResponder: (e, g) => exploreRef.current && (Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8),
-      onPanResponderGrant: () => { springVal.stopAnimation(); },
+      onPanResponderGrant: () => { springVal.stopAnimation(); lastDxRef.current = 0; lastDyRef.current = 0; },
       onPanResponderMove: (e, g) => {
-        const carr = exClamp(g.dx / TOUCH_TRAVEL_PX, -1, 1) * TOUCH_CARR_MAX;
-        const beat = exClamp(-g.dy / TOUCH_TRAVEL_PX, -1, 1) * TOUCH_BEAT_MAX;
-        touchBendRef.current = { beat, carr };
+        if (relativeRef.current) {
+          // Relative: accumulate the drag delta (a subsection at a time), reflect at
+          // the edges, and stay put on release — walk the space like real space.
+          const fdx = g.dx - lastDxRef.current, fdy = g.dy - lastDyRef.current;
+          lastDxRef.current = g.dx; lastDyRef.current = g.dy;
+          touchBendRef.current = {
+            carr: exReflect(touchBendRef.current.carr + (fdx / TOUCH_TRAVEL_PX) * REL_SUB * TOUCH_CARR_MAX, -TOUCH_CARR_MAX, TOUCH_CARR_MAX),
+            beat: exReflect(touchBendRef.current.beat + (-fdy / TOUCH_TRAVEL_PX) * REL_SUB * TOUCH_BEAT_MAX, -TOUCH_BEAT_MAX, TOUCH_BEAT_MAX),
+          };
+        } else {
+          touchBendRef.current = {
+            carr: exClamp(g.dx / TOUCH_TRAVEL_PX, -1, 1) * TOUCH_CARR_MAX,
+            beat: exClamp(-g.dy / TOUCH_TRAVEL_PX, -1, 1) * TOUCH_BEAT_MAX,
+          };
+        }
         applyBend();
       },
-      onPanResponderRelease: () => springBack(),
-      onPanResponderTerminate: () => springBack(),
+      onPanResponderRelease: () => { if (!relativeRef.current) springBack(); },
+      onPanResponderTerminate: () => { if (!relativeRef.current) springBack(); },
     });
   }
 
@@ -222,7 +247,8 @@ export default function PlayerScreen({ route, navigation }) {
   const lpRowRef = useRef(2);
   const lpBendRef = useRef(0);
   const lpSlideRef = useRef(0);
-  const lpStartRef = useRef(null); // block position at touch-start (for the drag delta)
+  const lpStartRef = useRef(null); // block position at touch-start (absolute-drag reference)
+  const lpLastRef = useRef(null); // previous block position (relative-mode delta)
   useEffect(() => {
     if (!exploreField || !isSynth || !lightpad.connected || !lightpad.setNoteListener) return;
     const blockPos = () => ({
@@ -230,12 +256,23 @@ export default function PlayerScreen({ route, navigation }) {
       y: exClamp((lpRowRef.current + lpSlideRef.current) / (LP_ROWS - 1), 0, 1),
     });
     const applyBlock = () => {
-      if (!lpStartRef.current) return;
       const p = blockPos();
-      touchBendRef.current = {
-        carr: exClamp(p.x - lpStartRef.current.x, -1, 1) * TOUCH_CARR_MAX,
-        beat: exClamp(p.y - lpStartRef.current.y, -1, 1) * TOUCH_BEAT_MAX, // up on the pad = higher beat
-      };
+      if (relativeRef.current) {
+        if (lpLastRef.current) {
+          const fdx = p.x - lpLastRef.current.x, fdy = p.y - lpLastRef.current.y;
+          touchBendRef.current = {
+            carr: exReflect(touchBendRef.current.carr + fdx * REL_SUB * TOUCH_CARR_MAX, -TOUCH_CARR_MAX, TOUCH_CARR_MAX),
+            beat: exReflect(touchBendRef.current.beat + fdy * REL_SUB * TOUCH_BEAT_MAX, -TOUCH_BEAT_MAX, TOUCH_BEAT_MAX),
+          };
+        }
+        lpLastRef.current = p;
+      } else {
+        if (!lpStartRef.current) return;
+        touchBendRef.current = {
+          carr: exClamp(p.x - lpStartRef.current.x, -1, 1) * TOUCH_CARR_MAX,
+          beat: exClamp(p.y - lpStartRef.current.y, -1, 1) * TOUCH_BEAT_MAX, // up on the pad = higher beat
+        };
+      }
       applyBend();
     };
     lightpad.setNoteListener(ev => {
@@ -244,6 +281,7 @@ export default function PlayerScreen({ route, navigation }) {
         lpColRef.current = col; lpRowRef.current = row; lpBendRef.current = 0; lpSlideRef.current = 0;
         springVal.stopAnimation();
         lpStartRef.current = blockPos();
+        lpLastRef.current = blockPos();
         applyBlock();
       } else if (ev.type === 'pitchBend') {
         lpBendRef.current = ev.value / LP_BEND_PER_COL;
@@ -253,7 +291,8 @@ export default function PlayerScreen({ route, navigation }) {
         applyBlock();
       } else if (ev.type === 'noteOff') {
         lpStartRef.current = null;
-        springBack();
+        lpLastRef.current = null;
+        if (!relativeRef.current) springBack(); // relative: stay where you explored to
       }
     });
     return () => { try { lightpad.setNoteListener(null); } catch (e) {} };

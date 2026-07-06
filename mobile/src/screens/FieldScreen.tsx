@@ -49,7 +49,7 @@ const EYE_RATE_MIN = 0.5; // matches the Nova controller's per-eye floor
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
 const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
-const REL_SENS_C = 1.0, REL_SENS_B = 1.0; // relative mode: a full-pad drag ≈ one full range sweep
+const REL_SENS_C = 0.35, REL_SENS_B = 0.35; // relative mode: a full-pad drag moves ~a third of the range — explore gradually
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
