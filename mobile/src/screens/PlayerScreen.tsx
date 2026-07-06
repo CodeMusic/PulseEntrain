@@ -260,6 +260,13 @@ export default function PlayerScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exploreField, isSynth, lightpad.connected]);
 
+  const toggleLightpad = () => {
+    if (IS_WEB) return;
+    if (lightpad.connected) lightpad.disconnect();
+    else if (lightpad.status !== 'scanning') lightpad.connect();
+  };
+  const lpChipStatus = lightpad.connected ? 'connected' : lightpad.status === 'scanning' ? 'scanning' : 'idle';
+
   const position = isSynth ? synthPos : tp.position;
   const duration = isSynth ? synthDur : tp.duration;
   const audio = dose ? audioSource(dose.audio) : null;
@@ -689,6 +696,21 @@ export default function PlayerScreen({ route, navigation }) {
         </Text>
       )}
 
+      {/* Explore Field Space: connect a Lightpad to bend this program by touch. */}
+      {exploreField && !IS_WEB && isSynth ? (
+        <TouchableOpacity
+          onPress={toggleLightpad}
+          activeOpacity={0.7}
+          hitSlop={14}
+          style={[styles.lpChip, lpChipStatus === 'connected' && styles.lpChipOn, lpChipStatus === 'scanning' && styles.lpChipBusy]}
+        >
+          <Text style={[styles.lpChipDot, lpChipStatus === 'connected' && { color: COLORS.accentGreen }, lpChipStatus === 'scanning' && { color: COLORS.accentBlue }]}>●</Text>
+          <Text style={styles.lpChipTxt}>
+            Lightpad — {lightpad.connected ? 'drag to bend the field' : lpChipStatus === 'scanning' ? 'connecting…' : 'tap to connect'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
       <Slider
         style={styles.progressSlider}
         minimumValue={0}
@@ -826,6 +848,11 @@ const styles = StyleSheet.create({
   graphBox: { height: 260, marginHorizontal: 24, borderRadius: 20, backgroundColor: COLORS.bgCard, paddingTop: 14, paddingHorizontal: 8 },
   title: { color: COLORS.textPrimary, fontSize: 26, fontWeight: '800', marginTop: 22, textAlign: 'center' },
   sub: { color: COLORS.textSecondary, fontSize: 14, marginTop: 6, textAlign: 'center' },
+  lpChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', marginTop: 12, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#1B2430', backgroundColor: '#111722' },
+  lpChipOn: { borderColor: COLORS.accentGreen, backgroundColor: '#12241C' },
+  lpChipBusy: { borderColor: COLORS.accentBlue, backgroundColor: '#12202E' },
+  lpChipDot: { color: '#3A4658', fontSize: 10, marginRight: 7 },
+  lpChipTxt: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '600' },
   progressSlider: { width: '100%', height: 36, marginTop: 18 },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   time: { color: COLORS.textMuted, fontSize: 12 },
