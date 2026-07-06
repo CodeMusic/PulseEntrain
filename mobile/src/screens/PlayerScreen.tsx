@@ -18,6 +18,8 @@ import { Stack } from 'one';
 import BeatChart, { carrierColor, bandFor } from '../components/BeatChart';
 import { carrierColorVibrant } from '../shared/entrainment';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
+import { useLightpad } from '../lightpad/LightpadProvider';
+import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
 import { useDevLines } from '../dev/DevPanel';
@@ -65,6 +67,7 @@ export default function PlayerScreen({ route, navigation }) {
   const dose = doseById(id);
   const pulsetto = usePulsetto();
   const nova = useNova();
+  const lightpad = useLightpad();
   const sessions = useSessions();
   const loggedRef = useRef(false); // log a completed session once
   const tp = useProgress(500);
@@ -120,9 +123,9 @@ export default function PlayerScreen({ route, navigation }) {
   useDevLines(
     devMode ? [
       `program · ${isSynth ? 'synth' : 'track'} · ${isPlaying ? 'playing' : 'paused/stopped'}`,
-      `nova ${nova.connected ? 'on' : 'off'} · stim ${pulsetto.connected ? 'on' : 'off'}`,
+      `nova ${nova.connected ? 'on' : 'off'} · stim ${pulsetto.connected ? 'on' : 'off'} · pad ${lightpad.connected ? 'on' : 'off'}`,
     ] : null,
-    [devMode, isSynth, isPlaying, nova.connected, pulsetto.connected],
+    [devMode, isSynth, isPlaying, nova.connected, pulsetto.connected, lightpad.connected],
   );
 
   // Explore Field Space: while a program plays, the Nova's accelerometer lets you
@@ -212,6 +215,50 @@ export default function PlayerScreen({ route, navigation }) {
       onPanResponderTerminate: () => springBack(),
     });
   }
+
+  // A ROLI Lightpad Block bends a program too: drag on the pad → the same
+  // temporary carrier/beat bend as the on-screen touch, springing back on release.
+  const lpColRef = useRef(2);
+  const lpRowRef = useRef(2);
+  const lpBendRef = useRef(0);
+  const lpSlideRef = useRef(0);
+  const lpStartRef = useRef(null); // block position at touch-start (for the drag delta)
+  useEffect(() => {
+    if (!exploreField || !isSynth || !lightpad.connected || !lightpad.setNoteListener) return;
+    const blockPos = () => ({
+      x: exClamp((lpColRef.current + lpBendRef.current) / (LP_COLS - 1), 0, 1),
+      y: exClamp((lpRowRef.current + lpSlideRef.current) / (LP_ROWS - 1), 0, 1),
+    });
+    const applyBlock = () => {
+      if (!lpStartRef.current) return;
+      const p = blockPos();
+      touchBendRef.current = {
+        carr: exClamp(p.x - lpStartRef.current.x, -1, 1) * TOUCH_CARR_MAX,
+        beat: exClamp(p.y - lpStartRef.current.y, -1, 1) * TOUCH_BEAT_MAX, // up on the pad = higher beat
+      };
+      applyBend();
+    };
+    lightpad.setNoteListener(ev => {
+      if (ev.type === 'noteOn') {
+        const { col, row } = decodeCell(ev.note);
+        lpColRef.current = col; lpRowRef.current = row; lpBendRef.current = 0; lpSlideRef.current = 0;
+        springVal.stopAnimation();
+        lpStartRef.current = blockPos();
+        applyBlock();
+      } else if (ev.type === 'pitchBend') {
+        lpBendRef.current = ev.value / LP_BEND_PER_COL;
+        applyBlock();
+      } else if (ev.type === 'cc' && ev.controller === 74) {
+        lpSlideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
+        applyBlock();
+      } else if (ev.type === 'noteOff') {
+        lpStartRef.current = null;
+        springBack();
+      }
+    });
+    return () => { try { lightpad.setNoteListener(null); } catch (e) {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploreField, isSynth, lightpad.connected]);
 
   const position = isSynth ? synthPos : tp.position;
   const duration = isSynth ? synthDur : tp.duration;

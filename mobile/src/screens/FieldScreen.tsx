@@ -564,13 +564,27 @@ export default function FieldScreen() {
   const haloOpacity = 0.2 + 0.55 * intensity;
   const band = bandFor(beat);
 
-  const Chip = ({ label, on, onPress, hint }: any) => (
-    <TouchableOpacity style={[styles.chip, on && styles.chipOn]} onPress={onPress} activeOpacity={0.8} hitSlop={10}>
-      <Text style={[styles.chipDot, on && styles.chipDotOn]}>●</Text>
-      <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{label}</Text>
-      {hint ? <Text style={styles.chipHint}>{hint}</Text> : null}
-    </TouchableOpacity>
-  );
+  // status: 'connected' → green (filled), 'scanning' → blue (processing), else hollow.
+  const Chip = ({ label, status, onPress, hint }: any) => {
+    const green = status === 'connected';
+    const blue = status === 'scanning';
+    return (
+      <TouchableOpacity
+        style={[styles.chip, green && styles.chipOn, blue && styles.chipBusy]}
+        onPress={onPress}
+        activeOpacity={0.7}
+        hitSlop={14}
+      >
+        <Text style={[styles.chipDot, green && styles.chipDotOn, blue && styles.chipDotBusy]}>●</Text>
+        <Text style={[styles.chipTxt, (green || blue) && styles.chipTxtOn]}>{label}</Text>
+        {hint ? <Text style={styles.chipHint}>{hint}</Text> : null}
+      </TouchableOpacity>
+    );
+  };
+  // Map each device's raw state to the chip status.
+  const lpChipStatus = lightpad.connected ? 'connected' : lightpad.status === 'scanning' ? 'scanning' : 'idle';
+  const novaChipStatus = nova.connected ? 'connected' : nova.status === 'scanning' ? 'scanning' : 'idle';
+  const stimChipStatus = pulsetto.connected ? 'connected' : pulsetto.scanning ? 'scanning' : 'idle';
 
   return (
     <View style={styles.container}>
@@ -579,13 +593,13 @@ export default function FieldScreen() {
         <View style={styles.setup}>
           <Text style={styles.setupTitle}>Wear your devices, set a time, then tap the circle.</Text>
           <View style={styles.chips}>
-            <Chip label="Beats" on hint="always on" />
-            <Chip label="Lightpad" on={lightpad.connected} onPress={toggleLightpad}
-              hint={IS_WEB ? 'app only' : lightpad.connected ? 'the field controller' : lightpad.status === 'scanning' ? 'searching…' : 'tap to connect'} />
-            <Chip label="Light" on={nova.connected} onPress={toggleNova}
-              hint={IS_WEB ? 'app only' : nova.connected ? 'Nova · head control' : 'tap to connect'} />
-            <Chip label="Stim" on={pulsetto.connected} onPress={togglePulsetto}
-              hint={IS_WEB ? 'app only' : pulsetto.connected ? 'Pulsetto' : pulsetto.scanning ? 'searching…' : 'tap to connect'} />
+            <Chip label="Beats" status="connected" hint="always on" />
+            <Chip label="Lightpad" status={lpChipStatus} onPress={toggleLightpad}
+              hint={IS_WEB ? 'app only' : lightpad.connected ? 'the field controller' : lpChipStatus === 'scanning' ? 'connecting…' : 'tap to connect'} />
+            <Chip label="Light" status={novaChipStatus} onPress={toggleNova}
+              hint={IS_WEB ? 'app only' : nova.connected ? 'Nova · head control' : novaChipStatus === 'scanning' ? 'connecting…' : 'tap to connect'} />
+            <Chip label="Stim" status={stimChipStatus} onPress={togglePulsetto}
+              hint={IS_WEB ? 'app only' : pulsetto.connected ? 'Pulsetto' : stimChipStatus === 'scanning' ? 'connecting…' : 'tap to connect'} />
           </View>
           <View style={styles.timerRow}>
             <TouchableOpacity style={styles.timerBtn} onPress={() => setTimerMin(m => Math.max(1, m - 5))}>
@@ -656,9 +670,11 @@ const styles = StyleSheet.create({
   setupTitle: { color: COLORS.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111722', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#1B2430' },
-  chipOn: { borderColor: COLORS.accentBlue, backgroundColor: '#12202E' },
+  chipOn: { borderColor: COLORS.accentGreen, backgroundColor: '#12241C' },
+  chipBusy: { borderColor: COLORS.accentBlue, backgroundColor: '#12202E' },
   chipDot: { color: '#3A4658', fontSize: 10, marginRight: 6 },
   chipDotOn: { color: COLORS.accentGreen },
+  chipDotBusy: { color: COLORS.accentBlue },
   chipTxt: { color: COLORS.textMuted, fontSize: 13, fontWeight: '700' },
   chipTxtOn: { color: COLORS.textPrimary },
   chipHint: { color: COLORS.textMuted, fontSize: 11, marginLeft: 6 },
