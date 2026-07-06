@@ -10,6 +10,7 @@ import StrengthBadge from '../components/StrengthBadge';
 import NovaExplorer from '../components/NovaExplorer';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
+import { useLightpad } from '../lightpad/LightpadProvider';
 import { useSettings } from '../settings/SettingsProvider';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
@@ -25,6 +26,7 @@ export default function DoseDetailScreen({ route, navigation }) {
   const dose = doseById(id);
   const nova = useNova();
   const pulsetto = usePulsetto();
+  const lightpad = useLightpad();
   const [usePulse, setUsePulse] = useState(false); // off by default — flip on to pre-connect
   const [peek, setPeek] = useState(false);
   const trackDefault = dose && dose.strength != null ? dose.strength : 4;
@@ -115,7 +117,20 @@ export default function DoseDetailScreen({ route, navigation }) {
     });
   };
 
-  const fullBand = !!((useSettings() as any) || {}).fullBand;
+  const settings: any = useSettings() || {};
+  const fullBand = !!settings.fullBand;
+  const exploreField = !!settings.exploreField;
+  const isSynth = isSynthDose(dose);
+  const toggleLightpad = () => {
+    if (IS_WEB) return nativeOnlyNotice('Lightpad Block');
+    if (lightpad.connected) lightpad.disconnect();
+    else if (lightpad.status !== 'scanning') lightpad.connect();
+  };
+  const lpSub = lightpad.connected
+    ? 'Connected — drag to bend the program'
+    : lightpad.status === 'scanning'
+    ? 'Connecting…'
+    : 'Tap to connect a ROLI Lightpad';
   const toggleNova = val => {
     if (val && IS_WEB) return nativeOnlyNotice('Lumenate Nova');
     if (!val) return nova.disconnect();
@@ -240,6 +255,21 @@ export default function DoseDetailScreen({ route, navigation }) {
         />
       </View>
       {nova.connected ? <NovaExplorer nova={nova} showFrequency /> : null}
+
+      {exploreField && isSynth ? (
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleTitle}>Use Lightpad</Text>
+            <Text style={styles.toggleSub}>{IS_WEB ? 'App only' : lpSub}</Text>
+          </View>
+          <Switch
+            value={lightpad.connected}
+            onValueChange={toggleLightpad}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.divider }}
+            thumbColor="#fff"
+          />
+        </View>
+      ) : null}
 
       <TouchableOpacity style={styles.startBtn} activeOpacity={0.85} onPress={start}>
         <Text style={styles.startTxt}>Start</Text>
