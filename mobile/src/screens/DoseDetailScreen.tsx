@@ -119,7 +119,6 @@ export default function DoseDetailScreen({ route, navigation }) {
 
   const settings: any = useSettings() || {};
   const fullBand = !!settings.fullBand;
-  const exploreField = !!settings.exploreField;
   const isSynth = isSynthDose(dose);
   const toggleLightpad = () => {
     if (IS_WEB) return nativeOnlyNotice('Lightpad Block');
@@ -256,7 +255,7 @@ export default function DoseDetailScreen({ route, navigation }) {
       </View>
       {nova.connected ? <NovaExplorer nova={nova} showFrequency /> : null}
 
-      {exploreField && isSynth ? (
+      {isSynth ? (
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.toggleTitle}>Use Lightpad</Text>

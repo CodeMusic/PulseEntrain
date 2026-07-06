@@ -250,7 +250,10 @@ export default function PlayerScreen({ route, navigation }) {
   const lpStartRef = useRef(null); // block position at touch-start (absolute-drag reference)
   const lpLastRef = useRef(null); // previous block position (relative-mode delta)
   useEffect(() => {
-    if (!exploreField || !isSynth || !lightpad.connected || !lightpad.setNoteListener) return;
+    // A connected Lightpad always bends a synth program — attaching the block IS
+    // the opt-in, so this doesn't wait on the Explore Field Space setting (that
+    // gates only the *implicit* surfaces: head motion + on-screen cover drag).
+    if (!isSynth || !lightpad.connected || !lightpad.setNoteListener) return;
     const blockPos = () => ({
       x: exClamp((lpColRef.current + lpBendRef.current) / (LP_COLS - 1), 0, 1),
       y: exClamp((lpRowRef.current + lpSlideRef.current) / (LP_ROWS - 1), 0, 1),
@@ -297,7 +300,7 @@ export default function PlayerScreen({ route, navigation }) {
     });
     return () => { try { lightpad.setNoteListener(null); } catch (e) {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exploreField, isSynth, lightpad.connected]);
+  }, [isSynth, lightpad.connected]);
 
   const toggleLightpad = () => {
     if (IS_WEB) return;
@@ -737,8 +740,9 @@ export default function PlayerScreen({ route, navigation }) {
         </Text>
       )}
 
-      {/* Explore Field Space: connect a Lightpad to bend this program by touch. */}
-      {exploreField && !IS_WEB && isSynth ? (
+      {/* Connect a Lightpad to bend this program's beat/carrier by touch. Shown for
+          any synth (.imedx) program — no Explore Field Space setting required. */}
+      {!IS_WEB && isSynth ? (
         <TouchableOpacity
           onPress={toggleLightpad}
           activeOpacity={0.7}
