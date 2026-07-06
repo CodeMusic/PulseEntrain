@@ -336,13 +336,15 @@ export default function PlayerScreen({ route, navigation }) {
     const flash = f || 'sync';
     if (flash === lastFlashRef.current) return;
     lastFlashRef.current = flash;
-    // sync = both eyes, left/right = one eye on (the beat drives the rate via setFrequency)
+    // `level` is STEADY brightness (1 = LED full-on = no visible flash; 0 = pure
+    // strobe). So a flashing eye is level 0 / duty 0.5, and a *quiet* eye is level
+    // 0 / duty 0 (never pulses → dark). sync flashes both; left/right isolate one.
     const eyes =
       flash === 'left'
-        ? { lLevel: 1, rLevel: 0 }
+        ? { lLevel: 0, lDuty: 0.5, rLevel: 0, rDuty: 0 }
         : flash === 'right'
-        ? { lLevel: 0, rLevel: 1 }
-        : { lLevel: 1, rLevel: 1 };
+        ? { lLevel: 0, lDuty: 0, rLevel: 0, rDuty: 0.5 }
+        : { lLevel: 0, lDuty: 0.5, rLevel: 0, rDuty: 0.5 };
     try {
       nova.setSyncedValues(eyes);
     } catch (e) {}

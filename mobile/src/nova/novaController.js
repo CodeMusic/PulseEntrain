@@ -213,7 +213,11 @@ export class NovaController {
   // the light tracks head/touch changes in ~1 s instead of crawling.
   startStrobe(beatHz) {
     if (beatHz != null) this.targetBeat = clampStrobe(beatHz);
-    this.values = { ...this.values, lFreq: Math.min(2, this.targetBeat), rFreq: Math.min(2, this.targetBeat) };
+    // Start from a clean pure-flash frame (level 0 = strobe, duty 0.5, phase 0).
+    // The controller is a singleton, so without this a prior program's "both-lit"
+    // style would leak in here and wash out the flash until Dev Tools reset it.
+    const start = Math.min(2, this.targetBeat);
+    this.values = { ...DEFAULT_VALUES(this.targetBeat), lFreq: start, rFreq: start };
     if (!this.device || !this.strobeChar) return;
     this.strobing = true;
     this._clearTick();

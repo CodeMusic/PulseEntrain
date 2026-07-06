@@ -51,6 +51,15 @@ const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
 const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
 const REL_SENS_C = 0.35, REL_SENS_B = 0.35; // relative mode: a full-pad drag moves ~a third of the range — explore gradually
+// Dev-panel flicker overrides (same presets as NovaExplorer). level 0 = pure
+// flash; duty 0 quiets an eye. Lets you tune the flash from Field mode, which has
+// no inline Developer Tools of its own.
+const FLICKER_STYLES: [string, string, any][] = [
+  ['standard', 'Std', { lLevel: 0, rLevel: 0, lDuty: 0.5, rDuty: 0.5 }],
+  ['enlightened', 'Lit', { lLevel: 1, rLevel: 1 }],
+  ['left', 'L', { lLevel: 0, lDuty: 0.5, rLevel: 0, rDuty: 0 }],
+  ['right', 'R', { lLevel: 0, lDuty: 0, rLevel: 0, rDuty: 0.5 }],
+];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
@@ -551,6 +560,14 @@ export default function FieldScreen() {
           {[1, 5, 10, 20, 40].map(r => (
             <TouchableOpacity key={r} onPress={() => setDevRate(r)} style={[styles.devRateBtn, devRate === r && styles.devRateOn]}>
               <Text style={styles.devRateTxt}>{r}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.devRates}>
+          <Text style={styles.devRatesLabel}>flicker</Text>
+          {FLICKER_STYLES.map(([k, l, patch]) => (
+            <TouchableOpacity key={k} onPress={() => { try { nova.setSyncedValues(patch); } catch (e) {} }} style={styles.devRateBtn}>
+              <Text style={styles.devRateTxt}>{l}</Text>
             </TouchableOpacity>
           ))}
         </View>
