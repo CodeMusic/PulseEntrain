@@ -128,7 +128,7 @@ export default function FieldScreen() {
   // Diagnostics (devMode): live values + a telemetry-rate to experiment with,
   // since the Nova's faster rates are unconfirmed. `dev` is a periodic snapshot so
   // the overlay doesn't re-render on every sample.
-  const [devRate, setDevRate] = useState(20);
+  const [devRate, setDevRate] = useState(10); // telemetry Hz — 10 works well; devMode can tweak it
   const [dev, setDev] = useState(null);
   const rawHeadRef = useRef({ pitch: 0, roll: 0 });
   const hzRef = useRef(0);

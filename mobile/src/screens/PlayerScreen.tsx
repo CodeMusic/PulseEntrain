@@ -141,12 +141,18 @@ export default function PlayerScreen({ route, navigation }) {
   };
   useEffect(() => {
     if (!exploreField || !nova.connected || !isPlaying || !nova.setMotionListener) return;
-    if (nova.setTelemetryRate) nova.setTelemetryRate(20);
+    if (nova.setTelemetryRate) nova.setTelemetryRate(10);
     exCenterRef.current = null;
+    const engageTs = Date.now();
     const apply = () => {
       const s = exHeadRef.current;
       if (!s) return;
-      if (!exCenterRef.current) exCenterRef.current = { pitch: s.pitch, roll: s.roll };
+      // Auto-center on start: capture the neutral pose once the head has settled
+      // (~0.6 s in), so no manual dev-tools calibration is needed.
+      if (!exCenterRef.current) {
+        if (Date.now() - engageTs < 600) return;
+        exCenterRef.current = { pitch: s.pitch, roll: s.roll };
+      }
       const c = exCenterRef.current;
       const p = exClamp(exDz((s.pitch - c.pitch) * EX_PITCH_SIGN, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
       const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_DEADZONE);
