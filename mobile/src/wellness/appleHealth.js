@@ -16,6 +16,21 @@ let enabled = false; // user's "Sync to Apple Health" preference
 let authorized = false; // HealthKit granted the write permission
 let authInFlight = null; // de-dupe concurrent auth requests
 
+// Tiny event bus so an app-level notifier can react without the write path
+// (SessionsProvider.logSession) needing any UI. Events: { type: 'synced' } after
+// a sample lands, { type: 'offNudge' } when a counting session finished but sync
+// is off (the listener decides whether to nudge, once).
+const listeners = new Set();
+export function subscribe(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+function emit(evt) {
+  listeners.forEach(l => {
+    try { l(evt); } catch (e) {}
+  });
+}
+
 const PERMS = {
   permissions: {
     read: [],
@@ -79,7 +94,9 @@ export function saveMindful(start, end) {
   const endDate = (end instanceof Date ? end : new Date(end)).toISOString();
   const write = () => {
     try {
-      AppleHealthKit.saveMindfulSession({ startDate, endDate }, () => {});
+      AppleHealthKit.saveMindfulSession({ startDate, endDate }, err => {
+        if (!err) emit({ type: 'synced' });
+      });
     } catch (e) {}
   };
   // If the user enabled sync but auth hasn't resolved yet, request then write.
@@ -88,4 +105,12 @@ export function saveMindful(start, end) {
     return;
   }
   write();
+}
+
+// Called for every counting-length session. When sync is OFF (but the platform
+// could do it), emit a nudge so the notifier can offer to turn it on — once.
+// When ON, the write path emits 'synced' itself, so nothing to do here.
+export function reportCompletion(counted) {
+  if (!IS_IOS || !counted || enabled) return;
+  emit({ type: 'offNudge' });
 }

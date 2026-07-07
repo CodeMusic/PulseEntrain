@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { saveMindful } from './appleHealth';
+import { saveMindful, reportCompletion } from './appleHealth';
 
 // App-wide wellness tracking: the session log + daily goal, shared by the home
 // screen (weekly tracker) and Manual mode (which logs a completed session).
@@ -80,7 +80,11 @@ export function SessionsProvider({ children }) {
     const startTime = new Date(endTime - actual * 1000);
     // Mirror any counting-length session into Apple Health as Mindful Minutes.
     // No-ops unless the user enabled Health sync (guarded inside the bridge).
-    if (actual >= MIN_COUNTING_SECONDS) saveMindful(startTime, new Date(endTime));
+    // reportCompletion drives the one-time "turn on sync?" nudge when it's off.
+    if (actual >= MIN_COUNTING_SECONDS) {
+      saveMindful(startTime, new Date(endTime));
+      reportCompletion(true);
+    }
     setSessions(prev => [
       {
         startTime: startTime.toISOString(),
