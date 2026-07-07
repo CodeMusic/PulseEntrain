@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setMixWithOthers } from '../audio/binauralEngine';
+import { setSyncEnabled as setHealthSyncEnabled } from '../wellness/appleHealth';
 
 // App-wide user settings / profile. Local-only for now (no account) — a name for
 // personalised greetings + goal notes, plus general preferences. A future login
@@ -13,6 +14,7 @@ const KEY_FULLBAND = '@pulseentrain/fullBand'; // opt out of photosensitivity sa
 const KEY_RELATIVE = '@pulseentrain/relativeControl'; // Field: relative (drag-delta) vs absolute pad
 const KEY_STIM = '@pulseentrain/pulsettoStrength'; // default Pulsetto session strength (1–7)
 const KEY_EXPLORE = '@pulseentrain/exploreField'; // let head motion bend normal programs
+const KEY_HEALTH = '@pulseentrain/healthSync'; // write finished sessions to Apple Health (Mindful Minutes)
 
 const SettingsContext = createContext(null);
 export const useSettings = () => useContext(SettingsContext);
@@ -25,6 +27,7 @@ export function SettingsProvider({ children }) {
   const [relativeControl, setRelState] = useState(false); // Field: drag-delta control vs absolute pad
   const [pulsettoStrength, setStimState] = useState(4); // default session strength (1–7); push adds +2
   const [exploreField, setExploreState] = useState(false); // head motion bends normal programs
+  const [healthSync, setHealthState] = useState(false); // write Mindful Minutes to Apple Health
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -46,6 +49,9 @@ export function SettingsProvider({ children }) {
         if (Number.isFinite(st)) setStimState(Math.max(1, Math.min(7, st)));
         const ex = await AsyncStorage.getItem(KEY_EXPLORE);
         setExploreState(ex === '1');
+        const hs = await AsyncStorage.getItem(KEY_HEALTH);
+        setHealthState(hs === '1');
+        setHealthSyncEnabled(hs === '1'); // prime the Health bridge with the stored pref
       } catch (e) {
       } finally {
         setLoaded(true);
@@ -90,8 +96,15 @@ export function SettingsProvider({ children }) {
     AsyncStorage.setItem(KEY_EXPLORE, on ? '1' : '0').catch(() => {});
   };
 
+  // Enabling requests HealthKit's Mindful write permission (handled in the bridge).
+  const setHealthSync = on => {
+    setHealthState(on);
+    setHealthSyncEnabled(on);
+    AsyncStorage.setItem(KEY_HEALTH, on ? '1' : '0').catch(() => {});
+  };
+
   return (
-    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField, loaded }}>
+    <SettingsContext.Provider value={{ name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField, healthSync, setHealthSync, loaded }}>
       {children}
     </SettingsContext.Provider>
   );

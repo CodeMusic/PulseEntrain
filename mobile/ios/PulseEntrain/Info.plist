@@ -45,6 +45,10 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>PulseEntrain writes your finished sessions to Apple Health as Mindful Minutes.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>PulseEntrain uses Apple Health to record your mindful minutes.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Need Bluetooth access to communicate with the device.</string>
     <key>NSBluetoothPeripheralUsageDescription</key>

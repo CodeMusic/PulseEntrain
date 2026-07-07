@@ -29,6 +29,7 @@ export default defineConfig({
       { find: /^react-native-audio-api$/, replacement: stub('audio-api.js') },
       { find: /^react-native-keep-awake$/, replacement: stub('keep-awake.js') },
       { find: /^react-native-permissions$/, replacement: stub('permissions.js') },
+      { find: /^react-native-health$/, replacement: stub('health.js') },
       { find: /^@react-native-community\/slider$/, replacement: stub('slider.js') },
       { find: /^@react-native-async-storage\/async-storage$/, replacement: stub('async-storage.js') },
     ],

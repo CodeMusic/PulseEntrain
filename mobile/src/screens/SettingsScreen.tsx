@@ -1,13 +1,15 @@
 import React from 'react';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, Alert, Platform, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { useSettings } from '../settings/SettingsProvider';
+
+const IS_IOS = Platform.OS === 'ios'; // Apple Health is iOS-only
 
 // Profile + preferences (local for now — see README roadmap for accounts/sync).
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField, healthSync, setHealthSync } = s;
 
   // Turning the safety off requires an explicit acknowledgement; turning it back
   // on is immediate.
@@ -57,6 +59,30 @@ export default function SettingsScreen() {
           />
         </View>
       </View>
+
+      {IS_IOS ? (
+        <>
+          <Text style={styles.section}>Apple Health</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.label}>Sync mindful minutes</Text>
+                <Text style={styles.hint}>
+                  Log each finished session to Apple Health as Mindful Minutes, so your
+                  PulseEntrain time counts toward your wellness rings and shows up in Health.
+                  You'll be asked to grant permission the first time.
+                </Text>
+              </View>
+              <Switch
+                value={!!healthSync}
+                onValueChange={setHealthSync}
+                trackColor={{ true: COLORS.accentGreen, false: COLORS.bgCardLight }}
+                thumbColor="#fff"
+              />
+            </View>
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.section}>Safety</Text>
       <View style={styles.card}>
