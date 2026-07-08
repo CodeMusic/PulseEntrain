@@ -131,10 +131,17 @@ export class SessionSynth {
     }
   }
 
-  // Explore Field Space: a live head-driven bend added on top of the timeline.
+  // Explore Field Space: a live head/touch-driven bend added on top of the
+  // timeline. Apply it to the engine immediately (not just on the next 200 ms
+  // tick) so a fast springy release reads smoothly instead of stepping.
   setBend(beatBend = 0, carrierBend = 0) {
     this.beatBend = Number.isFinite(beatBend) ? beatBend : 0;
     this.carrierBend = Number.isFinite(carrierBend) ? carrierBend : 0;
+    if (this.playing) {
+      const a = this._activeAt(this.position);
+      this.engine.setBeat(Math.max(0.5, a.beat + this.beatBend));
+      this.engine.setCarrier(Math.max(40, a.carrier + this.carrierBend));
+    }
   }
 
   pause() {

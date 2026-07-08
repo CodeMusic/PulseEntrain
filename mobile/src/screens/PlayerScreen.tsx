@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'one';
-import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator, PanResponder, Animated } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, Pressable, Switch, StyleSheet, Alert, ActivityIndicator, PanResponder } from 'react-native';
 import TrackPlayer, {
   useProgress,
   usePlaybackState,
@@ -20,6 +20,7 @@ import { carrierColorVibrant } from '../shared/entrainment';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
+import { springTouch, PRESS_VOL_BOOST } from '../shared/springTouch';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
 import { useDevLines } from '../dev/DevPanel';
@@ -185,19 +186,22 @@ export default function PlayerScreen({ route, navigation }) {
   // to what it authored. Taps still fall through to the graph toggle.
   const exploreRef = useRef(false);
   exploreRef.current = exploreField && isSynth;
-  const springVal = useRef(new Animated.Value(0)).current;
-  const springStartRef = useRef({ beat: 0, carr: 0 });
+  // Released bends spring home with a natural overshoot (see springTouch). One
+  // spring scales both dimensions off their release value, so carrier and beat
+  // bounce back together and the bigger pull overshoots more.
+  const springCancelRef = useRef<null | (() => void)>(null);
+  const cancelSpring = () => { if (springCancelRef.current) { springCancelRef.current(); springCancelRef.current = null; } };
   const springBack = () => {
-    springStartRef.current = { ...touchBendRef.current };
-    springVal.setValue(1);
-    const id = springVal.addListener(({ value }) => {
-      touchBendRef.current = { beat: springStartRef.current.beat * value, carr: springStartRef.current.carr * value };
-      applyBend();
-    });
-    Animated.spring(springVal, { toValue: 0, friction: 5, tension: 70, useNativeDriver: false }).start(() => {
-      springVal.removeListener(id);
+    cancelSpring();
+    const start = { ...touchBendRef.current };
+    if (Math.abs(start.beat) < 0.01 && Math.abs(start.carr) < 0.5) {
       touchBendRef.current = { beat: 0, carr: 0 };
       applyBend();
+      return;
+    }
+    springCancelRef.current = springTouch({
+      onUpdate: s => { touchBendRef.current = { beat: start.beat * s, carr: start.carr * s }; applyBend(); },
+      onRest: () => { touchBendRef.current = { beat: 0, carr: 0 }; applyBend(); springCancelRef.current = null; },
     });
   };
   const panRef = useRef(null);
@@ -206,7 +210,7 @@ export default function PlayerScreen({ route, navigation }) {
       onStartShouldSetPanResponder: () => false, // let taps reach the graph toggle
       onMoveShouldSetPanResponder: (e, g) => exploreRef.current && (Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6),
       onPanResponderTerminationRequest: () => false, // once we're bending, don't hand the drag back to the ScrollView
-      onPanResponderGrant: () => { springVal.stopAnimation(); },
+      onPanResponderGrant: () => { cancelSpring(); },
       onPanResponderMove: (e, g) => {
         // A program is a fixed journey — the drag is a momentary snap-bend that
         // springs back on release (below). Direct/absolute so it tracks the finger
@@ -253,7 +257,7 @@ export default function PlayerScreen({ route, navigation }) {
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         lpColRef.current = col; lpRowRef.current = row; lpBendRef.current = 0; lpSlideRef.current = 0;
-        springVal.stopAnimation();
+        cancelSpring();
         lpStartRef.current = blockPos();
         applyBlock();
       } else if (ev.type === 'pitchBend') {
@@ -262,8 +266,11 @@ export default function PlayerScreen({ route, navigation }) {
       } else if (ev.type === 'cc' && ev.controller === 74) {
         lpSlideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
         applyBlock();
+      } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
+        applyPressVol(ev.value / 127); // press harder → a little louder, on top of the base
       } else if (ev.type === 'noteOff') {
         lpStartRef.current = null;
+        applyPressVol(0); // lifted → drop the press boost
         springBack(); // lift off the pad → ease back to the authored beat/carrier
       }
     });
@@ -578,10 +585,19 @@ export default function PlayerScreen({ route, navigation }) {
     if (!pausedForBreakRef.current) pushStim();
   };
 
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
   const onVolume = v => {
     setVolume(v);
     if (isSynth) synthRef.current?.setVolume(v);
     else TrackPlayer.setVolume(v);
+  };
+  // Press (Lightpad Z / future touch) lifts the level a little above the slider's
+  // base while held, without moving the slider; pn 0 restores the base.
+  const applyPressVol = pn => {
+    const target = Math.min(1, volumeRef.current + PRESS_VOL_BOOST * exClamp(pn, 0, 1));
+    if (isSynth) synthRef.current?.setVolume(target);
+    else TrackPlayer.setVolume(target).catch(() => {});
   };
 
   const onLumi = v => {

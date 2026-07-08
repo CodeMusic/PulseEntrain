@@ -14,6 +14,7 @@ import { useSettings } from '../settings/SettingsProvider';
 import { useSessionActive } from '../session/SessionGuard';
 import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
+import { springTouch, PRESS_VOL_BOOST } from '../shared/springTouch';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 // Field Meditation Mode — immersive, eyes-closed. The circle IS the control:
@@ -127,7 +128,7 @@ export default function FieldScreen() {
   const pushingRef = useRef(false);
   const centerPitchRef = useRef(0); // head pitch captured at push-engage (bend anchor)
   const centerRollRef = useRef(0); // head roll captured at push / finger-move (biphotic zero)
-  const fadeRef = useRef(null); // interval id for the gentle biphotic re-sync
+  const fadeRef = useRef(null); // springTouch cancel fn for the gentle biphotic re-sync
   const headRef = useRef(null); // smoothed { pitch, roll }
   const uiRef = useRef(0);
   const novaBrightRef = useRef(0);
@@ -227,7 +228,7 @@ export default function FieldScreen() {
     () => () => {
       logIfCounted();
       if (tickRef.current) clearInterval(tickRef.current);
-      if (fadeRef.current) clearInterval(fadeRef.current);
+      if (fadeRef.current) fadeRef.current(); // cancel the biphotic spring
       try { engineRef.current?.stop(); } catch (e) {}
       try { nova.stopStrobe(); } catch (e) {}
       try { pulsetto.stopSession(); } catch (e) {} // unconditional — always stop the stimulator
@@ -274,23 +275,24 @@ export default function FieldScreen() {
     });
   };
 
-  const cancelFade = () => { if (fadeRef.current) { clearInterval(fadeRef.current); fadeRef.current = null; } };
-  // A quick tap gently re-syncs the eyes: ramp the locked biphotic balance → 0
-  // over BIPHOTIC_FADE_MS so the asymmetry dissolves naturally rather than snapping.
+  const cancelFade = () => { if (fadeRef.current) { fadeRef.current(); fadeRef.current = null; } };
+  // A quick tap gently re-syncs the eyes: spring the locked bi-ocular balance → 0
+  // with a natural overshoot (see springTouch), so the per-eye rate difference
+  // eases home — and dips slightly past sync — rather than snapping or crawling.
   const startBiphoticFade = () => {
     cancelFade();
     const startBal = balanceRef.current;
     if (Math.abs(startBal) < 0.02) return;
-    const t0 = Date.now();
-    fadeRef.current = setInterval(() => {
-      const k = Math.min(1, (Date.now() - t0) / BIPHOTIC_FADE_MS);
-      balanceRef.current = startBal * (1 - k);
-      if (runningRef.current && !pausedRef.current) nova.setBalance(balanceRef.current);
-      const b = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
-      setBiphotic(Math.round(Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN) * 2) / 2);
-      applyEars(); // ease the cross-ear pulse out with the biphotic
-      if (k >= 1) { balanceRef.current = 0; cancelFade(); applyEars(); }
-    }, 120);
+    fadeRef.current = springTouch({
+      onUpdate: s => {
+        balanceRef.current = startBal * s;
+        if (runningRef.current && !pausedRef.current) nova.setBalance(balanceRef.current);
+        const b = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
+        setBiphotic(Math.round(Math.abs(balanceRef.current) * (b - FIELD_BEAT_MIN) * 2) / 2);
+        applyEars(); // ease the cross-ear pulse out with the biphotic
+      },
+      onRest: () => { balanceRef.current = 0; cancelFade(); applyEars(); },
+    });
   };
 
   // Lightpad touch → carrier (X), beat (Y), intensity (Z) + the push gate.
@@ -338,8 +340,9 @@ export default function FieldScreen() {
       baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
       beatBendRef.current = 0;
       carrierBendRef.current = 0;
-      // Release the +2 stim boost back to the base strength.
+      // Release the +2 stim boost back to the base strength, and the volume lift.
       if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) pulsetto.setIntensity(pulseStrengthRef.current);
+      applyPressVol(0);
       applyField();
     };
     lightpad.setNoteListener(ev => {
@@ -358,9 +361,10 @@ export default function FieldScreen() {
         fromFinger();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         lastPressureRef.current = ev.value;
-        const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field brightness (not volume)
+        const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field brightness
         if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
         uiTick(() => setIntensity(i));
+        applyPressVol(ev.value / 127); // …and a little louder while you lean in
         const nowPushing = ev.value >= PUSH_THRESHOLD;
         if (nowPushing && !pushingRef.current) {
           pushingRef.current = true; setPushing(true);
@@ -376,6 +380,7 @@ export default function FieldScreen() {
           releasePush();
         }
       } else if (ev.type === 'noteOff') {
+        applyPressVol(0); // finger off → drop any volume lift
         if (pushingRef.current) releasePush();
       }
     });
@@ -446,9 +451,17 @@ export default function FieldScreen() {
     }, 1000);
   };
 
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
   const onVolume = v => {
     setVolume(v);
     if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(v);
+  };
+  // Pressing the block (Z) lifts the level a touch above the base while held —
+  // pn is the 0..1 pressure; 0 restores the slider's base volume.
+  const applyPressVol = pn => {
+    if (!runningRef.current || pausedRef.current || !engineRef.current) return;
+    engineRef.current.setVolume(Math.min(1, volumeRef.current + PRESS_VOL_BOOST * clamp(pn, 0, 1)));
   };
 
   const start = async () => {
