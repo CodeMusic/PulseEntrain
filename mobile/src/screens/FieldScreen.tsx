@@ -15,6 +15,7 @@ import { useSessionActive } from '../session/SessionGuard';
 import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
+import TouchPad from '../components/TouchPad';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 // Field Meditation Mode — immersive, eyes-closed. The circle IS the control:
@@ -104,6 +105,7 @@ export default function FieldScreen() {
   const [carrier, setCarrier] = useState(200);
   const [beat, setBeat] = useState(10);
   const [biphotic, setBiphotic] = useState(0); // emergent left/right flash difference (Hz)
+  const [padOpen, setPadOpen] = useState(false); // phone-as-Lightpad full-screen touch control
   const [intensity, setIntensity] = useState(0.7); // press-driven field brightness (light/visual)
   const [volume, setVolume] = useState(0.8); // session audio level — scales only our tones (mixable)
   const [timerMin, setTimerMin] = useState(15);
@@ -300,60 +302,87 @@ export default function FieldScreen() {
     });
   };
 
+  // Finger position (block cell + fine bend/slide, OR the on-screen touch pad) →
+  // base carrier (X) / beat (Y). Lifted to component scope so the Lightpad listener
+  // and the phone TouchPad drive the exact same mapping.
+  const fromFinger = () => {
+    const xR = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
+    const yR = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
+    const xN = LP_FLIP_X ? 1 - xR : xR;
+    const yN = LP_FLIP_Y ? 1 - yR : yR;
+    const prevC = baseCarrierRef.current, prevB = baseBeatRef.current;
+    let newC, newB;
+    if (relativeRef.current) {
+      // Trackpad: the block position isn't a coordinate, its MOVEMENT is a delta.
+      // Accumulate onto the current value and reflect at the edges (repeating space).
+      if (lastXNRef.current == null) { lastXNRef.current = xN; lastYNRef.current = yN; }
+      const dxN = xN - lastXNRef.current, dyN = yN - lastYNRef.current;
+      lastXNRef.current = xN; lastYNRef.current = yN;
+      newC = reflect(prevC + dxN * (CARR_MAX - CARR_MIN) * REL_SENS_C, CARR_MIN, CARR_MAX);
+      newB = reflect(prevB + dyN * (beatMaxRef.current - FIELD_BEAT_MIN) * REL_SENS_B, FIELD_BEAT_MIN, beatMaxRef.current);
+    } else {
+      // Absolute map: each spot is a fixed carrier/beat.
+      newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
+      newB = FIELD_BEAT_MIN + yN * (beatMaxRef.current - FIELD_BEAT_MIN);
+    }
+    // A meaningful move WHILE PRESSING re-syncs the biphotic (roll is a fine-tune
+    // at a spot); a light touch leaves a locked biphotic alone.
+    const moved = Math.abs(newB - prevB) > 0.5 || Math.abs(newC - prevC) > 8;
+    baseCarrierRef.current = newC;
+    baseBeatRef.current = newB;
+    if (moved && pushingRef.current) {
+      balanceRef.current = 0;
+      centerRollRef.current = headRef.current ? headRef.current.roll : 0;
+    }
+    applyField();
+  };
+  // Engage editing (press the block / touch the pad): open the push gate, boost the
+  // stim, and — in locked gaze — zero the head at the press pose.
+  const pressEngage = () => {
+    if (pushingRef.current) return;
+    pushingRef.current = true; setPushing(true);
+    cancelFade(); // pressing to edit stops the auto-sync so roll can set the biphotic
+    if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) {
+      pulsetto.setIntensity(Math.min(9, pulseStrengthRef.current + PUSH_STIM_BOOST));
+    }
+    if (gazeLockRef.current) {
+      const h = headRef.current;
+      centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
+      centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
+    }
+  };
+  // On release from a press: in locked gaze bake the head bend into the base so it
+  // locks; in free gaze leave it live. Drop the stim + volume lift.
+  const releasePush = () => {
+    if (!pushingRef.current) return;
+    pushingRef.current = false;
+    setPushing(false);
+    if (gazeLockRef.current) {
+      baseBeatRef.current = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
+      baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
+      beatBendRef.current = 0;
+      carrierBendRef.current = 0;
+    }
+    if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) pulsetto.setIntensity(pulseStrengthRef.current);
+    pressBoost.release();
+    applyField();
+  };
+
+  // Phone-as-Lightpad: the full-screen TouchPad drives the same finger mapping +
+  // push gate as the block. xN/yN feed the shared fromFinger via the cell refs.
+  const onPadField = e => {
+    if (e.phase === 'end') { pressBoost.release(); releasePush(); return; }
+    colRef.current = e.xN * (LP_COLS - 1);
+    rowRef.current = e.yN * (LP_ROWS - 1);
+    bendRef.current = 0; slideRef.current = 0;
+    if (e.phase === 'start') { lastXNRef.current = null; pressEngage(); }
+    fromFinger();
+    pressBoost.press(e.pressure);
+  };
+
   // Lightpad touch → carrier (X), beat (Y), intensity (Z) + the push gate.
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
-    const fromFinger = () => {
-      const xR = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
-      const yR = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
-      const xN = LP_FLIP_X ? 1 - xR : xR;
-      const yN = LP_FLIP_Y ? 1 - yR : yR;
-      const prevC = baseCarrierRef.current, prevB = baseBeatRef.current;
-      let newC, newB;
-      if (relativeRef.current) {
-        // Trackpad: the block position isn't a coordinate, its MOVEMENT is a delta.
-        // Accumulate onto the current value and reflect at the edges (repeating space).
-        if (lastXNRef.current == null) { lastXNRef.current = xN; lastYNRef.current = yN; }
-        const dxN = xN - lastXNRef.current, dyN = yN - lastYNRef.current;
-        lastXNRef.current = xN; lastYNRef.current = yN;
-        newC = reflect(prevC + dxN * (CARR_MAX - CARR_MIN) * REL_SENS_C, CARR_MIN, CARR_MAX);
-        newB = reflect(prevB + dyN * (beatMaxRef.current - FIELD_BEAT_MIN) * REL_SENS_B, FIELD_BEAT_MIN, beatMaxRef.current);
-      } else {
-        // Absolute map: each spot is a fixed carrier/beat.
-        newC = CARR_MIN + xN * (CARR_MAX - CARR_MIN);
-        newB = FIELD_BEAT_MIN + yN * (beatMaxRef.current - FIELD_BEAT_MIN);
-      }
-      // A meaningful move WHILE PRESSING re-syncs the biphotic (roll is a fine-tune
-      // at a spot); a light touch leaves a locked biphotic alone.
-      const moved = Math.abs(newB - prevB) > 0.5 || Math.abs(newC - prevC) > 8;
-      baseCarrierRef.current = newC;
-      baseBeatRef.current = newB;
-      if (moved && pushingRef.current) {
-        balanceRef.current = 0;
-        centerRollRef.current = headRef.current ? headRef.current.roll : 0;
-      }
-      applyField();
-    };
-    // On release from a press: bake the pitch bend into the base so beat/carrier
-    // lock, and LOCK the biphotic balance in place too (it persists until you
-    // press+re-roll, or tap to gently re-sync).
-    const releasePush = () => {
-      if (!pushingRef.current) return;
-      pushingRef.current = false;
-      setPushing(false);
-      // Gaze LOCKED = sculpt-and-lock: bake the head bend into the base so it holds.
-      // Gaze FREE: the bend keeps tracking the head, so leave it live (don't bake).
-      if (gazeLockRef.current) {
-        baseBeatRef.current = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
-        baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
-        beatBendRef.current = 0;
-        carrierBendRef.current = 0;
-      }
-      // Release the +2 stim boost back to the base strength, and the volume lift.
-      if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) pulsetto.setIntensity(pulseStrengthRef.current);
-      pressBoost.release();
-      applyField();
-    };
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
       if (ev.type === 'noteOn') {
@@ -377,23 +406,8 @@ export default function FieldScreen() {
         uiTick(() => setIntensity(i));
         pressBoost.press(ev.value / 127); // …and a little louder while you lean in
         const nowPushing = ev.value >= PUSH_THRESHOLD;
-        if (nowPushing && !pushingRef.current) {
-          pushingRef.current = true; setPushing(true);
-          cancelFade(); // pressing to edit stops the auto-sync so roll can set the biphotic
-          // Pressing boosts the vagus stim by +2 (up to 9) while held.
-          if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) {
-            pulsetto.setIntensity(Math.min(9, pulseStrengthRef.current + PUSH_STIM_BOOST));
-          }
-          // Locked gaze zeroes at the press pose (head only steers while held);
-          // free gaze keeps its session-start center.
-          if (gazeLockRef.current) {
-            const h = headRef.current;
-            centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
-            centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
-          }
-        } else if (!nowPushing && pushingRef.current) {
-          releasePush();
-        }
+        if (nowPushing && !pushingRef.current) pressEngage();
+        else if (!nowPushing && pushingRef.current) releasePush();
       } else if (ev.type === 'noteOff') {
         pressBoost.release(); // finger off → spring the volume lift back to base
         if (pushingRef.current) releasePush();
@@ -752,9 +766,15 @@ export default function FieldScreen() {
               ? 'sculpting — finger: ← → carrier, ↑ ↓ beat · head: pitch = beat, roll = balance'
               : 'press & hold the block to edit · tap the circle to pause'}
           </Text>
+          {running && !IS_WEB && !lightpad.connected ? (
+            <TouchableOpacity onPress={() => setPadOpen(true)} activeOpacity={0.7} hitSlop={12} style={styles.padChip}>
+              <Text style={styles.padChipTxt}>✋ Use the screen as a pad</Text>
+            </TouchableOpacity>
+          ) : null}
         </>
       ) : null}
 
+      <TouchPad visible={padOpen} onClose={() => setPadOpen(false)} onChange={onPadField} />
     </View>
   );
 }
@@ -779,6 +799,8 @@ const styles = StyleSheet.create({
   volSlider: { flex: 1, height: 36, marginHorizontal: 8 },
   volIcon: { fontSize: 15 },
   volHint: { color: COLORS.textMuted, fontSize: 11, textAlign: 'center', marginTop: 2 },
+  padChip: { alignSelf: 'center', marginTop: 10, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: '#2A2350', backgroundColor: '#171232' },
+  padChipTxt: { color: '#C7B8FF', fontSize: 13, fontWeight: '600' },
   timerBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#141C28', alignItems: 'center', justifyContent: 'center' },
   timerBtnTxt: { color: COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
   timerVal: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '700', minWidth: 84, textAlign: 'center' },

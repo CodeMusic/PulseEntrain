@@ -21,6 +21,7 @@ import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
+import TouchPad from '../components/TouchPad';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
 import { useDevLines } from '../dev/DevPanel';
@@ -94,6 +95,7 @@ export default function PlayerScreen({ route, navigation }) {
   const [synthDur, setSynthDur] = useState((dose && dose.lengthSeconds) || 0);
   const [synthPlaying, setSynthPlaying] = useState(false);
   const [graphMode, setGraphMode] = useState(false); // tap the cover → live beat map
+  const [padOpen, setPadOpen] = useState(false); // phone-as-Lightpad full-screen touch control
   const [seeking, setSeeking] = useState(false); // dragging the progress slider
   const [seekVal, setSeekVal] = useState(0);
   const novaOverrideRef = useRef(false); // Developer Tools took manual control of the flicker
@@ -648,6 +650,33 @@ export default function PlayerScreen({ route, navigation }) {
   }
   const pressBoost = pressBoostRef.current;
 
+  // Phone-as-Lightpad: the full-screen TouchPad reports the same gesture the block
+  // does. Map it to the same absolute-from-touch carrier/beat bend + press boost,
+  // springing home on release.
+  const padStartRef = useRef(null);
+  const onPad = e => {
+    if (e.phase === 'start') {
+      cancelSpring();
+      setPressing(true);
+      padStartRef.current = { x: e.xN, y: e.yN };
+      pressBoost.press(e.pressure);
+    } else if (e.phase === 'move') {
+      if (!padStartRef.current) padStartRef.current = { x: e.xN, y: e.yN };
+      const st = padStartRef.current;
+      touchBendRef.current = {
+        carr: exClamp(e.xN - st.x, -1, 1) * TOUCH_CARR_MAX,
+        beat: exClamp(st.y - e.yN, -1, 1) * TOUCH_BEAT_MAX, // up the pad = higher beat
+      };
+      applyBend();
+      pressBoost.press(e.pressure);
+    } else {
+      padStartRef.current = null;
+      setPressing(false);
+      pressBoost.release();
+      springBack();
+    }
+  };
+
   const onLumi = v => {
     setLumi(v);
     nova.setMasterBrightness(v / 100);
@@ -788,6 +817,14 @@ export default function PlayerScreen({ route, navigation }) {
           </Text>
         </TouchableOpacity>
       ) : null}
+
+      {/* No block? Use the phone screen as a Lightpad. */}
+      {!IS_WEB && isSynth && !lightpad.connected ? (
+        <TouchableOpacity onPress={() => setPadOpen(true)} activeOpacity={0.7} hitSlop={14} style={styles.padChip}>
+          <Text style={styles.padChipTxt}>✋ Use the screen as a pad</Text>
+        </TouchableOpacity>
+      ) : null}
+      <TouchPad visible={padOpen} onClose={() => setPadOpen(false)} onChange={onPad} />
 
       <Slider
         style={styles.progressSlider}
@@ -931,6 +968,8 @@ const styles = StyleSheet.create({
   lpChipBusy: { borderColor: COLORS.accentBlue, backgroundColor: '#12202E' },
   lpChipDot: { color: '#3A4658', fontSize: 10, marginRight: 7 },
   lpChipTxt: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '600' },
+  padChip: { alignSelf: 'center', marginTop: 8, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: '#2A2350', backgroundColor: '#171232' },
+  padChipTxt: { color: '#C7B8FF', fontSize: 13, fontWeight: '600' },
   progressSlider: { width: '100%', height: 36, marginTop: 18 },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   time: { color: COLORS.textMuted, fontSize: 12 },
