@@ -28,6 +28,10 @@ export class NovaController {
     this.strobing = false;
     this.targetBeat = 8;
     this.balance = 0; // −1 left … 0 both … +1 right flicker bias (Field mode)
+    this.gazeAlt = false; // pitch past threshold → eyes detune / drift out of phase
+    this.gazeSwap = false; // roll past threshold → the slowed eye hops each slow blink
+    this._swapPhase = 0; // accumulates a slow-blink cycle for the swap
+    this._swapState = false;
     this.values = DEFAULT_VALUES(8);
     this.master = 1; // master brightness multiplier (0..1)
     this.tickTimer = null;
@@ -224,9 +228,27 @@ export class NovaController {
     this.tickTimer = setInterval(() => {
       if (!this.strobing || !this.strobeChar) return;
       const RATE_MIN = 0.5; // the leaned-toward eye slows to ~0.5 Hz (≈ stopped)
-      const b = this.balance || 0;
-      const lTarget = b < 0 ? this.targetBeat + b * (this.targetBeat - RATE_MIN) : this.targetBeat;
-      const rTarget = b > 0 ? this.targetBeat - b * (this.targetBeat - RATE_MIN) : this.targetBeat;
+      const DT = 0.25; // tick period (s)
+      let b = this.balance || 0;
+      // Roll past threshold (gazeSwap): after each slow blink, hop the slowed eye to
+      // the other side, so the slow flash walks between the eyes as you hold the tilt.
+      if (this.gazeSwap && b !== 0) {
+        const slowRate = this.targetBeat - Math.abs(b) * (this.targetBeat - RATE_MIN);
+        this._swapPhase += Math.max(0.05, slowRate) * DT;
+        if (this._swapPhase >= 1) { this._swapPhase -= 1; this._swapState = !this._swapState; }
+        if (this._swapState) b = -b;
+      } else {
+        this._swapPhase = 0; this._swapState = false;
+      }
+      let lTarget = b < 0 ? this.targetBeat + b * (this.targetBeat - RATE_MIN) : this.targetBeat;
+      let rTarget = b > 0 ? this.targetBeat - b * (this.targetBeat - RATE_MIN) : this.targetBeat;
+      // Pitch past threshold (gazeAlt): detune the eyes a touch so they drift out of
+      // sync — they cross through anti-phase (alternating) instead of blinking together.
+      if (this.gazeAlt) {
+        const ALT_DETUNE = 0.09;
+        lTarget *= 1 - ALT_DETUNE / 2;
+        rTarget *= 1 + ALT_DETUNE / 2;
+      }
       const ramp = (cur, tgt) => (Math.abs(tgt - cur) < 0.05 ? tgt : cur + (tgt - cur) * 0.35);
       this.values.lFreq = ramp(this.values.lFreq, lTarget);
       this.values.rFreq = ramp(this.values.rFreq, rTarget);
@@ -249,6 +271,17 @@ export class NovaController {
   setBalance(b) {
     const v = Number(b);
     this.balance = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
+  }
+
+  // Gaze thresholds (Field / Explore): once head pitch or roll passes ±threshold,
+  // switch the eyes into a different flicker relationship (see the strobe tick).
+  //   alternate — pitch past ±threshold: eyes drift out of phase (anti-phase blink)
+  //   swap      — roll past ±threshold: the slowed eye hops sides each slow blink
+  setGazePattern(p) {
+    const o = p || {};
+    this.gazeAlt = !!o.alternate;
+    this.gazeSwap = !!o.swap;
+    if (!this.gazeSwap) { this._swapPhase = 0; this._swapState = false; }
   }
 
   // Explorer: merge per-eye pattern params (brightness / phase / duty) live.
