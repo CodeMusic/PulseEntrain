@@ -44,6 +44,7 @@ const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
 // push began, and both have a dead-zone so a still/settling head does nothing.
 const ROLL_DEADZONE = 2, ROLL_MAX = 20; // roll: ±2° balanced, then one eye slows gradually to 0.5 Hz by ±20°
 const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for a full bend
+const GAZE_PITCH_THRESH = 20, GAZE_ROLL_THRESH = 20; // past ±this (deg) the eyes change relationship
 const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
 const CARR_BEND_MAX = 12; // Hz — carrier bend alongside it, big enough to actually hear
 const BIPHOTIC_FADE_MS = 5000; // any touch eases the eyes back to sync over this long
@@ -338,6 +339,15 @@ export default function FieldScreen() {
   };
   // Engage editing (press the block / touch the pad): open the push gate, boost the
   // stim, and — in locked gaze — zero the head at the press pose.
+  // Touch recenters gaze: capture the current head pose as the neutral zero, so you
+  // touch looking forward and then bend by looking around from there.
+  const recenterGaze = () => {
+    const h = headRef.current;
+    if (!h) return;
+    centerPitchRef.current = h.pitch;
+    centerRollRef.current = h.roll;
+    gazeCenteredRef.current = true;
+  };
   const pressEngage = () => {
     if (pushingRef.current) return;
     pushingRef.current = true; setPushing(true);
@@ -345,11 +355,7 @@ export default function FieldScreen() {
     if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) {
       pulsetto.setIntensity(Math.min(9, pulseStrengthRef.current + PUSH_STIM_BOOST));
     }
-    if (gazeLockRef.current) {
-      const h = headRef.current;
-      centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
-      centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
-    }
+    recenterGaze();
   };
   // On release from a press: in locked gaze bake the head bend into the base so it
   // locks; in free gaze leave it live. Drop the stim + volume lift.
@@ -393,6 +399,7 @@ export default function FieldScreen() {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
         lastXNRef.current = null; // fresh touch: relative delta starts from here (no jump)
+        recenterGaze(); // the moment of touch zeroes your gaze at the current pose
         fromFinger();
         // Tap-to-resync only in locked gaze; in free gaze the live head-roll owns
         // the biphotic, so a fade would fight it.
@@ -429,7 +436,7 @@ export default function FieldScreen() {
     nova.setTelemetryRate(devRate);
     const applyHead = () => {
       if (!runningRef.current || pausedRef.current) return;
-      if (gazeLockRef.current && !pushingRef.current) return; // locked gaze: only while pressing
+      if (gazeLockRef.current && !pushingRef.current) { nova.setGazePattern && nova.setGazePattern({ alternate: false, swap: false }); return; } // locked gaze: only while pressing
       const s = headRef.current;
       if (!s) return;
       // Free gaze has no press to zero from, so capture the neutral pose on the
@@ -437,11 +444,14 @@ export default function FieldScreen() {
       if (!gazeLockRef.current && !gazeCenteredRef.current) {
         centerPitchRef.current = s.pitch; centerRollRef.current = s.roll; gazeCenteredRef.current = true;
       }
-      const p = clamp(dz((s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN, PITCH_DEADZONE), -PITCH_BEND_SPAN, PITCH_BEND_SPAN);
+      const pitchDelta = (s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN;
+      const rollDelta = (s.roll - centerRollRef.current) * FIELD_ROLL_SIGN;
+      const p = clamp(dz(pitchDelta, PITCH_DEADZONE), -PITCH_BEND_SPAN, PITCH_BEND_SPAN);
       beatBendRef.current = (p / PITCH_BEND_SPAN) * BEAT_BEND_MAX;
       carrierBendRef.current = (p / PITCH_BEND_SPAN) * CARR_BEND_MAX;
-      const dRoll = dz((s.roll - centerRollRef.current) * FIELD_ROLL_SIGN, ROLL_DEADZONE);
-      balanceRef.current = clamp(dRoll / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±2° balanced, one eye eases to 0.5 Hz by ±20°
+      balanceRef.current = clamp(dz(rollDelta, ROLL_DEADZONE) / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±2° balanced, one eye eases to 0.5 Hz by ±20°
+      // Past ±threshold the eyes change relationship: pitch → out-of-phase, roll → swap.
+      if (nova.setGazePattern) nova.setGazePattern({ alternate: Math.abs(pitchDelta) > GAZE_PITCH_THRESH, swap: Math.abs(rollDelta) > GAZE_ROLL_THRESH });
       applyField();
     };
     nova.setMotionListener(s => {
@@ -455,7 +465,10 @@ export default function FieldScreen() {
         : { pitch: s.pitch, roll: s.roll };
       applyHead();
     });
-    return () => { try { nova.setMotionListener(null); } catch (e) {} };
+    return () => {
+      try { nova.setMotionListener(null); } catch (e) {}
+      try { nova.setGazePattern && nova.setGazePattern({ alternate: false, swap: false }); } catch (e) {}
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, nova.connected]);
 

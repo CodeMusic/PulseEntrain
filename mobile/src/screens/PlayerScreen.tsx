@@ -45,6 +45,7 @@ const playCountKey = id => `@pulseentrain/playcount/${id}`;
 // mirror Field's head control (anchored to your pose when it engages).
 const EX_DEADZONE = 5, EX_PITCH_SPAN = 20, EX_ROLL_MAX = 20;
 const EX_ROLL_DEADZONE = 2; // roll: only ±2° stays balanced, then one eye eases to 0.5 Hz by EX_ROLL_MAX
+const GAZE_PITCH_THRESH = 20, GAZE_ROLL_THRESH = 20; // past ±this (deg) the eyes change relationship
 const EX_BEAT_BEND = 3.5, EX_CARR_BEND = 12; // Hz — how far pitch bends beat / carrier
 const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = 1;
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
@@ -103,7 +104,7 @@ export default function PlayerScreen({ route, navigation }) {
   const [intensity, setIntensityVal] = useState(
     defaultIntensityFor(chosenStrength != null ? chosenStrength : dose && dose.strength),
   );
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(0.82); // leave headroom so a press can lift the level
   const [lumi, setLumi] = useState(100);
   const intensityRef = useRef(intensity);
   intensityRef.current = intensity;
@@ -157,6 +158,7 @@ export default function PlayerScreen({ route, navigation }) {
   const cancelGazeSpring = () => { if (gazeSpringRef.current) { gazeSpringRef.current(); gazeSpringRef.current = null; } };
   const releaseGaze = () => {
     cancelGazeSpring();
+    try { nova.setGazePattern && nova.setGazePattern({ alternate: false, swap: false }); } catch (e) {} // let go → eyes back in sync
     const start = { beat: headBendRef.current.beat, carr: headBendRef.current.carr, bal: balanceRef.current };
     if (Math.abs(start.beat) < 0.01 && Math.abs(start.carr) < 0.5 && Math.abs(start.bal) < 0.01) {
       headBendRef.current = { beat: 0, carr: 0 }; balanceRef.current = 0; applyBend();
@@ -181,7 +183,9 @@ export default function PlayerScreen({ route, navigation }) {
   const setPressing = v => {
     const was = pressingRef.current;
     pressingRef.current = v;
-    if (v && gazeLockRef.current && exHeadRef.current) exCenterRef.current = { ...exHeadRef.current }; // zero at the press pose
+    // Touching recenters gaze at the current pose — touch looking forward, then look
+    // around from there. Applies in both free and locked gaze.
+    if (v && !was && exHeadRef.current) exCenterRef.current = { ...exHeadRef.current };
     if (was && !v && gazeLockRef.current) releaseGaze(); // let go → spring the gaze home
   };
   useEffect(() => {
@@ -192,7 +196,7 @@ export default function PlayerScreen({ route, navigation }) {
     const apply = () => {
       const s = exHeadRef.current;
       if (!s) return;
-      if (gazeLockRef.current && !pressingRef.current) return; // locked gaze rests until you press
+      if (gazeLockRef.current && !pressingRef.current) { nova.setGazePattern && nova.setGazePattern({ alternate: false, swap: false }); return; } // locked gaze rests until you press
       // Auto-center on start: capture the neutral pose once the head has settled
       // (~0.6 s in), so no manual dev-tools calibration is needed.
       if (!exCenterRef.current) {
@@ -201,12 +205,15 @@ export default function PlayerScreen({ route, navigation }) {
       }
       cancelGazeSpring(); // live head input overrides any in-flight release spring
       const c = exCenterRef.current;
-      const p = exClamp(exDz((s.pitch - c.pitch) * EX_PITCH_SIGN, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
-      const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_ROLL_DEADZONE);
+      const pitchDelta = (s.pitch - c.pitch) * EX_PITCH_SIGN;
+      const rollDelta = (s.roll - c.roll) * EX_ROLL_SIGN;
+      const p = exClamp(exDz(pitchDelta, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
       headBendRef.current = { beat: p * EX_BEAT_BEND, carr: p * EX_CARR_BEND };
       applyBend();
-      balanceRef.current = exClamp(dRoll / (EX_ROLL_MAX - EX_ROLL_DEADZONE), -1, 1);
+      balanceRef.current = exClamp(exDz(rollDelta, EX_ROLL_DEADZONE) / (EX_ROLL_MAX - EX_ROLL_DEADZONE), -1, 1);
       nova.setBalance(balanceRef.current);
+      // Past ±threshold the eyes change relationship: pitch → out-of-phase, roll → swap.
+      if (nova.setGazePattern) nova.setGazePattern({ alternate: Math.abs(pitchDelta) > GAZE_PITCH_THRESH, swap: Math.abs(rollDelta) > GAZE_ROLL_THRESH });
     };
     nova.setMotionListener(s => {
       const prev = exHeadRef.current;
@@ -218,6 +225,7 @@ export default function PlayerScreen({ route, navigation }) {
     return () => {
       try { nova.setMotionListener(null); } catch (e) {}
       try { nova.setBalance(0); } catch (e) {}
+      try { nova.setGazePattern && nova.setGazePattern({ alternate: false, swap: false }); } catch (e) {}
       cancelGazeSpring();
       headBendRef.current = { beat: 0, carr: 0 };
       balanceRef.current = 0;
