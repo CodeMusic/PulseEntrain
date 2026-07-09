@@ -18,7 +18,12 @@ const BLUE = [90, 170, 255]; // touch highlight
 const TOUCH_RADIUS = 1.9; // cells lit around the finger
 const DECAY = 0.9; // residue fade per frame (~0.4 s tail)
 const DIM = 0.62; // how far the untouched grid darkens while held (slightly)
-const DEFAULT_FORCE = 0.7; // pressure when the device reports none
+// Pressure proxy for phones with no 3D-Touch (force === 0). RN doesn't expose the
+// touch radius, so we use DWELL: holding still builds pressure toward full; a fast
+// drag bleeds it off, so a light glide stays soft. Real force wins when present.
+const DWELL_MIN = 0.32; // pressure the instant you land
+const DWELL_TAU = 42; // frames to build most of the way (~0.7 s at 60fps)
+const DWELL_MOVE_BLEED = 55; // how much a drag (normalised distance) softens the dwell
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const mix = (c1, c2, t) => [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
@@ -30,12 +35,18 @@ export default function TouchPad({ visible, onClose, onChange }) {
   const cell = Math.max(4, Math.floor(Math.min(width - 8, height - 96) / N));
   const size = cell * N;
   const heatRef = useRef(new Float32Array(N * N));
-  const touchRef = useRef<null | { cx: number; cy: number; force: number }>(null);
+  // rawForce: real 3D-Touch force (0 if none). dwell: frames held, feeding the proxy.
+  const touchRef = useRef<null | { cx: number; cy: number; xN: number; yN: number; rawForce: number; dwell: number; eff: number }>(null);
   const dimRef = useRef(1); // 1 = normal, →DIM while a finger is down
   const [, forceRender] = useState(0);
   const rafRef = useRef<any>(null);
 
-  // Animation loop: paint heat around the finger, decay the residue, ease the dim.
+  const pressureOf = t => {
+    if (t.rawForce > 0) return t.rawForce; // real pressure wins
+    return DWELL_MIN + (1 - DWELL_MIN) * (1 - Math.exp(-t.dwell / DWELL_TAU));
+  };
+
+  // Animation loop: build dwell pressure, emit it, paint heat, decay residue, ease dim.
   useEffect(() => {
     if (!visible) {
       heatRef.current.fill(0);
@@ -50,11 +61,13 @@ export default function TouchPad({ visible, onClose, onChange }) {
       const heat = heatRef.current;
       const t = touchRef.current;
       if (t) {
+        t.dwell += 1; // holding still builds pressure toward full
+        t.eff = pressureOf(t);
         for (let r = 0; r < N; r++) {
           for (let c = 0; c < N; c++) {
             const d = Math.hypot(c - t.cx, r - t.cy);
             if (d <= TOUCH_RADIUS) {
-              const v = t.force * (1 - d / TOUCH_RADIUS);
+              const v = t.eff * (1 - d / TOUCH_RADIUS);
               const i = r * N + c;
               if (v > heat[i]) heat[i] = v;
             }
@@ -64,7 +77,12 @@ export default function TouchPad({ visible, onClose, onChange }) {
       for (let i = 0; i < heat.length; i++) heat[i] *= DECAY;
       const dimTarget = t ? DIM : 1;
       dimRef.current += (dimTarget - dimRef.current) * 0.12;
-      if (++frame % 2 === 0) forceRender(n => n + 1); // ~30fps repaint
+      frame++;
+      // Drive the audio at ~30fps so dwell pressure swells even with a still finger.
+      if (frame % 2 === 0) {
+        if (t) onChange && onChange({ phase: 'move', xN: t.xN, yN: t.yN, pressure: t.eff });
+        forceRender(n => n + 1);
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -80,9 +98,17 @@ export default function TouchPad({ visible, onClose, onChange }) {
     const n = e.nativeEvent;
     const lx = clamp01(n.locationX / size) * size;
     const ly = clamp01(n.locationY / size) * size;
-    const pressure = n.force && n.force > 0 ? Math.min(1, n.force) : DEFAULT_FORCE;
-    touchRef.current = { cx: lx / cell - 0.5, cy: ly / cell - 0.5, force: pressure };
-    onChange && onChange({ phase, xN: lx / size, yN: ly / size, pressure });
+    const xN = lx / size, yN = ly / size;
+    const rawForce = n.force && n.force > 0 ? Math.min(1, n.force) : 0;
+    const prev = touchRef.current;
+    // A drag bleeds dwell off (light glide stays soft); a still hold keeps building.
+    let dwell = prev ? prev.dwell : 0;
+    if (prev) dwell = Math.max(0, dwell - Math.hypot(xN - prev.xN, yN - prev.yN) * DWELL_MOVE_BLEED);
+    const t = { cx: lx / cell - 0.5, cy: ly / cell - 0.5, xN, yN, rawForce, dwell, eff: 0 };
+    t.eff = pressureOf(t);
+    touchRef.current = t;
+    // 'start' seeds the screen's touch anchor immediately; 'move' is driven by the loop.
+    if (phase === 'start') onChange && onChange({ phase: 'start', xN, yN, pressure: t.eff });
   };
 
   const heat = heatRef.current;

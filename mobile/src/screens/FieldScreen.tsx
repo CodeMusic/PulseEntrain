@@ -378,6 +378,10 @@ export default function FieldScreen() {
     if (e.phase === 'start') { lastXNRef.current = null; pressEngage(); }
     fromFinger();
     pressBoost.press(e.pressure);
+    // Mirror the block's Z → field brightness (pressure/dwell drives the glow).
+    const i = clamp(0.2 + 0.8 * clamp(e.pressure, 0, 1), 0.2, 1);
+    if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
+    uiTick(() => setIntensity(i));
   };
 
   // Lightpad touch → carrier (X), beat (Y), intensity (Z) + the push gate.
