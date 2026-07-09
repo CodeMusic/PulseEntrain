@@ -16,8 +16,8 @@
 //                a gentle ~15% overshoot, higher = bouncier.
 //
 // Returns a cancel() — call it when a new pull grabs the control mid-spring.
-export const SPRING_RATE = 13; // default ω for released bends
-export const SPRING_BOUNCE = 0.5; // default overshoot (~15%)
+export const SPRING_RATE = 16; // default ω for released bends — snappier return
+export const SPRING_BOUNCE = 0.62; // default overshoot — a touch bouncier
 export const PRESS_VOL_BOOST = 0.15; // press (Z) lifts volume by up to this, on top of the base
 
 export function springTouch({ springRate = SPRING_RATE, bounce = SPRING_BOUNCE, onUpdate = _s => {}, onRest = () => {} } = {}) {
@@ -52,5 +52,36 @@ export function springTouch({ springRate = SPRING_RATE, bounce = SPRING_BOUNCE, 
   return () => {
     stopped = true;
     if (raf) cancelAnimationFrame(raf);
+  };
+}
+
+// Press-to-boost volume with a springy release. While pressing, the level sits at
+// base + up to `max`. On release it springs back to base (same feel as a bend),
+// dipping a touch below then settling — instead of snapping. Shared by Field and
+// programs so pressing the block gets a little louder everywhere.
+//   getBase()  — current base level (the slider value)
+//   setLevel(v)— push a level to the engine (already guarded for running/paused)
+export function createPressBoost({ getBase, setLevel, max = PRESS_VOL_BOOST }) {
+  let offset = 0;
+  let cancel = null;
+  const applyNow = () => setLevel(Math.max(0, Math.min(1, getBase() + offset)));
+  const stop = () => { if (cancel) { cancel(); cancel = null; } };
+  return {
+    // pn: 0..1 pressure. Drives the boost directly while held.
+    press(pn) {
+      stop();
+      offset = max * Math.max(0, Math.min(1, pn || 0));
+      applyNow();
+    },
+    // Let go: spring the boost back to base.
+    release() {
+      stop();
+      const start = offset;
+      if (start < 0.001) { offset = 0; applyNow(); return; }
+      cancel = springTouch({
+        onUpdate: s => { offset = start * s; applyNow(); },
+        onRest: () => { offset = 0; applyNow(); cancel = null; },
+      });
+    },
   };
 }

@@ -14,7 +14,7 @@ import { useSettings } from '../settings/SettingsProvider';
 import { useSessionActive } from '../session/SessionGuard';
 import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
-import { springTouch, PRESS_VOL_BOOST } from '../shared/springTouch';
+import { springTouch, createPressBoost } from '../shared/springTouch';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
 // Field Meditation Mode — immersive, eyes-closed. The circle IS the control:
@@ -90,6 +90,11 @@ export default function FieldScreen() {
   // Relative (drag-delta) vs absolute controller; ref so the touch listener reads it live.
   const relativeRef = useRef(false);
   relativeRef.current = !!(settings && settings.relativeControl);
+  // Gaze = head pitch (beat) + roll (biphotic). Off (default): free — the head
+  // always steers. On: locked — it only steers while pressing the block.
+  const gazeLockRef = useRef(false);
+  gazeLockRef.current = !!(settings && settings.gazeLock);
+  const gazeCenteredRef = useRef(false); // free gaze auto-zeros on the first sample of a session
   const lastXNRef = useRef(null); // previous finger position (relative-mode delta); null = fresh touch
   const lastYNRef = useRef(null);
   // Default Pulsetto session strength (Settings); pressing the block adds +2 while held.
@@ -336,13 +341,17 @@ export default function FieldScreen() {
       if (!pushingRef.current) return;
       pushingRef.current = false;
       setPushing(false);
-      baseBeatRef.current = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
-      baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
-      beatBendRef.current = 0;
-      carrierBendRef.current = 0;
+      // Gaze LOCKED = sculpt-and-lock: bake the head bend into the base so it holds.
+      // Gaze FREE: the bend keeps tracking the head, so leave it live (don't bake).
+      if (gazeLockRef.current) {
+        baseBeatRef.current = clamp(baseBeatRef.current + beatBendRef.current, FIELD_BEAT_MIN, beatMaxRef.current);
+        baseCarrierRef.current = clamp(baseCarrierRef.current + carrierBendRef.current, 60, 1100);
+        beatBendRef.current = 0;
+        carrierBendRef.current = 0;
+      }
       // Release the +2 stim boost back to the base strength, and the volume lift.
       if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) pulsetto.setIntensity(pulseStrengthRef.current);
-      applyPressVol(0);
+      pressBoost.release();
       applyField();
     };
     lightpad.setNoteListener(ev => {
@@ -352,7 +361,9 @@ export default function FieldScreen() {
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
         lastXNRef.current = null; // fresh touch: relative delta starts from here (no jump)
         fromFinger();
-        if (!pushingRef.current) startBiphoticFade(); // a touch eases to sync — but not a retrigger mid-press (that would fight the roll)
+        // Tap-to-resync only in locked gaze; in free gaze the live head-roll owns
+        // the biphotic, so a fade would fight it.
+        if (!pushingRef.current && gazeLockRef.current) startBiphoticFade();
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL;
         fromFinger();
@@ -364,7 +375,7 @@ export default function FieldScreen() {
         const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field brightness
         if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
         uiTick(() => setIntensity(i));
-        applyPressVol(ev.value / 127); // …and a little louder while you lean in
+        pressBoost.press(ev.value / 127); // …and a little louder while you lean in
         const nowPushing = ev.value >= PUSH_THRESHOLD;
         if (nowPushing && !pushingRef.current) {
           pushingRef.current = true; setPushing(true);
@@ -373,14 +384,18 @@ export default function FieldScreen() {
           if (runningRef.current && !pausedRef.current && pulsetto.sessionActive) {
             pulsetto.setIntensity(Math.min(9, pulseStrengthRef.current + PUSH_STIM_BOOST));
           }
-          const h = headRef.current;
-          centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
-          centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
+          // Locked gaze zeroes at the press pose (head only steers while held);
+          // free gaze keeps its session-start center.
+          if (gazeLockRef.current) {
+            const h = headRef.current;
+            centerPitchRef.current = h ? h.pitch : 0; // bend is measured from this entry pitch
+            centerRollRef.current = h ? h.roll : 0; // biphotic opens by rolling from here
+          }
         } else if (!nowPushing && pushingRef.current) {
           releasePush();
         }
       } else if (ev.type === 'noteOff') {
-        applyPressVol(0); // finger off → drop any volume lift
+        pressBoost.release(); // finger off → spring the volume lift back to base
         if (pushingRef.current) releasePush();
       }
     });
@@ -395,9 +410,15 @@ export default function FieldScreen() {
     if (!running || !nova.connected || !nova.setMotionListener) return;
     nova.setTelemetryRate(devRate);
     const applyHead = () => {
-      if (!pushingRef.current || !runningRef.current || pausedRef.current) return;
+      if (!runningRef.current || pausedRef.current) return;
+      if (gazeLockRef.current && !pushingRef.current) return; // locked gaze: only while pressing
       const s = headRef.current;
       if (!s) return;
+      // Free gaze has no press to zero from, so capture the neutral pose on the
+      // first sample of the session (auto-center).
+      if (!gazeLockRef.current && !gazeCenteredRef.current) {
+        centerPitchRef.current = s.pitch; centerRollRef.current = s.roll; gazeCenteredRef.current = true;
+      }
       const p = clamp(dz((s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN, PITCH_DEADZONE), -PITCH_BEND_SPAN, PITCH_BEND_SPAN);
       beatBendRef.current = (p / PITCH_BEND_SPAN) * BEAT_BEND_MAX;
       carrierBendRef.current = (p / PITCH_BEND_SPAN) * CARR_BEND_MAX;
@@ -457,18 +478,23 @@ export default function FieldScreen() {
     setVolume(v);
     if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(v);
   };
-  // Pressing the block (Z) lifts the level a touch above the base while held —
-  // pn is the 0..1 pressure; 0 restores the slider's base volume.
-  const applyPressVol = pn => {
-    if (!runningRef.current || pausedRef.current || !engineRef.current) return;
-    engineRef.current.setVolume(Math.min(1, volumeRef.current + PRESS_VOL_BOOST * clamp(pn, 0, 1)));
-  };
+  // Pressing the block (Z) lifts the level a touch above the base while held, then
+  // springs back to base on release (same feel as a bend).
+  const pressBoostRef = useRef(null);
+  if (!pressBoostRef.current) {
+    pressBoostRef.current = createPressBoost({
+      getBase: () => volumeRef.current,
+      setLevel: v => { if (runningRef.current && !pausedRef.current && engineRef.current) engineRef.current.setVolume(v); },
+    });
+  }
+  const pressBoost = pressBoostRef.current;
 
   const start = async () => {
     const e = ensureEngine();
     cancelFade();
     baseCarrierRef.current = carrier; baseBeatRef.current = beat;
     beatBendRef.current = 0; carrierBendRef.current = 0; balanceRef.current = 0;
+    gazeCenteredRef.current = false; // re-auto-center free gaze at the start of each session
     e.start({ carrier, beat, volume, background: 'none' });
     e.fadeIn(1.2);
     if (nova.connected) { nova.startStrobe(beat); nova.setMasterBrightness(intensity); nova.setBalance(0); }

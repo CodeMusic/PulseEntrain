@@ -9,7 +9,7 @@ const IS_IOS = Platform.OS === 'ios'; // Apple Health is iOS-only
 export default function SettingsScreen() {
   const s = useSettings();
   if (!s) return null;
-  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField, healthSync, setHealthSync } = s;
+  const { name, setName, mixWithOthers, setMix, devMode, setDevMode, fullBand, setFullBand, relativeControl, setRelativeControl, pulsettoStrength, setPulsettoStrength, exploreField, setExploreField, healthSync, setHealthSync, gazeLock, setGazeLock } = s;
 
   // Turning the safety off requires an explicit acknowledgement; turning it back
   // on is immediate.
@@ -123,6 +123,27 @@ export default function SettingsScreen() {
               <Text style={styles.stepTxt}>+</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </View>
+
+      <Text style={styles.section}>Head control</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.label}>Lock gaze to touch</Text>
+            <Text style={styles.hint}>
+              Gaze = tilting your head to nudge the beat (look up/down) and the biphotic split
+              (tilt left/right). Off (default): gaze is always live in Field mode and programs.
+              On: it only steers while you're pressing the light block (or the screen), and springs
+              back when you let go.
+            </Text>
+          </View>
+          <Switch
+            value={!!gazeLock}
+            onValueChange={setGazeLock}
+            trackColor={{ true: COLORS.accentBlue, false: COLORS.bgCardLight }}
+            thumbColor="#fff"
+          />
         </View>
       </View>
 

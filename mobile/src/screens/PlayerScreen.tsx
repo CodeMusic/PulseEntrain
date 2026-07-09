@@ -20,7 +20,7 @@ import { carrierColorVibrant } from '../shared/entrainment';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
-import { springTouch, PRESS_VOL_BOOST } from '../shared/springTouch';
+import { springTouch, createPressBoost } from '../shared/springTouch';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
 import { useDevLines } from '../dev/DevPanel';
@@ -138,11 +138,49 @@ export default function PlayerScreen({ route, navigation }) {
   // The program's bend = head part + touch part, summed and pushed to the synth.
   const headBendRef = useRef({ beat: 0, carr: 0 });
   const touchBendRef = useRef({ beat: 0, carr: 0 });
+  const balanceRef = useRef(0); // last per-eye balance from head roll (for the release spring)
   const applyBend = () => {
     const s = synthRef.current;
     if (isSynth && s && s.setBend) {
       s.setBend(headBendRef.current.beat + touchBendRef.current.beat, headBendRef.current.carr + touchBendRef.current.carr);
     }
+  };
+  // Gaze = head pitch (beat) + roll (biphotic). Off (default): free — the head
+  // steers whether or not you're touching. On: locked — only while pressing the
+  // block / touching the art; on release it springs the gaze bend back to 0.
+  const gazeLockRef = useRef(false);
+  gazeLockRef.current = !!uiSettings.gazeLock;
+  const pressingRef = useRef(false);
+  const gazeSpringRef = useRef<null | (() => void)>(null);
+  const cancelGazeSpring = () => { if (gazeSpringRef.current) { gazeSpringRef.current(); gazeSpringRef.current = null; } };
+  const releaseGaze = () => {
+    cancelGazeSpring();
+    const start = { beat: headBendRef.current.beat, carr: headBendRef.current.carr, bal: balanceRef.current };
+    if (Math.abs(start.beat) < 0.01 && Math.abs(start.carr) < 0.5 && Math.abs(start.bal) < 0.01) {
+      headBendRef.current = { beat: 0, carr: 0 }; balanceRef.current = 0; applyBend();
+      try { nova.setBalance(0); } catch (e) {}
+      return;
+    }
+    gazeSpringRef.current = springTouch({
+      onUpdate: sc => {
+        headBendRef.current = { beat: start.beat * sc, carr: start.carr * sc };
+        balanceRef.current = start.bal * sc;
+        applyBend();
+        try { nova.setBalance(balanceRef.current); } catch (e) {}
+      },
+      onRest: () => {
+        headBendRef.current = { beat: 0, carr: 0 }; balanceRef.current = 0; applyBend();
+        try { nova.setBalance(0); } catch (e) {}
+        gazeSpringRef.current = null;
+      },
+    });
+  };
+  // Track "pressing" (block touch / art drag) so locked gaze knows when to steer.
+  const setPressing = v => {
+    const was = pressingRef.current;
+    pressingRef.current = v;
+    if (v && gazeLockRef.current && exHeadRef.current) exCenterRef.current = { ...exHeadRef.current }; // zero at the press pose
+    if (was && !v && gazeLockRef.current) releaseGaze(); // let go → spring the gaze home
   };
   useEffect(() => {
     if (!exploreField || !nova.connected || !isPlaying || !nova.setMotionListener) return;
@@ -152,18 +190,21 @@ export default function PlayerScreen({ route, navigation }) {
     const apply = () => {
       const s = exHeadRef.current;
       if (!s) return;
+      if (gazeLockRef.current && !pressingRef.current) return; // locked gaze rests until you press
       // Auto-center on start: capture the neutral pose once the head has settled
       // (~0.6 s in), so no manual dev-tools calibration is needed.
       if (!exCenterRef.current) {
         if (Date.now() - engageTs < 600) return;
         exCenterRef.current = { pitch: s.pitch, roll: s.roll };
       }
+      cancelGazeSpring(); // live head input overrides any in-flight release spring
       const c = exCenterRef.current;
       const p = exClamp(exDz((s.pitch - c.pitch) * EX_PITCH_SIGN, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
       const dRoll = exDz((s.roll - c.roll) * EX_ROLL_SIGN, EX_ROLL_DEADZONE);
       headBendRef.current = { beat: p * EX_BEAT_BEND, carr: p * EX_CARR_BEND };
       applyBend();
-      nova.setBalance(exClamp(dRoll / (EX_ROLL_MAX - EX_ROLL_DEADZONE), -1, 1));
+      balanceRef.current = exClamp(dRoll / (EX_ROLL_MAX - EX_ROLL_DEADZONE), -1, 1);
+      nova.setBalance(balanceRef.current);
     };
     nova.setMotionListener(s => {
       const prev = exHeadRef.current;
@@ -175,7 +216,9 @@ export default function PlayerScreen({ route, navigation }) {
     return () => {
       try { nova.setMotionListener(null); } catch (e) {}
       try { nova.setBalance(0); } catch (e) {}
+      cancelGazeSpring();
       headBendRef.current = { beat: 0, carr: 0 };
+      balanceRef.current = 0;
       applyBend();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,7 +253,7 @@ export default function PlayerScreen({ route, navigation }) {
       onStartShouldSetPanResponder: () => false, // let taps reach the graph toggle
       onMoveShouldSetPanResponder: (e, g) => exploreRef.current && (Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6),
       onPanResponderTerminationRequest: () => false, // once we're bending, don't hand the drag back to the ScrollView
-      onPanResponderGrant: () => { cancelSpring(); },
+      onPanResponderGrant: () => { cancelSpring(); setPressing(true); },
       onPanResponderMove: (e, g) => {
         // A program is a fixed journey — the drag is a momentary snap-bend that
         // springs back on release (below). Direct/absolute so it tracks the finger
@@ -221,8 +264,8 @@ export default function PlayerScreen({ route, navigation }) {
         };
         applyBend();
       },
-      onPanResponderRelease: () => springBack(),
-      onPanResponderTerminate: () => springBack(),
+      onPanResponderRelease: () => { setPressing(false); springBack(); },
+      onPanResponderTerminate: () => { setPressing(false); springBack(); },
     });
   }
 
@@ -258,6 +301,7 @@ export default function PlayerScreen({ route, navigation }) {
         const { col, row } = decodeCell(ev.note);
         lpColRef.current = col; lpRowRef.current = row; lpBendRef.current = 0; lpSlideRef.current = 0;
         cancelSpring();
+        setPressing(true);
         lpStartRef.current = blockPos();
         applyBlock();
       } else if (ev.type === 'pitchBend') {
@@ -267,10 +311,11 @@ export default function PlayerScreen({ route, navigation }) {
         lpSlideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
         applyBlock();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
-        applyPressVol(ev.value / 127); // press harder → a little louder, on top of the base
+        pressBoost.press(ev.value / 127); // press harder → a little louder, on top of the base
       } else if (ev.type === 'noteOff') {
         lpStartRef.current = null;
-        applyPressVol(0); // lifted → drop the press boost
+        setPressing(false);
+        pressBoost.release(); // lifted → spring the press boost back to base
         springBack(); // lift off the pad → ease back to the authored beat/carrier
       }
     });
@@ -593,12 +638,15 @@ export default function PlayerScreen({ route, navigation }) {
     else TrackPlayer.setVolume(v);
   };
   // Press (Lightpad Z / future touch) lifts the level a little above the slider's
-  // base while held, without moving the slider; pn 0 restores the base.
-  const applyPressVol = pn => {
-    const target = Math.min(1, volumeRef.current + PRESS_VOL_BOOST * exClamp(pn, 0, 1));
-    if (isSynth) synthRef.current?.setVolume(target);
-    else TrackPlayer.setVolume(target).catch(() => {});
-  };
+  // base while held, then springs back to base on release — without moving the slider.
+  const pressBoostRef = useRef(null);
+  if (!pressBoostRef.current) {
+    pressBoostRef.current = createPressBoost({
+      getBase: () => volumeRef.current,
+      setLevel: v => { if (isSynth) synthRef.current?.setVolume(v); else TrackPlayer.setVolume(v).catch(() => {}); },
+    });
+  }
+  const pressBoost = pressBoostRef.current;
 
   const onLumi = v => {
     setLumi(v);
