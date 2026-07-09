@@ -15,7 +15,7 @@ const N = 15;
 const PURPLE = [124, 58, 237]; // #7C3AED — top-left
 const INDIGO = [63, 81, 181]; // bluish-indigo — bottom-right
 const BLUE = [90, 170, 255]; // touch highlight
-const TOUCH_RADIUS = 1.9; // cells lit around the finger
+const TOUCH_RADIUS = 2.5; // cells lit around the finger
 const DECAY = 0.9; // residue fade per frame (~0.4 s tail)
 const DIM = 0.62; // how far the untouched grid darkens while held (slightly)
 // Pressure proxy for phones with no 3D-Touch (force === 0). RN doesn't expose the
@@ -134,6 +134,7 @@ export default function TouchPad({ visible, onClose, onChange }) {
       <View style={styles.backdrop}>
         <View
           style={[styles.grid, { width: size, height: size }]}
+          pointerEvents="box-only" // the grid is the touch target, not the cells → locationX/Y stays grid-relative
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
           onResponderGrant={e => handle(e, 'start')}
