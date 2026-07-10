@@ -302,16 +302,19 @@ export class NovaController {
     this._kicking = true;
     this.values.lFreq = f;
     this.values.rFreq = f;
+    console.log(`[Nova] phaseKick START L=${f.toFixed(2)}Hz R=${(f + dRate).toFixed(2)}Hz for ${ms}ms (right eye advances ${cycles} cycle)`);
     this._kickTimer = setInterval(() => {
       const done = Date.now() - t0 >= ms;
       this.values.lFreq = f;
       this.values.rFreq = done ? f : f + dRate;
+      const { hex } = this._frame();
+      console.log(`[Nova] kick${done ? '·END' : ''} L=${this.values.lFreq.toFixed(2)} R=${this.values.rFreq.toFixed(2)} ${hex}`);
       try { this.strobeChar.writeWithoutResponse(this._frame().b64); } catch (e) {}
       if (done) {
         clearInterval(this._kickTimer);
         this._kickTimer = null;
         this._kicking = false; // hand the eyes back to the tick at matched rates
-        console.log('[Nova] phaseKick done — watch: do the eyes hold anti-phase or resync?');
+        console.log('[Nova] phaseKick done — WATCH THE EYES: do they hold anti-phase or resync?');
       }
     }, 50);
   }
