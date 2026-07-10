@@ -163,6 +163,15 @@ export default function NovaExplorer({ nova, showFrequency = false, onOverride =
             (~1 Hz) is confirmed — higher is untested; watch the live Hz. (Yaw — turning L/R — isn't
             sensed by the accelerometer.)
           </Text>
+          <Text style={styles.motionSub}>Phase test (needs a running strobe)</Text>
+          <TouchableOpacity style={styles.phaseBtn} onPress={() => nova && nova.phaseKick && nova.phaseKick(0.5, 500)}>
+            <Text style={styles.phaseTxt}>½-phase kick (right eye)</Text>
+          </TouchableOpacity>
+          <Text style={styles.motionHint}>
+            Speeds the right eye up by half a cycle, then re-matches rates. If the eyes end up
+            alternating and HOLD there, the device free-runs and we can lock true anti-phase; if they
+            snap back in sync, phase resets per frame. Tap twice = back in sync.
+          </Text>
         </>
       ) : null}
     </View>
@@ -221,6 +230,8 @@ const styles = StyleSheet.create({
   rateTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '700' },
   rateTxtOn: { color: '#fff' },
   motionHint: { color: COLORS.textMuted, fontSize: 11, lineHeight: 16, marginTop: 8 },
+  phaseBtn: { marginTop: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: COLORS.bgCardLight, alignItems: 'center' },
+  phaseTxt: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '700' },
   checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, gap: 10 },
   checkBox: {
     width: 22,

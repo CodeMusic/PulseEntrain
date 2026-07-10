@@ -32,6 +32,8 @@ export class NovaController {
     this.gazeSwap = false; // roll past threshold → the slowed eye hops each slow blink
     this._swapPhase = 0; // accumulates a slow-blink cycle for the swap
     this._swapState = false;
+    this._kicking = false; // a phase-kick is briefly driving the eyes directly
+    this._kickTimer = null;
     this.values = DEFAULT_VALUES(8);
     this.master = 1; // master brightness multiplier (0..1)
     this.tickTimer = null;
@@ -227,6 +229,7 @@ export class NovaController {
     this._clearTick();
     this.tickTimer = setInterval(() => {
       if (!this.strobing || !this.strobeChar) return;
+      if (this._kicking) return; // a phase-kick owns the eyes for its brief window
       const RATE_MIN = 0.5; // the leaned-toward eye slows to ~0.5 Hz (≈ stopped)
       const DT = 0.25; // tick period (s)
       let b = this.balance || 0;
@@ -245,7 +248,7 @@ export class NovaController {
       // Pitch past threshold (gazeAlt): detune the eyes a touch so they drift out of
       // sync — they cross through anti-phase (alternating) instead of blinking together.
       if (this.gazeAlt) {
-        const ALT_DETUNE = 0.09;
+        const ALT_DETUNE = 0.22; // wider split → the drift through anti-phase is more obvious
         lTarget *= 1 - ALT_DETUNE / 2;
         rTarget *= 1 + ALT_DETUNE / 2;
       }
@@ -282,6 +285,35 @@ export class NovaController {
     this.gazeAlt = !!o.alternate;
     this.gazeSwap = !!o.swap;
     if (!this.gazeSwap) { this._swapPhase = 0; this._swapState = false; }
+  }
+
+  // DIAGNOSTIC: try to set a held phase offset with rate alone. Both eyes start at
+  // targetBeat; for `ms`, run the right eye faster so it advances `cycles` extra
+  // cycles, then restore matched rates. If the device free-runs (doesn't reset
+  // phase per frame), the eyes end up offset and STAY that way — a real anti-phase.
+  // If they snap back in sync, phase resets per frame and a true half-offset needs
+  // firmware support. Streams frames at a fine cadence during the window.
+  phaseKick(cycles = 0.5, ms = 500) {
+    if (!this.device || !this.strobeChar || !this.strobing) return;
+    if (this._kickTimer) { clearInterval(this._kickTimer); this._kickTimer = null; }
+    const f = Math.max(0.5, this.targetBeat);
+    const dRate = cycles / (ms / 1000); // extra Hz on the right eye for the window
+    const t0 = Date.now();
+    this._kicking = true;
+    this.values.lFreq = f;
+    this.values.rFreq = f;
+    this._kickTimer = setInterval(() => {
+      const done = Date.now() - t0 >= ms;
+      this.values.lFreq = f;
+      this.values.rFreq = done ? f : f + dRate;
+      try { this.strobeChar.writeWithoutResponse(this._frame().b64); } catch (e) {}
+      if (done) {
+        clearInterval(this._kickTimer);
+        this._kickTimer = null;
+        this._kicking = false; // hand the eyes back to the tick at matched rates
+        console.log('[Nova] phaseKick done — watch: do the eyes hold anti-phase or resync?');
+      }
+    }, 50);
   }
 
   // Explorer: merge per-eye pattern params (brightness / phase / duty) live.
