@@ -15,6 +15,7 @@ import { useSessionActive } from '../session/SessionGuard';
 import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
+import { clamp, deadzone as dz, reflect, throttleRef as throttle } from '../shared/math';
 import TouchPad from '../components/TouchPad';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -62,18 +63,6 @@ const FLICKER_STYLES: [string, string, any][] = [
   ['left', 'L', { lLevel: 0, lDuty: 0.5, rLevel: 0, rDuty: 0 }],
   ['right', 'R', { lLevel: 0, lDuty: 0, rLevel: 0, rDuty: 0.5 }],
 ];
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
-// Fold a value into [lo,hi] by reflecting at the edges (triangle wave), so the
-// relative space repeats smoothly instead of clamping — cross a boundary and you
-// glide back the other way.
-const reflect = (v, lo, hi) => {
-  const span = hi - lo;
-  if (span <= 0) return lo;
-  let t = (v - lo) % (2 * span);
-  if (t < 0) t += 2 * span;
-  return t <= span ? lo + t : lo + (2 * span - t);
-};
 const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.max(0, s % 60)).padStart(2, '0')}`;
 
 export default function FieldScreen() {
@@ -161,10 +150,6 @@ export default function FieldScreen() {
   const uiTick = fn => {
     const now = Date.now();
     if (now - uiRef.current > 66) { uiRef.current = now; fn(); }
-  };
-  const throttle = (ref, ms, fn) => {
-    const now = Date.now();
-    if (now - ref.current > ms) { ref.current = now; fn(); }
   };
 
   // Inner orb: a slow, calm breath. Outer ring: breathes at the binaural beat rate.

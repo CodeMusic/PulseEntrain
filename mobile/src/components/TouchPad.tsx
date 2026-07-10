@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { clamp01, lerpColor as mix, rgbColor as rgb } from '../shared/math';
 
 // Full-screen on-phone stand-in for the ROLI Lightpad: a 15×15 "screen door" of
 // squares tinted along the top-left→bottom-right diagonal from purple to a bluish
@@ -25,10 +26,6 @@ const DWELL_MIN = 0.32; // pressure the instant you land
 const DWELL_TAU = 42; // frames to build most of the way (~0.7 s at 60fps)
 const DWELL_MOVE_BLEED = 55; // how much a drag (normalised distance) softens the dwell
 
-const lerp = (a, b, t) => a + (b - a) * t;
-const mix = (c1, c2, t) => [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
-const rgb = c => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
-const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export default function TouchPad({ visible, onClose, onChange }) {
   const { width, height } = useWindowDimensions();

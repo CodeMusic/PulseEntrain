@@ -21,6 +21,7 @@ import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
+import { clamp as exClamp, deadzone as exDz } from '../shared/math';
 import TouchPad from '../components/TouchPad';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
@@ -51,8 +52,6 @@ const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = -1; // roll slows the 
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
 const TOUCH_CARR_MAX = 200, TOUCH_BEAT_MAX = 10; // Hz bend range for a full drag
 const TOUCH_TRAVEL_PX = 180; // drag distance (px) that reaches the full bend
-const exClamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const exDz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
 // Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
 const defaultIntensityFor = strength => Math.min(9, Math.max(1, ((strength ?? 4) + 1)));
 

@@ -5,6 +5,7 @@ import KeepAwake from 'react-native-keep-awake';
 import { COLORS } from '../theme';
 import { BinauralEngine, bandFor } from '../audio/binauralEngine';
 import { carrierColor } from '../shared/entrainment';
+import { clamp, mapRange } from '../shared/math';
 import { MAX_NOVA_STROBE_HZ } from '../nova/novaController';
 import { useNova } from '../nova/NovaProvider';
 import { usePulsetto } from '../pulsetto/PulsettoProvider';
@@ -52,8 +53,6 @@ const isAccidental = n => [1, 3, 6, 8, 10].includes(((n % 12) + 12) % 12); // bl
 const LP_BASE = 48, LP_COLS = 5, LP_ROWS = 5, LP_ROW_OFFSET = 5;
 const LP_CARR_MIN = 80, LP_CARR_MAX = 500, LP_BEAT_MAX = 40;
 const LP_BEND_PER_COL = 170; // 14-bit pitch-bend units ≈ one semitone (one column) at ±48 st range
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 
 export default function ManualScreen() {
   const nova = useNova();
