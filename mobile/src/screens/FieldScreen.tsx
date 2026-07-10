@@ -16,6 +16,7 @@ import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
 import { clamp, deadzone as dz, reflect, throttleRef as throttle } from '../shared/math';
+import { GAZE, mapGaze } from '../shared/gaze';
 import TouchPad from '../components/TouchPad';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -39,20 +40,12 @@ const FIELD_BEAT_MIN = 0.5; // near-zero binaural beat / flash floor
 const FIELD_BEAT_SAFE = 15; // beat/flash ceiling with photosensitivity safeties on
 const FIELD_BEAT_FULL = 30; // ceiling with Full frequency range (safeties off)
 const PUSH_STIM_BOOST = 2; // pressing the block adds this to the Pulsetto strength (capped at 9)
-// Head control (Nova accelerometer, while pressing). Roll opens the biphotic beat;
-// pitch only *bends* the finger-set beat. Both are relative to your pose when the
-// push began, and both have a dead-zone so a still/settling head does nothing.
-const ROLL_DEADZONE = 2, ROLL_MAX = 20; // roll: ±2° balanced, then one eye slows gradually to 0.5 Hz by ±20°
-const PITCH_DEADZONE = 4, PITCH_BEND_SPAN = 20; // pitch: degrees from entry for a full bend
-const GAZE_PITCH_THRESH = 20, GAZE_ROLL_THRESH = 20; // past ±this (deg) the eyes change relationship
-const BEAT_BEND_MAX = 3.5; // Hz — how far head pitch bends the (finger-set) beat
-const CARR_BEND_MAX = 12; // Hz — carrier bend alongside it, big enough to actually hear
+// Head control (Nova accelerometer): pitch bends the finger-set beat, roll opens the
+// biphotic beat. All the mapping (deadzones, spans, signs, thresholds) lives in the
+// shared gaze module (src/shared/gaze.js) so Field and programs can't drift apart.
 const BIPHOTIC_FADE_MS = 5000; // any touch eases the eyes back to sync over this long
 const EAR_CROSS_DEPTH = 0.5; // cross-modal: pulse each ear at the CONTRALATERAL eye's flash rate
 const EYE_RATE_MIN = 0.5; // matches the Nova controller's per-eye floor
-const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
-const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
-const FIELD_ROLL_SIGN = -1; // roll toward a side slows the OPPOSITE eye (lean left → right eye slows)
 const REL_SENS_C = 0.35, REL_SENS_B = 0.35; // relative mode: a full-pad drag moves ~a third of the range — explore gradually
 // Dev-panel flicker overrides (same presets as NovaExplorer). level 0 = pure
 // flash; duty 0 quiets an eye. Lets you tune the flash from Field mode, which has
@@ -417,14 +410,11 @@ export default function FieldScreen() {
       if (!gazeLockRef.current && !gazeCenteredRef.current) {
         centerPitchRef.current = s.pitch; centerRollRef.current = s.roll; gazeCenteredRef.current = true;
       }
-      const pitchDelta = (s.pitch - centerPitchRef.current) * FIELD_PITCH_SIGN;
-      const rollDelta = (s.roll - centerRollRef.current) * FIELD_ROLL_SIGN;
-      const p = clamp(dz(pitchDelta, PITCH_DEADZONE), -PITCH_BEND_SPAN, PITCH_BEND_SPAN);
-      beatBendRef.current = (p / PITCH_BEND_SPAN) * BEAT_BEND_MAX;
-      carrierBendRef.current = (p / PITCH_BEND_SPAN) * CARR_BEND_MAX;
-      balanceRef.current = clamp(dz(rollDelta, ROLL_DEADZONE) / (ROLL_MAX - ROLL_DEADZONE), -1, 1); // ±2° balanced, one eye eases to 0.5 Hz by ±20°
-      // Past ±threshold the eyes change relationship: pitch → out-of-phase, roll → swap.
-      if (nova.setGazePattern) nova.setGazePattern({ alternate: Math.abs(pitchDelta) > GAZE_PITCH_THRESH, swap: Math.abs(rollDelta) > GAZE_ROLL_THRESH });
+      const g = mapGaze(s.pitch - centerPitchRef.current, s.roll - centerRollRef.current);
+      beatBendRef.current = g.beatBend;
+      carrierBendRef.current = g.carrBend;
+      balanceRef.current = g.balance;
+      if (nova.setGazePattern) nova.setGazePattern({ alternate: g.alternate, swap: g.swap });
       applyField();
     };
     nova.setMotionListener(s => {
@@ -434,7 +424,7 @@ export default function FieldScreen() {
       lastTsRef.current = now;
       const p = headRef.current;
       headRef.current = p
-        ? { pitch: p.pitch + (s.pitch - p.pitch) * HEAD_SMOOTH_ALPHA, roll: p.roll + (s.roll - p.roll) * HEAD_SMOOTH_ALPHA }
+        ? { pitch: p.pitch + (s.pitch - p.pitch) * GAZE.smoothingAlpha, roll: p.roll + (s.roll - p.roll) * GAZE.smoothingAlpha }
         : { pitch: s.pitch, roll: s.roll };
       applyHead();
     });

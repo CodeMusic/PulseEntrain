@@ -22,6 +22,7 @@ import { useLightpad } from '../lightpad/LightpadProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
 import { clamp as exClamp, deadzone as exDz } from '../shared/math';
+import { GAZE, mapGaze } from '../shared/gaze';
 import TouchPad from '../components/TouchPad';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
@@ -42,13 +43,9 @@ const fmt = s => {
   return `${m}:${sec}`;
 };
 const playCountKey = id => `@pulseentrain/playcount/${id}`;
-// Explore Field Space: head motion bends a program the way Field mode does. Values
-// mirror Field's head control (anchored to your pose when it engages).
-const EX_DEADZONE = 5, EX_PITCH_SPAN = 20, EX_ROLL_MAX = 20;
-const EX_ROLL_DEADZONE = 2; // roll: only ±2° stays balanced, then one eye eases to 0.5 Hz by EX_ROLL_MAX
-const GAZE_PITCH_THRESH = 20, GAZE_ROLL_THRESH = 20; // past ±this (deg) the eyes change relationship
-const EX_BEAT_BEND = 3.5, EX_CARR_BEND = 12; // Hz — how far pitch bends beat / carrier
-const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = -1; // roll slows the OPPOSITE eye (lean left → right eye slows)
+// Explore Field Space: head motion bends a program exactly the way Field mode does
+// — both go through the shared gaze module (src/shared/gaze.js), anchored to your
+// pose when it engages.
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
 const TOUCH_CARR_MAX = 200, TOUCH_BEAT_MAX = 10; // Hz bend range for a full drag
 const TOUCH_TRAVEL_PX = 180; // drag distance (px) that reaches the full bend
@@ -204,20 +201,17 @@ export default function PlayerScreen({ route, navigation }) {
       }
       cancelGazeSpring(); // live head input overrides any in-flight release spring
       const c = exCenterRef.current;
-      const pitchDelta = (s.pitch - c.pitch) * EX_PITCH_SIGN;
-      const rollDelta = (s.roll - c.roll) * EX_ROLL_SIGN;
-      const p = exClamp(exDz(pitchDelta, EX_DEADZONE), -EX_PITCH_SPAN, EX_PITCH_SPAN) / EX_PITCH_SPAN;
-      headBendRef.current = { beat: p * EX_BEAT_BEND, carr: p * EX_CARR_BEND };
+      const g = mapGaze(s.pitch - c.pitch, s.roll - c.roll);
+      headBendRef.current = { beat: g.beatBend, carr: g.carrBend };
       applyBend();
-      balanceRef.current = exClamp(exDz(rollDelta, EX_ROLL_DEADZONE) / (EX_ROLL_MAX - EX_ROLL_DEADZONE), -1, 1);
+      balanceRef.current = g.balance;
       nova.setBalance(balanceRef.current);
-      // Past ±threshold the eyes change relationship: pitch → out-of-phase, roll → swap.
-      if (nova.setGazePattern) nova.setGazePattern({ alternate: Math.abs(pitchDelta) > GAZE_PITCH_THRESH, swap: Math.abs(rollDelta) > GAZE_ROLL_THRESH });
+      if (nova.setGazePattern) nova.setGazePattern({ alternate: g.alternate, swap: g.swap });
     };
     nova.setMotionListener(s => {
       const prev = exHeadRef.current;
       exHeadRef.current = prev
-        ? { pitch: prev.pitch + (s.pitch - prev.pitch) * EX_ALPHA, roll: prev.roll + (s.roll - prev.roll) * EX_ALPHA }
+        ? { pitch: prev.pitch + (s.pitch - prev.pitch) * GAZE.smoothingAlpha, roll: prev.roll + (s.roll - prev.roll) * GAZE.smoothingAlpha }
         : { pitch: s.pitch, roll: s.roll };
       apply();
     });
