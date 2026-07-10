@@ -360,6 +360,7 @@ export class NovaController {
   }
 
   async disconnect() {
+    try { bleManager.stopDeviceScan(); } catch (e) {} // in case we're mid-scan (unmount)
     await this.stopStrobe();
     if (this.telemetrySub) {
       try {

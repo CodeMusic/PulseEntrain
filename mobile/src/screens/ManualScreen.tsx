@@ -113,7 +113,7 @@ export default function ManualScreen() {
       engineRef.current.setBeat(b);
       engineRef.current.setCarrier(c);
     }
-    if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+    if (runningRef.current && nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
   };
 
   const ensureEngine = () => {
@@ -235,7 +235,7 @@ export default function ManualScreen() {
         if (glideS > 0) engineRef.current.glideBeat(v, glideS);
         else engineRef.current.setBeat(v);
       }
-      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
+      if (runningRef.current && nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
       uiTick(() => setBeat(Math.round(v * 10) / 10));
     };
     // White-key bend: carrier offset in semitones (±1 reaches the next sharp/flat).
@@ -316,7 +316,7 @@ export default function ManualScreen() {
         engineRef.current.glideCarrier(c, 0.12);
         engineRef.current.glideBeat(b, 0.12);
       }
-      if (nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
+      if (runningRef.current && nova.connected && !novaOverrideRef.current) nova.setFrequency(b);
       uiTick(() => { setCarrier(Math.round(c)); setBeat(Math.round(b * 10) / 10); });
     };
     lightpad.setNoteListener(ev => {
@@ -358,7 +358,7 @@ export default function ManualScreen() {
     baseBeatRef.current = v;
     setBeat(v);
     if (running) engineRef.current?.glideBeat(v, BEAT_GLIDE); // sweep to the new beat, like the carrier
-    if (nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
+    if (runningRef.current && nova.connected && !novaOverrideRef.current) nova.setFrequency(v);
   };
   const onCarrier = v => { setCarrier(v); if (running) engineRef.current?.setCarrier(v); };
   const onNoise = v => { setNoise(v); if (running) engineRef.current?.setBackground(v); };

@@ -78,7 +78,7 @@ export default function PlayerScreen({ route, navigation }) {
     const d = Math.round(secs || 0);
     if (d < 1) return;
     loggedRef.current = true;
-    sessions.logSession({ plannedSeconds: d, actualSeconds: d, kind: (dose && dose.category) || 'session' });
+    sessions.logSession({ plannedSeconds: d, actualSeconds: d, strength: pulsetto.connected ? intensityRef.current : null, kind: (dose && dose.category) || 'session' });
   };
   const playbackState = usePlaybackState();
   const [loading, setLoading] = useState(true);

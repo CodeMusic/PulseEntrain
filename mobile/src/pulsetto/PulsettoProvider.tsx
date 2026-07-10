@@ -227,10 +227,23 @@ export function PulsettoProvider({ children }) {
     }
   };
 
-  const scanForDevices = () => {
+  // Wait until the BLE radio is actually on before scanning — otherwise a cold
+  // start throws "invalid state" (Nova/Lumi controllers do the same).
+  const waitPoweredOn = async () => {
+    try {
+      if ((await manager.state()) === 'PoweredOn') return true;
+      return await new Promise(resolve => {
+        const sub = manager.onStateChange(s => { if (s === 'PoweredOn') { sub.remove(); resolve(true); } }, true);
+        setTimeout(() => { sub.remove(); resolve(false); }, 6000);
+      });
+    } catch (e) { return false; }
+  };
+
+  const scanForDevices = async () => {
     if (scanningRef.current || connectedRef.current) return;
     userDisconnectedRef.current = false; // re-enabling clears the no-reconnect flag
     setScan(true);
+    if (!(await waitPoweredOn())) { setScan(false); return; }
     manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         setScan(false);

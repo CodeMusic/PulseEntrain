@@ -132,6 +132,7 @@ export class LumiController {
   }
 
   async disconnect() {
+    try { bleManager.stopDeviceScan(); } catch (e) {} // in case we're mid-scan (unmount)
     if (this.sub) {
       try {
         this.sub.remove();
