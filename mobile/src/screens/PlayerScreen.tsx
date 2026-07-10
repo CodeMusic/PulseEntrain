@@ -23,6 +23,7 @@ import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpa
 import { springTouch, createPressBoost } from '../shared/springTouch';
 import { clamp as exClamp } from '../shared/math';
 import { GAZE, mapGaze } from '../shared/gaze';
+import { makeBlockGesture } from '../shared/blockGesture';
 import TouchPad from '../components/TouchPad';
 import { useSessionActive } from '../session/SessionGuard';
 import { useSettings } from '../settings/SettingsProvider';
@@ -278,7 +279,6 @@ export default function PlayerScreen({ route, navigation }) {
   const lpRowRef = useRef(2);
   const lpBendRef = useRef(0);
   const lpSlideRef = useRef(0);
-  const lpPressRef = useRef(0.5); // last block Z (0..1); the block's pressure stream
   useEffect(() => {
     // A connected Lightpad always bends a synth program — attaching the block IS
     // the opt-in, so this doesn't wait on the Explore Field Space setting (that
@@ -286,30 +286,32 @@ export default function PlayerScreen({ route, navigation }) {
     if (!isSynth || !lightpad.connected || !lightpad.setNoteListener) return;
     // The block reports the SAME normalised gesture as the phone pad and hands it to
     // the one shared handler (onPad) — so both stay identical, no drift. yN is
-    // flipped so up on the block = higher beat, matching the screen pad.
+    // flipped so up on the block = higher beat, matching the screen pad. Per-pad
+    // noteOns from a glide are coalesced into one gesture (see makeBlockGesture) so
+    // the pull anchor doesn't reset every time the finger crosses a pad.
     const lpNorm = () => ({
       xN: exClamp((lpColRef.current + lpBendRef.current) / (LP_COLS - 1), 0, 1),
       yN: 1 - exClamp((lpRowRef.current + lpSlideRef.current) / (LP_ROWS - 1), 0, 1),
     });
+    const gesture = makeBlockGesture({ position: lpNorm, emit: onPad });
     lightpad.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         lpColRef.current = col; lpRowRef.current = row; lpBendRef.current = 0; lpSlideRef.current = 0;
-        onPad({ phase: 'start', ...lpNorm(), pressure: lpPressRef.current });
+        gesture.noteOn();
       } else if (ev.type === 'pitchBend') {
         lpBendRef.current = ev.value / LP_BEND_PER_COL;
-        onPad({ phase: 'move', ...lpNorm(), pressure: lpPressRef.current });
+        gesture.move();
       } else if (ev.type === 'cc' && ev.controller === 74) {
         lpSlideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
-        onPad({ phase: 'move', ...lpNorm(), pressure: lpPressRef.current });
+        gesture.move();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
-        lpPressRef.current = ev.value / 127; // press harder → onPad lifts the volume like the phone pad
-        onPad({ phase: 'move', ...lpNorm(), pressure: lpPressRef.current });
+        gesture.setPressure(ev.value / 127);
       } else if (ev.type === 'noteOff') {
-        onPad({ phase: 'end' });
+        gesture.noteOff();
       }
     });
-    return () => { try { lightpad.setNoteListener(null); } catch (e) {} };
+    return () => { gesture.reset(); try { lightpad.setNoteListener(null); } catch (e) {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSynth, lightpad.connected]);
 

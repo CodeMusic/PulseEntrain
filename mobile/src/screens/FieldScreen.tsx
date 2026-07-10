@@ -17,6 +17,7 @@ import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpa
 import { springTouch, createPressBoost } from '../shared/springTouch';
 import { clamp, reflect, throttleRef as throttle } from '../shared/math';
 import { GAZE, mapGaze } from '../shared/gaze';
+import { makeBlockGesture } from '../shared/blockGesture';
 import TouchPad from '../components/TouchPad';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
 
@@ -369,28 +370,30 @@ export default function FieldScreen() {
   // orientation, same as the phone pad.)
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
-    const lpX = () => clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
-    const lpY = () => clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
+    const position = () => ({ xN: clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1), yN: clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1) });
+    // Coalesce per-pad noteOns from a glide into one gesture so the push gate + gaze
+    // recenter don't retrigger every time the finger crosses a pad (see blockGesture).
+    const gesture = makeBlockGesture({ position, emit: onPadField });
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
-        onPadField({ phase: 'start', xN: lpX(), yN: lpY(), pressure: lastPressureRef.current / 127 });
+        gesture.noteOn();
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL;
-        onPadField({ phase: 'move', xN: lpX(), yN: lpY(), pressure: lastPressureRef.current / 127 });
+        gesture.move();
       } else if (ev.type === 'cc' && ev.controller === 74) {
         slideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
-        onPadField({ phase: 'move', xN: lpX(), yN: lpY(), pressure: lastPressureRef.current / 127 });
+        gesture.move();
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         lastPressureRef.current = ev.value;
-        onPadField({ phase: 'move', xN: lpX(), yN: lpY(), pressure: ev.value / 127 });
+        gesture.setPressure(ev.value / 127);
       } else if (ev.type === 'noteOff') {
-        onPadField({ phase: 'end' });
+        gesture.noteOff();
       }
     });
-    return () => lightpad.setNoteListener(null);
+    return () => { gesture.reset(); lightpad.setNoteListener(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightpad.connected]);
 
