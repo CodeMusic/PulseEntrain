@@ -52,7 +52,7 @@ const EAR_CROSS_DEPTH = 0.5; // cross-modal: pulse each ear at the CONTRALATERAL
 const EYE_RATE_MIN = 0.5; // matches the Nova controller's per-eye floor
 const HEAD_SMOOTH_ALPHA = 0.18; // low-pass on head samples (smaller = smoother)
 const FIELD_PITCH_SIGN = -1; // pitch reads inverted on the Nova — flip it
-const FIELD_ROLL_SIGN = 1; // leaning left slows the left eye (confirmed on device)
+const FIELD_ROLL_SIGN = -1; // roll toward a side slows the OPPOSITE eye (lean left → right eye slows)
 const REL_SENS_C = 0.35, REL_SENS_B = 0.35; // relative mode: a full-pad drag moves ~a third of the range — explore gradually
 // Dev-panel flicker overrides (same presets as NovaExplorer). level 0 = pure
 // flash; duty 0 quiets an eye. Lets you tune the flash from Field mode, which has

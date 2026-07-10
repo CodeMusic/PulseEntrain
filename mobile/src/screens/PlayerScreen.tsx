@@ -47,7 +47,7 @@ const EX_DEADZONE = 5, EX_PITCH_SPAN = 20, EX_ROLL_MAX = 20;
 const EX_ROLL_DEADZONE = 2; // roll: only ±2° stays balanced, then one eye eases to 0.5 Hz by EX_ROLL_MAX
 const GAZE_PITCH_THRESH = 20, GAZE_ROLL_THRESH = 20; // past ±this (deg) the eyes change relationship
 const EX_BEAT_BEND = 3.5, EX_CARR_BEND = 12; // Hz — how far pitch bends beat / carrier
-const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = 1;
+const EX_ALPHA = 0.18, EX_PITCH_SIGN = -1, EX_ROLL_SIGN = -1; // roll slows the OPPOSITE eye (lean left → right eye slows)
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
 const TOUCH_CARR_MAX = 200, TOUCH_BEAT_MAX = 10; // Hz bend range for a full drag
 const TOUCH_TRAVEL_PX = 180; // drag distance (px) that reaches the full bend
