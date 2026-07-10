@@ -21,7 +21,7 @@ import { usePulsetto } from '../pulsetto/PulsettoProvider';
 import { useLightpad } from '../lightpad/LightpadProvider';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
-import { clamp as exClamp, deadzone as exDz } from '../shared/math';
+import { clamp as exClamp } from '../shared/math';
 import { GAZE, mapGaze } from '../shared/gaze';
 import TouchPad from '../components/TouchPad';
 import { useSessionActive } from '../session/SessionGuard';

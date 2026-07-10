@@ -15,7 +15,7 @@ import { useSessionActive } from '../session/SessionGuard';
 import { useDevPanelContent } from '../dev/DevPanel';
 import { LP_COLS, LP_ROWS, LP_BEND_PER_COL, decodeCell } from '../shared/lightpadGrid';
 import { springTouch, createPressBoost } from '../shared/springTouch';
-import { clamp, deadzone as dz, reflect, throttleRef as throttle } from '../shared/math';
+import { clamp, reflect, throttleRef as throttle } from '../shared/math';
 import { GAZE, mapGaze } from '../shared/gaze';
 import TouchPad from '../components/TouchPad';
 import { IS_WEB, nativeOnlyNotice } from '../nativeOnly';
