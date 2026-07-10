@@ -38,7 +38,6 @@ const FIELD_BEAT_MIN = 0.5; // near-zero binaural beat / flash floor
 const FIELD_BEAT_SAFE = 15; // beat/flash ceiling with photosensitivity safeties on
 const FIELD_BEAT_FULL = 30; // ceiling with Full frequency range (safeties off)
 const PUSH_STIM_BOOST = 2; // pressing the block adds this to the Pulsetto strength (capped at 9)
-const PUSH_THRESHOLD = 40; // pressure (0–127) above which editing engages
 // Head control (Nova accelerometer, while pressing). Roll opens the biphotic beat;
 // pitch only *bends* the finger-set beat. Both are relative to your pose when the
 // push began, and both have a dead-zone so a still/settling head does nothing.
@@ -64,7 +63,6 @@ const FLICKER_STYLES: [string, string, any][] = [
   ['right', 'R', { lLevel: 0, lDuty: 0, rLevel: 0, rDuty: 0.5 }],
 ];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const mapRange = (v, inA, inB, outA, outB) => outA + ((v - inA) / ((inB - inA) || 1)) * (outB - outA);
 const dz = (d, z) => (Math.abs(d) <= z ? 0 : d - Math.sign(d) * z);
 // Fold a value into [lo,hi] by reflecting at the edges (triangle wave), so the
 // relative space repeats smoothly instead of clamping — cross a boundary and you
@@ -306,9 +304,9 @@ export default function FieldScreen() {
   // Finger position (block cell + fine bend/slide, OR the on-screen touch pad) →
   // base carrier (X) / beat (Y). Lifted to component scope so the Lightpad listener
   // and the phone TouchPad drive the exact same mapping.
-  const fromFinger = () => {
-    const xR = clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
-    const yR = clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
+  const fromFinger = (xRraw, yRraw) => {
+    const xR = clamp(xRraw, 0, 1);
+    const yR = clamp(yRraw, 0, 1);
     const xN = LP_FLIP_X ? 1 - xR : xR;
     const yN = LP_FLIP_Y ? 1 - yR : yR;
     const prevC = baseCarrierRef.current, prevB = baseBeatRef.current;
@@ -374,54 +372,44 @@ export default function FieldScreen() {
     applyField();
   };
 
-  // Phone-as-Lightpad: the full-screen TouchPad drives the same finger mapping +
-  // push gate as the block. xN/yN feed the shared fromFinger via the cell refs.
+  // THE one touch handler — the phone TouchPad and the Lightpad both call this with
+  // a normalised { phase, xN, yN, pressure }, so they behave identically (no drift):
+  // finger → carrier/beat via fromFinger, Z → volume lift + field brightness, and
+  // touching engages the push gate + recenters gaze.
   const onPadField = e => {
     if (e.phase === 'end') { pressBoost.release(); releasePush(); return; }
-    colRef.current = e.xN * (LP_COLS - 1);
-    rowRef.current = e.yN * (LP_ROWS - 1);
-    bendRef.current = 0; slideRef.current = 0;
-    if (e.phase === 'start') { lastXNRef.current = null; pressEngage(); }
-    fromFinger();
+    if (e.phase === 'start') { lastXNRef.current = null; pressEngage(); recenterGaze(); }
+    fromFinger(e.xN, e.yN);
     pressBoost.press(e.pressure);
-    // Mirror the block's Z → field brightness (pressure/dwell drives the glow).
-    const i = clamp(0.2 + 0.8 * clamp(e.pressure, 0, 1), 0.2, 1);
+    const i = clamp(0.2 + 0.8 * clamp(e.pressure, 0, 1), 0.2, 1); // Z → field brightness
     if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
     uiTick(() => setIntensity(i));
   };
 
-  // Lightpad touch → carrier (X), beat (Y), intensity (Z) + the push gate.
+  // Lightpad block → the same shared handler. Its cell + fine bend/slide fold into
+  // one normalised x/y; Z is the pressure. (yN un-flipped — fromFinger applies the
+  // orientation, same as the phone pad.)
   useEffect(() => {
     if (!lightpad.connected || !lightpad.setNoteListener) return;
+    const lpX = () => clamp((colRef.current + bendRef.current) / (LP_COLS - 1), 0, 1);
+    const lpY = () => clamp((rowRef.current + slideRef.current) / (LP_ROWS - 1), 0, 1);
     lightpad.setNoteListener(ev => {
       lastEvtRef.current = ev.type + (ev.controller != null ? ':cc' + ev.controller : '') + (ev.value != null ? '=' + ev.value : '');
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         colRef.current = col; rowRef.current = row; bendRef.current = 0; slideRef.current = 0;
-        lastXNRef.current = null; // fresh touch: relative delta starts from here (no jump)
-        recenterGaze(); // the moment of touch zeroes your gaze at the current pose
-        fromFinger();
-        // Tap-to-resync only in locked gaze; in free gaze the live head-roll owns
-        // the biphotic, so a fade would fight it.
-        if (!pushingRef.current && gazeLockRef.current) startBiphoticFade();
+        onPadField({ phase: 'start', xN: lpX(), yN: lpY(), pressure: lastPressureRef.current / 127 });
       } else if (ev.type === 'pitchBend') {
         bendRef.current = ev.value / LP_BEND_PER_COL;
-        fromFinger();
+        onPadField({ phase: 'move', xN: lpX(), yN: lpY(), pressure: lastPressureRef.current / 127 });
       } else if (ev.type === 'cc' && ev.controller === 74) {
         slideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
-        fromFinger();
+        onPadField({ phase: 'move', xN: lpX(), yN: lpY(), pressure: lastPressureRef.current / 127 });
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
         lastPressureRef.current = ev.value;
-        const i = clamp(mapRange(ev.value, 0, 127, 0.2, 1), 0.2, 1); // press → field brightness
-        if (runningRef.current && !pausedRef.current && nova.connected) throttle(novaBrightRef, 120, () => nova.setMasterBrightness(i));
-        uiTick(() => setIntensity(i));
-        pressBoost.press(ev.value / 127); // …and a little louder while you lean in
-        const nowPushing = ev.value >= PUSH_THRESHOLD;
-        if (nowPushing && !pushingRef.current) pressEngage();
-        else if (!nowPushing && pushingRef.current) releasePush();
+        onPadField({ phase: 'move', xN: lpX(), yN: lpY(), pressure: ev.value / 127 });
       } else if (ev.type === 'noteOff') {
-        pressBoost.release(); // finger off → spring the volume lift back to base
-        if (pushingRef.current) releasePush();
+        onPadField({ phase: 'end' });
       }
     });
     return () => lightpad.setNoteListener(null);

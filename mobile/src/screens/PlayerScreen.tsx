@@ -285,48 +285,35 @@ export default function PlayerScreen({ route, navigation }) {
   const lpRowRef = useRef(2);
   const lpBendRef = useRef(0);
   const lpSlideRef = useRef(0);
-  const lpStartRef = useRef(null); // block position at touch-start (absolute-drag reference)
+  const lpPressRef = useRef(0.5); // last block Z (0..1); the block's pressure stream
   useEffect(() => {
     // A connected Lightpad always bends a synth program — attaching the block IS
     // the opt-in, so this doesn't wait on the Explore Field Space setting (that
     // gates only the *implicit* surfaces: head motion + on-screen cover drag).
     if (!isSynth || !lightpad.connected || !lightpad.setNoteListener) return;
-    const blockPos = () => ({
-      x: exClamp((lpColRef.current + lpBendRef.current) / (LP_COLS - 1), 0, 1),
-      y: exClamp((lpRowRef.current + lpSlideRef.current) / (LP_ROWS - 1), 0, 1),
+    // The block reports the SAME normalised gesture as the phone pad and hands it to
+    // the one shared handler (onPad) — so both stay identical, no drift. yN is
+    // flipped so up on the block = higher beat, matching the screen pad.
+    const lpNorm = () => ({
+      xN: exClamp((lpColRef.current + lpBendRef.current) / (LP_COLS - 1), 0, 1),
+      yN: 1 - exClamp((lpRowRef.current + lpSlideRef.current) / (LP_ROWS - 1), 0, 1),
     });
-    const applyBlock = () => {
-      // Same as the on-screen drag: absolute snap-bend off the touch-start cell,
-      // springing back on release so the program returns to its authored journey.
-      if (!lpStartRef.current) return;
-      const p = blockPos();
-      touchBendRef.current = {
-        carr: exClamp(p.x - lpStartRef.current.x, -1, 1) * TOUCH_CARR_MAX,
-        beat: exClamp(p.y - lpStartRef.current.y, -1, 1) * TOUCH_BEAT_MAX, // up on the pad = higher beat
-      };
-      applyBend();
-    };
     lightpad.setNoteListener(ev => {
       if (ev.type === 'noteOn') {
         const { col, row } = decodeCell(ev.note);
         lpColRef.current = col; lpRowRef.current = row; lpBendRef.current = 0; lpSlideRef.current = 0;
-        cancelSpring();
-        setPressing(true);
-        lpStartRef.current = blockPos();
-        applyBlock();
+        onPad({ phase: 'start', ...lpNorm(), pressure: lpPressRef.current });
       } else if (ev.type === 'pitchBend') {
         lpBendRef.current = ev.value / LP_BEND_PER_COL;
-        applyBlock();
+        onPad({ phase: 'move', ...lpNorm(), pressure: lpPressRef.current });
       } else if (ev.type === 'cc' && ev.controller === 74) {
         lpSlideRef.current = ((ev.value - 63) / 63) * (LP_ROWS - 1);
-        applyBlock();
+        onPad({ phase: 'move', ...lpNorm(), pressure: lpPressRef.current });
       } else if (ev.type === 'pressure' || ev.type === 'polyAT') {
-        pressBoost.press(ev.value / 127); // press harder → a little louder, on top of the base
+        lpPressRef.current = ev.value / 127; // press harder → onPad lifts the volume like the phone pad
+        onPad({ phase: 'move', ...lpNorm(), pressure: lpPressRef.current });
       } else if (ev.type === 'noteOff') {
-        lpStartRef.current = null;
-        setPressing(false);
-        pressBoost.release(); // lifted → spring the press boost back to base
-        springBack(); // lift off the pad → ease back to the authored beat/carrier
+        onPad({ phase: 'end' });
       }
     });
     return () => { try { lightpad.setNoteListener(null); } catch (e) {} };
