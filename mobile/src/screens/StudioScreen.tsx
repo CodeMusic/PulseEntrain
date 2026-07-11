@@ -7,6 +7,7 @@ import EditableBeatGraph from '../components/EditableBeatGraph';
 import { SessionSynth } from '../audio/sessionSynth';
 import { pickImedxFile } from '../catalog/pickImedx';
 import { registerImportedDose } from '../catalog/importDose';
+import { addUserSession } from '../catalog/userSessions';
 import { CATEGORIES, dosesByCategory, doseById, isSynthDose } from '../catalog/data';
 
 // Web authoring (`/studio`): the desktop Admin's editor, in the browser, reusing
@@ -279,6 +280,17 @@ export default function StudioScreen({ navigation, route }) {
     setDirty(false); // saved to disk
   };
 
+  const saveToMySessions = () => {
+    stopPreview();
+    try {
+      const dose = addUserSession(buildImedx()); // validates + persists to the My Sessions category
+      setDirty(false);
+      Alert.alert('Saved', `"${dose.name}" is now in My Sessions.`);
+    } catch (e) {
+      Alert.alert("Couldn't save", (e && e.message) || 'Check the session has at least one scene.');
+    }
+  };
+
   const openFile = async () => {
     try {
       const picked = await pickImedxFile();
@@ -329,6 +341,7 @@ export default function StudioScreen({ navigation, route }) {
         <Pill label={playing ? '■ Stop' : '▶ Preview'} onPress={togglePreview} color={playing ? COLORS.accentRed : COLORS.accentGreen} />
         <Pill label="Play in player" onPress={playInPlayer} />
         <Pill label="Download .imedx" onPress={download} color={COLORS.accentBlue} />
+        <Pill label="Save to My Sessions" onPress={saveToMySessions} color={COLORS.accentGreen} />
         <Pill label="↶ Undo" onPress={undo} dim={!canUndo} />
         <Pill label="↷ Redo" onPress={redo} dim={!canRedo} />
       </View>

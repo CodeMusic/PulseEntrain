@@ -13,6 +13,8 @@ export function pathFor(screen, params = {}) {
       return '/manual';
     case 'Field':
       return '/field';
+    case 'Ai':
+      return '/ai';
     case 'Studio':
       return params && params.load ? `/studio?load=${encodeURIComponent(params.load)}` : '/studio';
     case 'About':

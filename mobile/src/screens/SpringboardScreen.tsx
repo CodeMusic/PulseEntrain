@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { categoryCards } from '../catalog/data';
+import { useUserSessions, USER_CATEGORY } from '../catalog/userSessions';
 import { useSettings } from '../settings/SettingsProvider';
 import { useSessions } from '../wellness/SessionsProvider';
 import SpringboardCard from '../components/SpringboardCard';
@@ -9,6 +10,7 @@ import WeeklyTracker from '../components/WeeklyTracker';
 
 export default function SpringboardScreen({ navigation }) {
   const cats = categoryCards();
+  const userSessions = useUserSessions();
   const settings = useSettings();
   const sessions = useSessions();
   const name = (settings && settings.name && settings.name.trim()) || '';
@@ -38,9 +40,23 @@ export default function SpringboardScreen({ navigation }) {
         />
       </View>
       <View style={styles.row}>
-        <SpringboardCard title="AI Session" subtitle="Prompt → program" disabled />
+        <SpringboardCard
+          title="AI Session"
+          subtitle="Prompt → program"
+          accent={COLORS.accentOrange}
+          onPress={() => navigation.navigate('Ai')}
+        />
         <View style={{ width: 12 }} />
-        <View style={{ flex: 1 }} />
+        {userSessions.length > 0 ? (
+          <SpringboardCard
+            title={USER_CATEGORY}
+            subtitle={`${userSessions.length} session${userSessions.length === 1 ? '' : 's'}`}
+            accent={COLORS.accentBlueLight}
+            onPress={() => navigation.navigate('Category', { category: USER_CATEGORY })}
+          />
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
       </View>
 
       <Text style={styles.h2}>Programs</Text>

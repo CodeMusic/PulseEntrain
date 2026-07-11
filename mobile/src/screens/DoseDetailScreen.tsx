@@ -3,6 +3,7 @@ import { ScrollView, View, Text, Switch, TouchableOpacity, Pressable, StyleSheet
 import Slider from '@react-native-community/slider';
 import { COLORS, strengthColor } from '../theme';
 import { doseById, imageSource, audioSource, isSynthDose } from '../catalog/data';
+import { removeUserSession } from '../catalog/userSessions';
 import ArtImage from '../components/ArtImage';
 import TrackArt from '../components/TrackArt';
 import BeatPeek from '../components/BeatPeek';
@@ -28,6 +29,12 @@ export default function DoseDetailScreen({ route, navigation }) {
   const pulsetto = usePulsetto();
   const lightpad = useLightpad();
   const [usePulse, setUsePulse] = useState(false); // off by default — flip on to pre-connect
+  const confirmDelete = () => {
+    Alert.alert('Delete this session?', `"${dose.name}" will be removed from My Sessions.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => { removeUserSession(dose.id); navigation.goBack(); } },
+    ]);
+  };
   const [peek, setPeek] = useState(false);
   const trackDefault = dose && dose.strength != null ? dose.strength : 4;
   const [strength, setStrength] = useState(trackDefault);
@@ -280,6 +287,12 @@ export default function DoseDetailScreen({ route, navigation }) {
           <Text style={styles.studioTxt}>Open in Studio</Text>
         </TouchableOpacity>
       ) : null}
+
+      {dose.userCreated ? (
+        <TouchableOpacity style={styles.deleteBtn} activeOpacity={0.8} onPress={confirmDelete}>
+          <Text style={styles.deleteTxt}>Delete session</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }
@@ -319,4 +332,6 @@ const styles = StyleSheet.create({
   startTxt: { color: '#fff', fontSize: 18, fontWeight: '700' },
   studioBtn: { borderRadius: 30, paddingVertical: 14, alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: COLORS.divider },
   studioTxt: { color: COLORS.textSecondary, fontSize: 15, fontWeight: '700' },
+  deleteBtn: { borderRadius: 30, paddingVertical: 14, alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: 'rgba(239,68,68,0.5)' },
+  deleteTxt: { color: '#F87171', fontSize: 15, fontWeight: '700' },
 });
