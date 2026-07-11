@@ -836,7 +836,8 @@ export default function PlayerScreen({ route, navigation }) {
           const base = s ? s.current() : { beat: (dose as any)?.beat || 10, carrier: (dose as any)?.carrier || 200 };
           return {
             beat: base.beat + touchBendRef.current.beat + headBendRef.current.beat,
-            carrier: base.carrier + touchBendRef.current.carr + headBendRef.current.carr,
+            carrier: base.carrier + touchBendRef.current.carr + headBendRef.current.carr, // bent (inner)
+            trackCarrier: base.carrier, // the program's authored value (outer / true colour)
           };
         }}
       />

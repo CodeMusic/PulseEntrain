@@ -761,7 +761,11 @@ export default function FieldScreen() {
         visible={padOpen}
         onClose={() => setPadOpen(false)}
         onChange={onPadField}
-        getValues={() => ({ beat: baseBeatRef.current + beatBendRef.current, carrier: baseCarrierRef.current + carrierBendRef.current })}
+        getValues={() => ({
+          beat: baseBeatRef.current + beatBendRef.current,
+          carrier: baseCarrierRef.current + carrierBendRef.current, // bent (inner)
+          trackCarrier: baseCarrierRef.current, // field's set carrier (outer); in Field the inner just settles here
+        })}
       />
     </View>
   );

@@ -7,141 +7,104 @@ import { carrierRGB } from '../shared/entrainment';
 // under it blue (brighter with pressure) and the rest dims while you hold.
 //
 // It reports the same gesture the block does via onChange({ phase, xN, yN, pressure }):
-// 'start' | 'move' | 'end' (release after a bend) | 'tap' (release with ~no travel →
-// the screen rings a small bend). Force falls back to a medium value without 3D-Touch.
+// 'start' | 'move' | 'end' (release after a bend) | 'tap'. Force falls back to a
+// medium value without 3D-Touch.
 //
-// COLOUR = the live CARRIER. The whole grid continuously eases toward the carrier's
-// colour (the shared carrier→colour map), so a program's timeline changes recolour it
-// gradually, and a bend that springs back drags the colour back too — overshoot and
-// all. A tap or bend-release also casts a WAVE from the touch point that expands at the
-// live BEAT (cells/sec × a scale) and recolours faster inside its front — so you see the
-// change ripple out at the entrainment rate. getValues() supplies live { beat, carrier }.
-const N = 20; // grid resolution — one constant; N*N Views repaint ~30fps, so watch perf if you raise it
-const PURPLE = [124, 58, 237]; // resting diagonal (blooms into the carrier colour on open)
-const INDIGO = [63, 81, 181];
+// COLOUR tells the story: OUTSIDE a wave, cells hold the TRACK's true carrier colour;
+// INSIDE the wave they show the BENT carrier colour. A tap / bend-release casts a wave
+// from the touch point that expands at the live BEAT and "reveals" the bent colour as
+// it passes; as the bend springs back to the program's value, the bent colour (and the
+// wave speed) spring with it, so the inner region recedes to the track colour. In Field
+// there's no spring, so the inner colour just settles at the field's colour.
+// Overlapping wavefronts add as a signed field → interference fringes where they cross.
+// getValues() supplies live { beat, carrier (bent), trackCarrier (true) }.
+const N = 20;
 const BLUE = [90, 170, 255]; // touch highlight
-const FRONT_COLOR = [230, 242, 255]; // pale crest so the wavefront is visible as it travels
-const TOUCH_RADIUS = 3.2; // cells lit around the finger
-const DECAY = 0.9; // touch residue fade per frame
-const DIM = 0.62; // how far the untouched grid darkens while held
-const BASE_DRIFT = 0.035; // ambient recolour toward the live carrier (timeline / spring-back / bloom)
-const FILL_RATE = 0.36; // faster recolour inside a wavefront — makes the ripple read as a moving edge
-const SPEED_SCALE = 3.5; // wave speed = beat × this (cells/sec); raise for snappier waves
-const FRONT_W = 1.2; // wavefront crest half-width (cells)
-const DWELL_MIN = 0.32, DWELL_TAU = 42, DWELL_MOVE_BLEED = 55; // pressure proxy (no 3D-Touch)
-const TAP_MOVE = 0.05; // normalised travel beyond which a release is a bend, not a tap
+const CREST = [235, 245, 255]; // constructive fringe tint
+const TOUCH_RADIUS = 3.2, DECAY = 0.9, DIM = 0.62;
+const B_RISE = 0.34; // how fast a cell flips to "revealed/bent" once a front passes it
+const B_DECAY = 0.955; // how fast the reveal fades back once no wave covers the cell
+const SPEED_SCALE = 3.5; // wave speed = beat × this (cells/sec)
+const WAVE_K = 1.7; // wavefront ring spacing (interference wavelength)
+const WAVE_ENV = 2.0; // wave-train envelope width around each front (cells)
+const DWELL_MIN = 0.32, DWELL_TAU = 42, DWELL_MOVE_BLEED = 55;
+const TAP_MOVE = 0.05;
 
 export default function TouchPad({ visible, onClose, onChange, getValues }) {
   const { width, height } = useWindowDimensions();
   const cell = Math.max(4, Math.floor(Math.min(width - 8, height - 96) / N));
   const size = cell * N;
   const heatRef = useRef(new Float32Array(N * N));
-  const srRef = useRef(new Float32Array(N * N)); // settled colour the grid has eased to
-  const sgRef = useRef(new Float32Array(N * N));
-  const sbRef = useRef(new Float32Array(N * N));
-  const frontRef = useRef(new Float32Array(N * N)); // wavefront crest highlight, rebuilt per frame
-  const rateRef = useRef(new Float32Array(N * N)); // per-cell recolour rate this frame
+  const bRef = useRef(new Float32Array(N * N)); // 0 = track colour … 1 = bent colour (wave-revealed)
+  const frontRef = useRef(new Float32Array(N * N)); // signed wavefront field (sums → interference)
   const ripplesRef = useRef<any[]>([]);
   const touchRef = useRef<null | { cx: number; cy: number; xN: number; yN: number; rawForce: number; dwell: number; eff: number }>(null);
   const startRef = useRef<null | { cx: number; cy: number; xN: number; yN: number }>(null);
   const movedRef = useRef(false);
   const dimRef = useRef(1);
-  const lastTargetRef = useRef([0, 0, 0]);
-  const settleFramesRef = useRef(0); // keep repainting for a bit after anything changes
+  const paintRef = useRef(0); // frames of repaint remaining after the last change
   const [, forceRender] = useState(0);
   const rafRef = useRef<any>(null);
 
   const pressureOf = t => (t.rawForce > 0 ? t.rawForce : DWELL_MIN + (1 - DWELL_MIN) * (1 - Math.exp(-t.dwell / DWELL_TAU)));
 
-  const resetSettled = () => {
-    const sr = srRef.current, sg = sgRef.current, sb = sbRef.current;
-    for (let r = 0; r < N; r++) {
-      for (let c = 0; c < N; c++) {
-        const i = r * N + c;
-        const col = mix(PURPLE, INDIGO, (r + c) / (2 * (N - 1)));
-        sr[i] = col[0]; sg[i] = col[1]; sb[i] = col[2];
-      }
-    }
-  };
-
   const spawnRipple = (cx, cy) => {
     const rs = ripplesRef.current;
-    if (rs.length > 10) rs.shift();
-    rs.push({ cx, cy, radius: 0 }); // speed is read live from the beat each frame (springs with it)
-    settleFramesRef.current = 60;
+    if (rs.length > 8) rs.shift();
+    rs.push({ cx, cy, radius: 0 }); // speed read live from the beat each frame
+    paintRef.current = 80;
   };
 
   useEffect(() => {
     if (!visible) {
-      heatRef.current.fill(0); frontRef.current.fill(0);
+      heatRef.current.fill(0); bRef.current.fill(0); frontRef.current.fill(0);
       ripplesRef.current = []; touchRef.current = null; startRef.current = null;
-      movedRef.current = false; dimRef.current = 1; settleFramesRef.current = 0;
+      movedRef.current = false; dimRef.current = 1; paintRef.current = 0;
       return;
     }
-    resetSettled();
-    settleFramesRef.current = 80; // bloom into the carrier colour on open
-    let alive = true;
-    let frame = 0;
+    paintRef.current = 40;
+    let alive = true, frame = 0;
     const loop = () => {
       if (!alive) return;
-      const heat = heatRef.current, front = frontRef.current, rate = rateRef.current;
-      const sr = srRef.current, sg = sgRef.current, sb = sbRef.current;
+      const heat = heatRef.current, b = bRef.current, front = frontRef.current;
       const t = touchRef.current;
-      const v = getValues ? getValues() : { beat: 8, carrier: 200 };
-      const tgt = carrierRGB(v.carrier || 200);
-      const lt = lastTargetRef.current;
-      if (Math.abs(tgt[0] - lt[0]) + Math.abs(tgt[1] - lt[1]) + Math.abs(tgt[2] - lt[2]) > 1.5) {
-        settleFramesRef.current = Math.max(settleFramesRef.current, 30); // carrier moved → keep painting
-        lastTargetRef.current = tgt;
-      }
+      const v = getValues ? getValues() : { beat: 8, carrier: 200, trackCarrier: 200 };
       if (t) {
-        t.dwell += 1;
-        t.eff = pressureOf(t);
+        t.dwell += 1; t.eff = pressureOf(t);
         for (let r = 0; r < N; r++) {
           for (let c = 0; c < N; c++) {
             const d = Math.hypot(c - t.cx, r - t.cy);
-            if (d <= TOUCH_RADIUS) {
-              const val = t.eff * (1 - d / TOUCH_RADIUS);
-              const i = r * N + c;
-              if (val > heat[i]) heat[i] = val;
-            }
+            if (d <= TOUCH_RADIUS) { const val = t.eff * (1 - d / TOUCH_RADIUS); const i = r * N + c; if (val > heat[i]) heat[i] = val; }
           }
         }
       }
       for (let i = 0; i < heat.length; i++) heat[i] *= DECAY;
-      // Wavefronts: expand at the beat rate; mark cells inside for fast recolour + crest.
+      for (let i = 0; i < b.length; i++) b[i] *= B_DECAY; // reveal fades unless a wave keeps it up
       front.fill(0);
-      rate.fill(BASE_DRIFT);
       const ripples = ripplesRef.current;
-      // Live wave speed = the current beat — so an in-flight wave slows/speeds as the
-      // beat springs back to the program's value (overshoot included).
+      // Live wave speed = the current beat, so a wave springs with the beat.
       const liveSpeed = (Math.max(0.5, Math.min(60, v.beat || 8)) * SPEED_SCALE) / 60;
       for (let ri = ripples.length - 1; ri >= 0; ri--) {
         const rp = ripples[ri];
         rp.radius += liveSpeed;
-        if (rp.radius > N * 1.9) { ripples.splice(ri, 1); continue; }
+        if (rp.radius > N * 2.0) { ripples.splice(ri, 1); continue; }
         for (let r = 0; r < N; r++) {
           for (let c = 0; c < N; c++) {
             const i = r * N + c;
             const dr = Math.hypot(c - rp.cx, r - rp.cy) - rp.radius;
-            if (dr <= 0) rate[i] = FILL_RATE;
-            if (dr > -FRONT_W && dr < FRONT_W) front[i] += 1 - Math.abs(dr) / FRONT_W;
+            if (dr <= 0) b[i] += (1 - b[i]) * B_RISE; // behind the front → reveal the bent colour
+            if (dr > -3 * WAVE_ENV && dr < 2 * WAVE_ENV) { // signed wave-train → interference on overlap
+              front[i] += Math.cos(WAVE_K * dr) * Math.exp(-(dr * dr) / (2 * WAVE_ENV * WAVE_ENV));
+            }
           }
         }
-      }
-      // Recolour every cell toward the live carrier colour (fast inside a front, slow outside).
-      for (let i = 0; i < sr.length; i++) {
-        sr[i] += (tgt[0] - sr[i]) * rate[i];
-        sg[i] += (tgt[1] - sg[i]) * rate[i];
-        sb[i] += (tgt[2] - sb[i]) * rate[i];
       }
       const dimTarget = t ? DIM : 1;
       dimRef.current += (dimTarget - dimRef.current) * 0.12;
       if (Math.abs(dimRef.current - dimTarget) < 0.004) dimRef.current = dimTarget;
-      if (t || ripples.length > 0) settleFramesRef.current = 60;
-      else settleFramesRef.current = Math.max(0, settleFramesRef.current - 1);
+      if (t || ripples.length > 0) paintRef.current = 80; else paintRef.current = Math.max(0, paintRef.current - 1);
       frame++;
-      const active = settleFramesRef.current > 0 || dimRef.current < 0.995;
+      const active = paintRef.current > 0 || dimRef.current < 0.995;
       if (active && frame % 2 === 0) {
         if (t) onChange && onChange({ phase: 'move', xN: t.xN, yN: t.yN, pressure: t.eff });
         forceRender(n => n + 1);
@@ -186,16 +149,21 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
     }
   };
 
-  const heat = heatRef.current, front = frontRef.current;
-  const sr = srRef.current, sg = sgRef.current, sb = sbRef.current;
+  const heat = heatRef.current, b = bRef.current, front = frontRef.current;
   const dim = dimRef.current;
+  const vNow = getValues ? getValues() : { carrier: 200, trackCarrier: 200 };
+  const trackCol = carrierRGB(vNow.trackCarrier != null ? vNow.trackCarrier : vNow.carrier);
+  const bentCol = carrierRGB(vNow.carrier);
   const cells = [];
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
       const i = r * N + c;
-      let col = [sr[i] * dim, sg[i] * dim, sb[i] * dim];
+      let col = mix(trackCol, bentCol, clamp01(b[i])); // outer = track, inner = bent
+      col = [col[0] * dim, col[1] * dim, col[2] * dim];
       if (heat[i] > 0.01) col = mix(col, BLUE, Math.min(1, heat[i]));
-      if (front[i] > 0.01) col = mix(col, FRONT_COLOR, clamp01(front[i]) * 0.55);
+      const f = front[i];
+      if (f > 0.01) col = mix(col, CREST, clamp01(f * 0.5)); // constructive → bright fringe
+      else if (f < -0.01) { const k = clamp01(-f * 0.5) * 0.5; col = [col[0] * (1 - k), col[1] * (1 - k), col[2] * (1 - k)]; } // destructive → dark
       cells.push(
         <View
           key={i}
