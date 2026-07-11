@@ -3,6 +3,7 @@ import { ScrollView, View, Text, TextInput, TouchableOpacity, Animated, Easing, 
 import { COLORS } from '../theme';
 import { IMEDX_SYSTEM_PROMPT, extractImedx } from '../catalog/imedxSpec';
 import { addUserSession } from '../catalog/userSessions';
+import { isOnDeviceAvailable, generateOnDevice } from '../ai/onDeviceModel';
 
 const ENDPOINT = 'https://n8n.codemusic.ca/webhook/pulseentrain';
 
@@ -31,6 +32,9 @@ export default function AiSessionScreen({ navigation }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [stage, setStage] = useState(0);
+  const [onDevice, setOnDevice] = useState(false); // use the on-device model
+  const [onDeviceOk, setOnDeviceOk] = useState(false); // device supports it
+  useEffect(() => { isOnDeviceAvailable().then(setOnDeviceOk); }, []);
   const glow = useRef(new Animated.Value(0)).current;
   const spin = useRef(new Animated.Value(0)).current;
 
@@ -67,17 +71,27 @@ export default function AiSessionScreen({ navigation }) {
     Keyboard.dismiss();
     setBusy(true);
     setError(null);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 90000);
     try {
-      const res = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description, system: IMEDX_SYSTEM_PROMPT }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error(`The generator returned ${res.status}.`);
-      const imedx = extractImedx(await res.text());
+      let raw;
+      if (onDevice && onDeviceOk) {
+        raw = await generateOnDevice(description, IMEDX_SYSTEM_PROMPT); // Apple Foundation Models
+      } else {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 90000);
+        try {
+          const res = await fetch(ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description, system: IMEDX_SYSTEM_PROMPT }),
+            signal: ctrl.signal,
+          });
+          if (!res.ok) throw new Error(`The generator returned ${res.status}.`);
+          raw = await res.text();
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      const imedx = extractImedx(raw);
       if (!imedx) throw new Error("Couldn't read a session from the response.");
       const dose = addUserSession(imedx); // validates; throws on a bad shape
       // push (not replace) so back goes: session → AI (make another) → home
@@ -85,7 +99,6 @@ export default function AiSessionScreen({ navigation }) {
     } catch (e) {
       setError(e && e.name === 'AbortError' ? 'The generator took too long. Try again.' : (e && e.message) || 'Something went wrong. Try again.');
     } finally {
-      clearTimeout(timer);
       setBusy(false);
     }
   };
@@ -119,6 +132,18 @@ export default function AiSessionScreen({ navigation }) {
             Name a goal and a length — or give it something abstract: an emotion, a medicine, a place, a food,
             a memory. It listens for the essence and turns it into sound.
           </Text>
+
+          {onDeviceOk ? (
+            <View style={styles.segment}>
+              <TouchableOpacity style={[styles.seg, !onDevice && styles.segOn]} onPress={() => setOnDevice(false)} activeOpacity={0.8}>
+                <Text style={[styles.segTxt, !onDevice && styles.segTxtOn]}>☁  Cloud</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.seg, onDevice && styles.segOn]} onPress={() => setOnDevice(true)} activeOpacity={0.8}>
+                <Text style={[styles.segTxt, onDevice && styles.segTxtOn]}>⚡  On-device</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {onDeviceOk && onDevice ? <Text style={styles.segHint}>Runs privately on your iPhone — faster and unlimited.</Text> : null}
 
           <TextInput
             style={styles.input}
@@ -170,6 +195,12 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, justifyContent: 'center' },
   chip: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   chipTxt: { color: '#CFC6EA', fontSize: 12.5 },
+  segment: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 3, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(139,92,246,0.25)' },
+  seg: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
+  segOn: { backgroundColor: 'rgba(139,92,246,0.55)' },
+  segTxt: { color: '#B9AED6', fontSize: 13, fontWeight: '700' },
+  segTxtOn: { color: '#fff' },
+  segHint: { color: '#9A8FBE', fontSize: 12, textAlign: 'center', marginTop: -6, marginBottom: 12 },
   error: { color: COLORS.accentOrange, fontSize: 13, marginTop: 16, textAlign: 'center' },
   btn: { backgroundColor: '#7C3AED', borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 22, shadowColor: '#7C3AED', shadowOpacity: 0.6, shadowRadius: 16, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   btnDisabled: { opacity: 0.45 },
