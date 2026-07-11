@@ -85,6 +85,10 @@
           }
         },
         "beds": { "type": "array", "items": { "$ref": "#/$defs/bed" } },
+        "music": {
+          "description": "Optional embedded background MP3 as a base64 data URI ('data:audio/mpeg;base64,…'), or null. Plays once under the tones with its own fade-in/out; ducks the noise bed while present; its level is a separate player slider. Keep the file under ~4.5 MB so the whole session stays under 5 MB.",
+          "type": ["string", "null"]
+        },
         "masterVolume": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 },
         "transitionFade": {
           "description": "start fade-in / end fade-out length: none | short(~1s) | medium(~2s) | long(~3s)",

@@ -69,6 +69,24 @@ the Admin dropdowns, and the n8n prompt all read from.
 `none` | `short` (~1 s) | `medium` (~2 s, default) | `long` (~3 s). Edited in the Admin
 (a dropdown); applied by playback and the Admin preview.
 
+## Background music (`audio.music`)
+
+`audio.music` is an **optional** self-contained MP3 — a base64 data URI
+(`"data:audio/mpeg;base64,…"`), same as `meta.image` — or `null`. When present it plays
+**once** under the tones:
+
+- **Fade-in** (~3 s) at the start; when it's present the noise bed is **ducked** a little
+  so it sits under the music.
+- **Fade-out** depends on length: if the music is **longer** than the track it fades with
+  the track's end fade; if it's **shorter** it fades at its **own** end and the track keeps
+  playing.
+- Its level is a **separate "Background music" slider** in the player (the Volume slider
+  still controls the binaural tones + noise).
+
+Encode one in the Studio ("+ Music (mp3)"). **Size:** base64 adds ~33%, so keep the MP3
+under **~4.5 MB** to keep the whole `.imedx` under **~5 MB**. The AI generator never emits
+music (it can't author audio) — it's added by hand in the Studio.
+
 ---
 
 ## Modalities

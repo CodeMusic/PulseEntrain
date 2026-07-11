@@ -19,12 +19,13 @@ export class SessionSynth {
   /**
    * @param {{ scenes?: Array<{atSec:number,beatHz:number,carrierHz?:number}>, carrier?: number,
    *           duration?: number, noise?: string, volume?: number, transitionFade?: string,
+   *           music?: string|null, musicLevel?: number,
    *           onTick?: (pos:number, beat:number, ctx:{intensity?:number, flash?:string, flashHz?:number})=>void,
    *           onEnded?: ()=>void }} [opts]
    */
   constructor(opts = {}) {
     const { scenes, carrier = 200, duration, noise = 'none', volume = 1,
-            transitionFade = 'medium', onTick, onEnded } = opts;
+            transitionFade = 'medium', music = null, musicLevel = 0.5, onTick, onEnded } = opts;
     this.fadeSeconds = FADE_SECONDS[transitionFade] != null ? FADE_SECONDS[transitionFade] : 2.0;
     this._faded = false;
     this.scenes = (scenes || []).slice().sort((a, b) => a.atSec - b.atSec);
@@ -33,6 +34,9 @@ export class SessionSynth {
       duration || (this.scenes.length ? this.scenes[this.scenes.length - 1].atSec : 60) || 60;
     this.noise = normalizeNoise(noise);
     this.volume = volume;
+    this.music = music; // base64 MP3 (data URI) or null
+    this.musicLevel = musicLevel;
+    this._musicFaded = false;
     this.onTick = onTick;
     this.onEnded = onEnded;
     this.beatBend = 0; // Explore Field Space: head-driven ± offset on the program's beat…
@@ -94,9 +98,10 @@ export class SessionSynth {
     if (this.playing) return;
     const a = this._activeAt(this.position);
     this._curNoise = normalizeNoise(a.noise);
-    this.engine.start({ carrier: a.carrier, beat: a.beat, volume: this.volume, background: this._curNoise });
+    this.engine.start({ carrier: a.carrier, beat: a.beat, volume: this.volume, background: this._curNoise, music: this.music, musicLevel: this.musicLevel });
     if (this.fadeSeconds > 0) this.engine.fadeIn(this.fadeSeconds);
     this._faded = false;
+    this._musicFaded = false;
     this._t0 = Date.now();
     this.playing = true;
     this._timer = setInterval(() => this._tick(), 200);
@@ -107,6 +112,12 @@ export class SessionSynth {
     if (this.fadeSeconds > 0 && !this._faded && this.position >= this.duration - this.fadeSeconds) {
       this._faded = true; // end fade-out
       this.engine.fadeOut(Math.max(0.05, this.duration - this.position));
+    }
+    // Music longer than the track: fade it with the track's end fade (a shorter clip
+    // fades at its own end via the engine, letting the track keep playing).
+    if (this.music && !this._musicFaded && this.position >= this.duration - Math.max(this.fadeSeconds, 3)) {
+      this._musicFaded = true;
+      this.engine.fadeOutMusic(Math.max(0.5, this.duration - this.position));
     }
     if (this.position >= this.duration) {
       this.position = this.duration;
@@ -181,6 +192,11 @@ export class SessionSynth {
   setVolume(v) {
     this.volume = v;
     this.engine.setVolume(v);
+  }
+
+  setMusicVolume(v) {
+    this.musicLevel = v;
+    this.engine.setMusicVolume(v);
   }
 
   stop() {

@@ -34,6 +34,7 @@ const doseToSession = dose => ({
   noise: dose.noise || 'none',
   fade: dose.fade || 'medium',
   image: dose.image || null,
+  music: dose.music || null,
   scenes: (dose.scenes || []).map(o => ({ ...o })),
 });
 
@@ -47,6 +48,7 @@ const blankSession = () => ({
   noise: 'none',
   fade: 'medium',
   image: null,
+  music: null,
   scenes: [
     { atSec: 0, beatHz: 10 },
     { atSec: 600, beatHz: 6 },
@@ -260,6 +262,7 @@ export default function StudioScreen({ navigation, route }) {
     audio: {
       binaural: { carrierHz: s.carrier },
       beds: s.noise !== 'none' ? [{ source: 'noise', type: s.noise, level: 0.25 }] : [],
+      music: s.music || null, // base64 MP3 data URI, or null
       transitionFade: s.fade,
       masterVolume: 1,
     },
@@ -291,6 +294,28 @@ export default function StudioScreen({ navigation, route }) {
     }
   };
 
+  // base64 is ~4/3 the byte size; estimate the embedded MP3's MB from the data URI.
+  const musicMB = () => (s.music ? (String(s.music).length * 0.75) / 1048576 : 0);
+  const pickMusic = () => {
+    if (!IS_WEB) { Alert.alert('Web only', 'Attach background music in the web Studio.'); return; }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'audio/mpeg,audio/mp3,.mp3';
+    input.onchange = () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      if (f.size > 4.5 * 1024 * 1024) {
+        window.alert(`That file is ${(f.size / 1048576).toFixed(1)} MB. Keep the MP3 under ~4.5 MB so the whole session stays under 5 MB (base64 adds ~33%).`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => { setS(prev => ({ ...prev, music: reader.result })); setDirty(true); };
+      reader.readAsDataURL(f);
+    };
+    input.click();
+  };
+  const removeMusic = () => { setS(prev => ({ ...prev, music: null })); setDirty(true); };
+
   const openFile = async () => {
     try {
       const picked = await pickImedxFile();
@@ -310,6 +335,7 @@ export default function StudioScreen({ navigation, route }) {
         noise: noiseBed ? noiseBed.type : 'none',
         fade: audio.transitionFade || 'medium',
         image: meta.image || null,
+        music: audio.music || null,
         scenes: (j.entrainment && j.entrainment.scenes) || [],
       });
       histRef.current = { undo: [], redo: [] };
@@ -342,6 +368,9 @@ export default function StudioScreen({ navigation, route }) {
         <Pill label="Play in player" onPress={playInPlayer} />
         <Pill label="Download .imedx" onPress={download} color={COLORS.accentBlue} />
         <Pill label="Save to My Sessions" onPress={saveToMySessions} color={COLORS.accentGreen} />
+        {s.music
+          ? <Pill label={`♪ ${musicMB().toFixed(1)}MB  ✕`} onPress={removeMusic} color={COLORS.accentBlueLight} />
+          : <Pill label="+ Music (mp3)" onPress={pickMusic} />}
         <Pill label="↶ Undo" onPress={undo} dim={!canUndo} />
         <Pill label="↷ Redo" onPress={redo} dim={!canRedo} />
       </View>

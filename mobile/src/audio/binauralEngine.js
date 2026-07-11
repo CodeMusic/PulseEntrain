@@ -1,8 +1,18 @@
 import { AudioContext, AudioManager } from 'react-native-audio-api';
+import { Buffer } from 'buffer';
 // Coefficients + noise generators are platform-agnostic and shared with the other
 // synths (and the desktop Python preview); band helper lives in shared/entrainment.
 import { NOISE_SECONDS, NOISE_LEVEL, NOISE_FILL } from '../shared/synthCoefficients';
 import { bandFor } from '../shared/entrainment';
+
+// Optional embedded background music (a base64 MP3 in the .imedx). It plays once
+// through a fade-in, ducks the noise bed a little while present, and fades out — at
+// the track's end if it's longer than the track, or at its own end (track continues)
+// if it's shorter. Level is a separate user slider.
+const MUSIC_FADE_IN = 3; // seconds
+const MUSIC_FADE_OUT = 3; // seconds
+const MUSIC_DEFAULT_LEVEL = 0.5;
+const MUSIC_NOISE_DUCK = 0.6; // noise bed multiplier while music is present
 
 export { bandFor }; // re-export so importers (ManualScreen) keep their path
 
@@ -47,6 +57,11 @@ export class BinauralEngine {
     this.rightOsc = null;
     this.noiseSrc = null;
     this.noiseGain = null;
+    this.musicSrc = null;
+    this.musicFadeGain = null; // fade-in/out envelope
+    this.musicLevelGain = null; // user level
+    this.musicLevel = MUSIC_DEFAULT_LEVEL;
+    this.hasMusic = false;
     this.carrier = 200;
     this.beat = 10;
     this.volume = 0.8;
@@ -54,12 +69,18 @@ export class BinauralEngine {
     this.running = false;
   }
 
-  start({ carrier = 200, beat = 10, volume = 0.8, background = 'none' } = {}) {
+  _noiseLevel() {
+    return NOISE_LEVEL * (this.hasMusic ? MUSIC_NOISE_DUCK : 1);
+  }
+
+  start({ carrier = 200, beat = 10, volume = 0.8, background = 'none', music = null, musicLevel } = {}) {
     if (this.running) this.stop();
     this.carrier = carrier;
     this.beat = beat;
     this.volume = volume;
     this.background = background;
+    this.hasMusic = !!music;
+    if (musicLevel != null) this.musicLevel = Math.max(0, Math.min(1, musicLevel));
 
     // Play as a "playback" session that *mixes with* other apps instead of
     // interrupting them — so a guided meditation (or any audio app) can run on
@@ -109,7 +130,58 @@ export class BinauralEngine {
     this._buildEarPulse();
 
     this._startNoise(background);
+    if (music) this._startMusic(music); // async decode; fades in when ready
     this.running = true;
+  }
+
+  // Decode a base64 MP3 (data URI or bare base64) and play it once under the tones:
+  // src → fade envelope → user level → master. Fades in, and schedules its own fade-
+  // out at its end (so a short clip fades while the track keeps going).
+  async _startMusic(music) {
+    if (!music || !this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    try {
+      const b64 = String(music).includes(',') ? String(music).split(',').pop() : String(music);
+      const bytes = Buffer.from(b64, 'base64');
+      const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      const audioBuf = await ctx.decodeAudioData(ab);
+      if (this.ctx !== ctx || !this.master) return; // stopped/restarted while decoding
+      const src = ctx.createBufferSource();
+      src.buffer = audioBuf;
+      const fade = ctx.createGain();
+      fade.gain.value = 0;
+      const level = ctx.createGain();
+      level.gain.value = this.musicLevel;
+      src.connect(fade);
+      fade.connect(level);
+      level.connect(this.master);
+      const now = ctx.currentTime;
+      const dur = audioBuf.duration;
+      const fin = Math.min(MUSIC_FADE_IN, dur / 3);
+      fade.gain.setValueAtTime(0, now);
+      fade.gain.linearRampToValueAtTime(1, now + fin);
+      const outStart = Math.max(now + fin, now + dur - MUSIC_FADE_OUT);
+      fade.gain.setValueAtTime(1, outStart);
+      fade.gain.linearRampToValueAtTime(0, now + dur);
+      src.start(now);
+      this.musicSrc = src;
+      this.musicFadeGain = fade;
+      this.musicLevelGain = level;
+    } catch (e) {}
+  }
+
+  // The user's background-music level (separate slider). Does not touch the fades.
+  setMusicVolume(v) {
+    this.musicLevel = Math.max(0, Math.min(1, Number(v) || 0));
+    if (this.musicLevelGain) this._setParam(this.musicLevelGain.gain, this.musicLevel);
+  }
+
+  // Fade the music out over `seconds` — used when the track ends before the music does.
+  fadeOutMusic(seconds = MUSIC_FADE_OUT) {
+    if (!this.musicFadeGain || !this.ctx) return;
+    const g = this.musicFadeGain.gain;
+    const now = this.ctx.currentTime;
+    try { g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + seconds); } catch (e) {}
   }
 
   // Attach a per-ear LFO (osc → depth gain → tremolo gain param). Off until
@@ -186,7 +258,7 @@ export class BinauralEngine {
     if (type === 'none') return;
     const made = this._makeNoise(type);
     if (!made) return;
-    made.g.gain.value = NOISE_LEVEL; // noise sits under the tones
+    made.g.gain.value = this._noiseLevel(); // noise sits under the tones (ducked under music)
     this.noiseSrc = made.src;
     this.noiseGain = made.g;
   }
@@ -230,9 +302,9 @@ export class BinauralEngine {
     }
     try {
       made.g.gain.setValueAtTime(0, now);
-      made.g.gain.linearRampToValueAtTime(NOISE_LEVEL, now + seconds);
+      made.g.gain.linearRampToValueAtTime(this._noiseLevel(), now + seconds);
     } catch (e) {
-      made.g.gain.value = NOISE_LEVEL;
+      made.g.gain.value = this._noiseLevel();
     }
     this.noiseSrc = made.src;
     this.noiseGain = made.g;
@@ -339,8 +411,10 @@ export class BinauralEngine {
     try { this.leftPulse && this.leftPulse.lfo.stop(); } catch (e) {}
     try { this.rightPulse && this.rightPulse.lfo.stop(); } catch (e) {}
     try { this.noiseSrc && this.noiseSrc.stop(); } catch (e) {}
+    try { this.musicSrc && this.musicSrc.stop(); } catch (e) {}
     try { this.ctx && this.ctx.close && this.ctx.close(); } catch (e) {}
     this.leftOsc = this.rightOsc = this.noiseSrc = this.noiseGain = this.master = this.ctx = null;
     this.leftTrem = this.rightTrem = this.leftPulse = this.rightPulse = null;
+    this.musicSrc = this.musicFadeGain = this.musicLevelGain = null;
   }
 }

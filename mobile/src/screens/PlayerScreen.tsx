@@ -103,6 +103,7 @@ export default function PlayerScreen({ route, navigation }) {
     defaultIntensityFor(chosenStrength != null ? chosenStrength : dose && dose.strength),
   );
   const [volume, setVolume] = useState(0.82); // leave headroom so a press can lift the level
+  const [musicVolume, setMusicVolume] = useState(0.5); // background-music level (synth doses with embedded MP3)
   const [lumi, setLumi] = useState(100);
   const intensityRef = useRef(intensity);
   intensityRef.current = intensity;
@@ -453,6 +454,8 @@ export default function PlayerScreen({ route, navigation }) {
           noise: sd.noise,
           transitionFade: sd.fade,
           volume: 1,
+          music: sd.music || null,
+          musicLevel: musicVolumeRef.current,
           onTick: (pos, beat, ctx) => {
             setSynthPos(pos);
             if (wantNova && nova.connected && !novaOverrideRef.current) {
@@ -625,10 +628,17 @@ export default function PlayerScreen({ route, navigation }) {
 
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
+  const musicVolumeRef = useRef(musicVolume);
+  musicVolumeRef.current = musicVolume;
+  const hasMusic = isSynth && !!(dose as any)?.music;
   const onVolume = v => {
     setVolume(v);
     if (isSynth) synthRef.current?.setVolume(v);
     else TrackPlayer.setVolume(v);
+  };
+  const onMusicVolume = v => {
+    setMusicVolume(v);
+    if (isSynth) synthRef.current?.setMusicVolume(v);
   };
   // Press (Lightpad Z / future touch) lifts the level a little above the slider's
   // base while held, then springs back to base on release — without moving the slider.
@@ -914,6 +924,23 @@ export default function PlayerScreen({ route, navigation }) {
           thumbTintColor="#fff"
         />
       </View>
+
+      {/* Background music level — only for synth doses that embed an MP3 */}
+      {hasMusic ? (
+        <View style={styles.sliderBlock}>
+          <Text style={styles.sliderLabel}>Background music</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={1}
+            value={musicVolume}
+            onValueChange={onMusicVolume}
+            minimumTrackTintColor={COLORS.accentBlueLight}
+            maximumTrackTintColor={COLORS.bgCardLight}
+            thumbTintColor="#fff"
+          />
+        </View>
+      ) : null}
 
       {/* Web preview: device modalities are native-only — show them disabled so
           it's clear the iOS / Android app does more (Bluetooth devices). */}

@@ -62,6 +62,7 @@ export function imedxToDose(json) {
     carrier: binaural.carrierHz ?? 200,
     noise: noiseType,
     noiseLevel: noiseBed ? noiseBed.level ?? 0.25 : 0,
+    music: audio.music || null, // base64 MP3 (data URI) background, or null
     fade: audio.transitionFade || 'medium',
     imported: true,
   };
