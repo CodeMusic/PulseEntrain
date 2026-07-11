@@ -835,9 +835,10 @@ export default function PlayerScreen({ route, navigation }) {
           const s = synthRef.current;
           const base = s ? s.current() : { beat: (dose as any)?.beat || 10, carrier: (dose as any)?.carrier || 200 };
           return {
-            beat: base.beat + touchBendRef.current.beat + headBendRef.current.beat,
+            beat: base.beat + touchBendRef.current.beat + headBendRef.current.beat, // bent
             carrier: base.carrier + touchBendRef.current.carr + headBendRef.current.carr, // bent (inner)
-            trackCarrier: base.carrier, // the program's authored value (outer / true colour)
+            trackBeat: base.beat, // authored beat (waves spring their speed toward it)
+            trackCarrier: base.carrier, // authored carrier (the ocean / true colour)
           };
         }}
       />

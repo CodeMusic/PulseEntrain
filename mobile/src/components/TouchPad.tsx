@@ -3,72 +3,86 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } 
 import { clamp01, lerpColor as mix, rgbColor as rgb } from '../shared/math';
 import { carrierRGB } from '../shared/entrainment';
 
-// Full-screen on-phone stand-in for the ROLI Lightpad. Your finger lights the cells
-// under it blue (brighter with pressure) and the rest dims while you hold.
+// Full-screen on-phone stand-in for the ROLI Lightpad. Reports the same gesture the
+// block does via onChange({ phase, xN, yN, pressure }): 'start' | 'move' | 'end'
+// (release after a bend) | 'tap'. Force falls back to a medium value without 3D-Touch.
 //
-// It reports the same gesture the block does via onChange({ phase, xN, yN, pressure }):
-// 'start' | 'move' | 'end' (release after a bend) | 'tap'. Force falls back to a
-// medium value without 3D-Touch.
-//
-// COLOUR tells the story: OUTSIDE a wave, cells hold the TRACK's true carrier colour;
-// INSIDE the wave they show the BENT carrier colour. A tap / bend-release casts a wave
-// from the touch point that expands at the live BEAT and "reveals" the bent colour as
-// it passes; as the bend springs back to the program's value, the bent colour (and the
-// wave speed) spring with it, so the inner region recedes to the track colour. In Field
-// there's no spring, so the inner colour just settles at the field's colour.
-// Overlapping wavefronts add as a signed field → interference fringes where they cross.
-// getValues() supplies live { beat, carrier (bent), trackCarrier (true) }.
+// The grid is an "ocean" whose colour is ALWAYS the program track's current carrier.
+// While you pull/bend, the bent colour shows only in your TOUCH RESIDUE (the glowing
+// trail under your finger). On release a circular WAVE is cast that carries the bend it
+// was thrown with, frozen, then springing back toward the track colour (briefly past it)
+// over its own life while it expands at the (springing) beat. Each wave keeps its own
+// bend, so you can lay several; where they overlap the inner colours blend (colour
+// interference) and their signed crests add (edge interference). In Field there's no
+// spring, so a wave just settles at the field's colour.
+// getValues() → live { beat, carrier (bent), trackBeat, trackCarrier }.
 const N = 20;
-const BLUE = [90, 170, 255]; // touch highlight
-const CREST = [235, 245, 255]; // constructive fringe tint
+const WHITE = [255, 255, 255];
+const CREST = [235, 245, 255];
 const TOUCH_RADIUS = 3.2, DECAY = 0.9, DIM = 0.62;
-const B_RISE = 0.34; // how fast a cell flips to "revealed/bent" once a front passes it
-const B_DECAY = 0.955; // how fast the reveal fades back once no wave covers the cell
 const SPEED_SCALE = 3.5; // wave speed = beat × this (cells/sec)
-const WAVE_K = 1.7; // wavefront ring spacing (interference wavelength)
-const WAVE_ENV = 2.0; // wave-train envelope width around each front (cells)
+const EDGE = 1.6; // soft width of a wave's colour-fill boundary (cells)
+const WAVE_K = 1.7, WAVE_ENV = 2.0; // crest ring spacing + train width (edge interference)
 const DWELL_MIN = 0.32, DWELL_TAU = 42, DWELL_MOVE_BLEED = 55;
 const TAP_MOVE = 0.05;
+
+// Bend → track spring: 0 at cast, →1 with a brief overshoot past 1 (colour/speed go
+// slightly past the track value before settling), over ~0.8 s.
+const springProgress = age => {
+  const x = age / 26;
+  return Math.max(0, Math.min(1.25, 1 - Math.exp(-x) * Math.cos(x * 1.6)));
+};
+const clampByte = v => (v < 0 ? 0 : v > 255 ? 255 : v);
 
 export default function TouchPad({ visible, onClose, onChange, getValues }) {
   const { width, height } = useWindowDimensions();
   const cell = Math.max(4, Math.floor(Math.min(width - 8, height - 96) / N));
   const size = cell * N;
   const heatRef = useRef(new Float32Array(N * N));
-  const bRef = useRef(new Float32Array(N * N)); // 0 = track colour … 1 = bent colour (wave-revealed)
-  const frontRef = useRef(new Float32Array(N * N)); // signed wavefront field (sums → interference)
+  const fcRef = useRef(new Float32Array(N * N * 3)); // per-cell blended colour (ocean + waves)
+  const frontRef = useRef(new Float32Array(N * N)); // signed crest field (edge interference)
   const ripplesRef = useRef<any[]>([]);
   const touchRef = useRef<null | { cx: number; cy: number; xN: number; yN: number; rawForce: number; dwell: number; eff: number }>(null);
   const startRef = useRef<null | { cx: number; cy: number; xN: number; yN: number }>(null);
   const movedRef = useRef(false);
   const dimRef = useRef(1);
-  const paintRef = useRef(0); // frames of repaint remaining after the last change
+  const paintRef = useRef(0);
   const [, forceRender] = useState(0);
   const rafRef = useRef<any>(null);
 
   const pressureOf = t => (t.rawForce > 0 ? t.rawForce : DWELL_MIN + (1 - DWELL_MIN) * (1 - Math.exp(-t.dwell / DWELL_TAU)));
 
   const spawnRipple = (cx, cy) => {
+    const v = getValues ? getValues() : { beat: 8, carrier: 200 };
     const rs = ripplesRef.current;
-    if (rs.length > 8) rs.shift();
-    rs.push({ cx, cy, radius: 0 }); // speed read live from the beat each frame
-    paintRef.current = 80;
+    if (rs.length > 6) rs.shift();
+    rs.push({ cx, cy, radius: 0, age: 0, c0: carrierRGB(v.carrier || 200), beat0: v.beat || 8 });
+    paintRef.current = 90;
   };
 
   useEffect(() => {
     if (!visible) {
-      heatRef.current.fill(0); bRef.current.fill(0); frontRef.current.fill(0);
+      heatRef.current.fill(0); frontRef.current.fill(0);
       ripplesRef.current = []; touchRef.current = null; startRef.current = null;
       movedRef.current = false; dimRef.current = 1; paintRef.current = 0;
       return;
     }
-    paintRef.current = 40;
+    paintRef.current = 30;
+    // Seed the colour field with the current track colour so the grid opens as the ocean.
+    {
+      const v0 = getValues ? getValues() : { trackCarrier: 200, carrier: 200 };
+      const tc = carrierRGB(v0.trackCarrier != null ? v0.trackCarrier : v0.carrier);
+      const fc = fcRef.current;
+      for (let i = 0; i < N * N; i++) { fc[i * 3] = tc[0]; fc[i * 3 + 1] = tc[1]; fc[i * 3 + 2] = tc[2]; }
+    }
     let alive = true, frame = 0;
     const loop = () => {
       if (!alive) return;
-      const heat = heatRef.current, b = bRef.current, front = frontRef.current;
+      const heat = heatRef.current, front = frontRef.current, fc = fcRef.current;
       const t = touchRef.current;
-      const v = getValues ? getValues() : { beat: 8, carrier: 200, trackCarrier: 200 };
+      const v = getValues ? getValues() : { beat: 8, carrier: 200, trackBeat: 8, trackCarrier: 200 };
+      const trackCol = carrierRGB(v.trackCarrier != null ? v.trackCarrier : v.carrier);
+      const trackBeat = v.trackBeat != null ? v.trackBeat : v.beat || 8;
       if (t) {
         t.dwell += 1; t.eff = pressureOf(t);
         for (let r = 0; r < N; r++) {
@@ -79,33 +93,46 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
         }
       }
       for (let i = 0; i < heat.length; i++) heat[i] *= DECAY;
-      for (let i = 0; i < b.length; i++) b[i] *= B_DECAY; // reveal fades unless a wave keeps it up
-      front.fill(0);
+      // Per-ripple physics: spring the colour + speed toward the track, expand.
       const ripples = ripplesRef.current;
-      // Live wave speed = the current beat, so a wave springs with the beat.
-      const liveSpeed = (Math.max(0.5, Math.min(60, v.beat || 8)) * SPEED_SCALE) / 60;
       for (let ri = ripples.length - 1; ri >= 0; ri--) {
         const rp = ripples[ri];
-        rp.radius += liveSpeed;
-        if (rp.radius > N * 2.0) { ripples.splice(ri, 1); continue; }
-        for (let r = 0; r < N; r++) {
-          for (let c = 0; c < N; c++) {
-            const i = r * N + c;
-            const dr = Math.hypot(c - rp.cx, r - rp.cy) - rp.radius;
-            if (dr <= 0) b[i] += (1 - b[i]) * B_RISE; // behind the front → reveal the bent colour
-            if (dr > -3 * WAVE_ENV && dr < 2 * WAVE_ENV) { // signed wave-train → interference on overlap
-              front[i] += Math.cos(WAVE_K * dr) * Math.exp(-(dr * dr) / (2 * WAVE_ENV * WAVE_ENV));
-            }
-          }
-        }
+        rp.age += 1;
+        const sp = springProgress(rp.age);
+        rp.col = mix(rp.c0, trackCol, sp); // bent → track (with overshoot)
+        const beat = rp.beat0 + (trackBeat - rp.beat0) * Math.min(1, sp);
+        rp.radius += (Math.max(0.5, Math.min(60, beat)) * SPEED_SCALE) / 60;
+        if (rp.radius > N * 2.0) ripples.splice(ri, 1);
       }
+      frame++;
+      const active = paintRef.current > 0 || ripples.length > 0 || t || dimRef.current < 0.995;
       const dimTarget = t ? DIM : 1;
       dimRef.current += (dimTarget - dimRef.current) * 0.12;
       if (Math.abs(dimRef.current - dimTarget) < 0.004) dimRef.current = dimTarget;
-      if (t || ripples.length > 0) paintRef.current = 80; else paintRef.current = Math.max(0, paintRef.current - 1);
-      frame++;
-      const active = paintRef.current > 0 || dimRef.current < 0.995;
+      if (t || ripples.length > 0) paintRef.current = 90; else paintRef.current = Math.max(0, paintRef.current - 1);
+      // Build the per-cell colour field (ocean + wave blend) + crest field, on paint frames.
       if (active && frame % 2 === 0) {
+        front.fill(0);
+        for (let r = 0; r < N; r++) {
+          for (let c = 0; c < N; c++) {
+            const i = r * N + c;
+            let ar = 0, ag = 0, ab = 0, tw = 0;
+            for (let ri = 0; ri < ripples.length; ri++) {
+              const rp = ripples[ri];
+              const dr = Math.hypot(c - rp.cx, r - rp.cy) - rp.radius;
+              const w = clamp01(-dr / EDGE); // 1 well inside, ramps to 0 at the front
+              if (w > 0) { ar += rp.col[0] * w; ag += rp.col[1] * w; ab += rp.col[2] * w; tw += w; }
+              if (dr > -3 * WAVE_ENV && dr < 2 * WAVE_ENV) front[i] += Math.cos(WAVE_K * dr) * Math.exp(-(dr * dr) / (2 * WAVE_ENV * WAVE_ENV));
+            }
+            const cover = clamp01(tw);
+            const wr = tw > 0 ? ar / tw : trackCol[0];
+            const wg = tw > 0 ? ag / tw : trackCol[1];
+            const wb = tw > 0 ? ab / tw : trackCol[2];
+            fc[i * 3] = trackCol[0] + (wr - trackCol[0]) * cover;
+            fc[i * 3 + 1] = trackCol[1] + (wg - trackCol[1]) * cover;
+            fc[i * 3 + 2] = trackCol[2] + (wb - trackCol[2]) * cover;
+          }
+        }
         if (t) onChange && onChange({ phase: 'move', xN: t.xN, yN: t.yN, pressure: t.eff });
         forceRender(n => n + 1);
       }
@@ -149,25 +176,23 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
     }
   };
 
-  const heat = heatRef.current, b = bRef.current, front = frontRef.current;
+  const heat = heatRef.current, front = frontRef.current, fc = fcRef.current;
   const dim = dimRef.current;
-  const vNow = getValues ? getValues() : { carrier: 200, trackCarrier: 200 };
-  const trackCol = carrierRGB(vNow.trackCarrier != null ? vNow.trackCarrier : vNow.carrier);
-  const bentCol = carrierRGB(vNow.carrier);
+  const vNow = getValues ? getValues() : { carrier: 200 };
+  const residue = mix(carrierRGB(vNow.carrier), WHITE, 0.22); // bent-carrier glow left by the finger
   const cells = [];
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
       const i = r * N + c;
-      let col = mix(trackCol, bentCol, clamp01(b[i])); // outer = track, inner = bent
-      col = [col[0] * dim, col[1] * dim, col[2] * dim];
-      if (heat[i] > 0.01) col = mix(col, BLUE, Math.min(1, heat[i]));
+      let col = [fc[i * 3] * dim, fc[i * 3 + 1] * dim, fc[i * 3 + 2] * dim];
+      if (heat[i] > 0.01) col = mix(col, residue, Math.min(1, heat[i]));
       const f = front[i];
-      if (f > 0.01) col = mix(col, CREST, clamp01(f * 0.5)); // constructive → bright fringe
-      else if (f < -0.01) { const k = clamp01(-f * 0.5) * 0.5; col = [col[0] * (1 - k), col[1] * (1 - k), col[2] * (1 - k)]; } // destructive → dark
+      if (f > 0.01) col = mix(col, CREST, clamp01(f * 0.5));
+      else if (f < -0.01) { const k = clamp01(-f * 0.5) * 0.5; col = [col[0] * (1 - k), col[1] * (1 - k), col[2] * (1 - k)]; }
       cells.push(
         <View
           key={i}
-          style={{ position: 'absolute', left: c * cell, top: r * cell, width: cell - 1, height: cell - 1, borderRadius: 2, backgroundColor: rgb(col) }}
+          style={{ position: 'absolute', left: c * cell, top: r * cell, width: cell - 1, height: cell - 1, borderRadius: 2, backgroundColor: rgb([clampByte(col[0]), clampByte(col[1]), clampByte(col[2])]) }}
         />,
       );
     }
