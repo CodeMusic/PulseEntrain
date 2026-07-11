@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { imedxToDose, validateImedx } from './importDose';
+import { normalizeImedx } from './imedxSpec';
 
 export const USER_CATEGORY = 'My Sessions';
 const KEY = '@pulseentrain/userSessions';
@@ -36,7 +37,8 @@ export const getUserDose = id => registry.get(id) || null;
 export const isUserDose = id => registry.has(id);
 
 // Convert an .imedx, register + persist it, and return the playable dose (throws on bad input).
-export function addUserSession(imedx, opts = {}) {
+export function addUserSession(rawImedx, opts = {}) {
+  const imedx = normalizeImedx(rawImedx); // repair misplaced keys before validating
   const v = validateImedx(imedx);
   if (!v.ok) throw new Error(v.error);
   const dose = imedxToDose(imedx);

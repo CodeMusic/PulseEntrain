@@ -40,7 +40,10 @@ export function imedxToDose(json) {
   const audio = json.audio || {};
   const binaural = audio.binaural || {};
   const beds = audio.beds || binaural.beds || []; // tolerate beds mis-nested under binaural
-  const noiseBed = beds.find(b => b.source === 'noise');
+  const NOISE_TYPES = ['white', 'pink', 'brown', 'grey'];
+  // tolerate the model putting the noise colour in `source` instead of `type`
+  const noiseBed = beds.find(b => b && (b.source === 'noise' || NOISE_TYPES.includes(b.type) || NOISE_TYPES.includes(b.source)));
+  const noiseType = noiseBed ? (NOISE_TYPES.includes(noiseBed.type) ? noiseBed.type : noiseBed.source) : 'none';
   const id = `imported_${slug(meta.name)}_${++_counter}`;
   return {
     id,
@@ -55,9 +58,9 @@ export function imedxToDose(json) {
     audio: null,
     bundledAudio: false,
     format: 'imedx',
-    scenes: (json.entrainment && json.entrainment.scenes) || [],
+    scenes: (json.entrainment && json.entrainment.scenes) || (audio.entrainment && audio.entrainment.scenes) || [],
     carrier: binaural.carrierHz ?? 200,
-    noise: noiseBed ? noiseBed.type : 'none',
+    noise: noiseType,
     noiseLevel: noiseBed ? noiseBed.level ?? 0.25 : 0,
     fade: audio.transitionFade || 'medium',
     imported: true,

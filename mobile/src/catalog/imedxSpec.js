@@ -40,6 +40,7 @@ Shape:
 The request may be concrete (a goal + a length) OR abstract — an emotion, a drug or medicine, a holiday, a food, a colour, a place, a memory. When it is abstract, practise SYNESTHESIA: translate the thing's felt ESSENCE into sound rather than describing it literally. Let its energy set the beat band and how it arcs over time; its warmth/brightness set the carrier (low = warm, heavy, close; high = bright, airy, distant); its texture decide the noise bed; its mood shape the name and description. The session should feel like the thing.
 
 Rules:
+- Nesting matters: "entrainment" is a TOP-LEVEL key (a sibling of "meta" and "audio"), never inside "audio". Inside "audio", "beds", "transitionFade" and "masterVolume" sit beside "binaural" (not inside it). A noise bed is { "source": "noise", "type": "white"|"pink"|"brown", "level": 0-1 } — the colour goes in "type".
 - The beat frequency (beatHz) is the entrainment. Bands: delta 0.5-4 (deep rest/sleep), theta 4-8 (meditation/creativity), alpha 8-13 (calm focus), beta 13-30 (alert focus), gamma 30-40 (peak). Choose bands that fit the request and shape a journey.
 - scenes MUST be sorted by atSec, start at atSec 0, and the beat glides linearly between consecutive scenes — so use several scenes to ramp gently (avoid big jumps).
 - durationSec MUST equal the final scene's atSec. Pick a sensible length for the goal (e.g. 600-1800s) unless the user asks otherwise.
@@ -64,13 +65,33 @@ const parseLoose = s => {
   return null;
 };
 
+// Models routinely misplace keys (entrainment under audio, beds/fade/volume under
+// binaural, scenes at the top level). Hoist them back to where the app reads them,
+// so a structurally-sloppy-but-complete session still loads.
+export function normalizeImedx(o) {
+  if (!o || typeof o !== 'object') return o;
+  const j = { ...o };
+  const audio = (j.audio = { ...(o.audio || {}) });
+  const binaural = (audio.binaural = { ...(audio.binaural || {}) });
+  if (!j.entrainment && audio.entrainment) { j.entrainment = audio.entrainment; delete audio.entrainment; }
+  if (!j.entrainment && binaural.entrainment) { j.entrainment = binaural.entrainment; delete binaural.entrainment; }
+  if (!j.entrainment) {
+    const scenes = o.scenes || audio.scenes || binaural.scenes;
+    if (Array.isArray(scenes)) j.entrainment = { scenes };
+  }
+  if (!audio.beds && binaural.beds) { audio.beds = binaural.beds; delete binaural.beds; }
+  if (audio.transitionFade == null && binaural.transitionFade != null) { audio.transitionFade = binaural.transitionFade; delete binaural.transitionFade; }
+  if (audio.masterVolume == null && binaural.masterVolume != null) { audio.masterVolume = binaural.masterVolume; delete binaural.masterVolume; }
+  return j;
+}
+
 export function extractImedx(data) {
   let d = data;
   if (typeof d === 'string') d = parseLoose(d) || d;
-  if (d && typeof d === 'object' && !d.entrainment) {
+  if (d && typeof d === 'object' && !d.entrainment && !(d.audio && d.audio.entrainment)) {
     const wrap = d.session || d.imedx || d.output || d.json || d.data || d.result || d.text || d.message;
     if (wrap && wrap !== d) d = wrap;
   }
   if (typeof d === 'string') d = parseLoose(d);
-  return d && typeof d === 'object' ? d : null;
+  return d && typeof d === 'object' ? normalizeImedx(d) : null;
 }
