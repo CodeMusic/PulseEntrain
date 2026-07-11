@@ -14,6 +14,8 @@
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		C6CD2C28442C4B9CAD462598 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 559DBD3FFAD0086A180638E0 /* PrivacyInfo.xcprivacy */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		AAD1CE01000000000000B101 /* OnDeviceAI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD1CE01000000000000A101 /* OnDeviceAI.swift */; };
+		AAD1CE02000000000000B202 /* OnDeviceAI.m in Sources */ = {isa = PBXBuildFile; fileRef = AAD1CE02000000000000A202 /* OnDeviceAI.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +31,8 @@
 		E6E91C3A67A9AFC8E90C8CB5 /* libPods-PulseEntrain.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PulseEntrain.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = PulseEntrain/AppDelegate.swift; sourceTree = "<group>"; };
+		AAD1CE01000000000000A101 /* OnDeviceAI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnDeviceAI.swift; path = PulseEntrain/OnDeviceAI.swift; sourceTree = "<group>"; };
+		AAD1CE02000000000000A202 /* OnDeviceAI.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = OnDeviceAI.m; path = PulseEntrain/OnDeviceAI.m; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* PulseEntrain-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "PulseEntrain-Bridging-Header.h"; path = "PulseEntrain/PulseEntrain-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -48,6 +52,8 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				AAD1CE01000000000000A101 /* OnDeviceAI.swift */,
+				AAD1CE02000000000000A202 /* OnDeviceAI.m */,
 				F11748442D0722820044C1D9 /* PulseEntrain-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -333,6 +339,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				AAD1CE01000000000000B101 /* OnDeviceAI.swift in Sources */,
+				AAD1CE02000000000000B202 /* OnDeviceAI.m in Sources */,
 				46D4ED795131F6B1F25CE4B2 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -365,6 +373,10 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
+					"-weak_framework",
+					FoundationModels,
+					"-weak_framework",
+					ImagePlayground,
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.codemusic.PulseEntrain;
@@ -397,6 +409,10 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
+					"-weak_framework",
+					FoundationModels,
+					"-weak_framework",
+					ImagePlayground,
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.codemusic.PulseEntrain;

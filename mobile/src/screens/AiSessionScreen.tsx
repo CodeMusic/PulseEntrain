@@ -3,7 +3,7 @@ import { ScrollView, View, Text, TextInput, TouchableOpacity, Animated, Easing, 
 import { COLORS } from '../theme';
 import { IMEDX_SYSTEM_PROMPT, extractImedx } from '../catalog/imedxSpec';
 import { addUserSession } from '../catalog/userSessions';
-import { isOnDeviceAvailable, generateOnDevice } from '../ai/onDeviceModel';
+import { isOnDeviceAvailable, generateOnDevice, isImageAvailable, generateImageOnDevice } from '../ai/onDeviceModel';
 
 const ENDPOINT = 'https://n8n.codemusic.ca/webhook/pulseentrain';
 
@@ -34,7 +34,12 @@ export default function AiSessionScreen({ navigation }) {
   const [stage, setStage] = useState(0);
   const [onDevice, setOnDevice] = useState(false); // use the on-device model
   const [onDeviceOk, setOnDeviceOk] = useState(false); // device supports it
-  useEffect(() => { isOnDeviceAvailable().then(setOnDeviceOk); }, []);
+  const [artOk, setArtOk] = useState(false); // device can generate cover art
+  const [makeArt, setMakeArt] = useState(true); // generate art when supported
+  useEffect(() => {
+    isOnDeviceAvailable().then(setOnDeviceOk);
+    isImageAvailable().then(setArtOk);
+  }, []);
   const glow = useRef(new Animated.Value(0)).current;
   const spin = useRef(new Animated.Value(0)).current;
 
@@ -93,6 +98,13 @@ export default function AiSessionScreen({ navigation }) {
       }
       const imedx = extractImedx(raw);
       if (!imedx) throw new Error("Couldn't read a session from the response.");
+      if (makeArt && artOk) {
+        try {
+          const m = imedx.meta || (imedx.meta = {}); // paint cover art on-device (best-effort)
+          const img = await generateImageOnDevice(`${m.name || description}. ${m.description || ''}`.trim());
+          if (img) m.image = img;
+        } catch (e) {}
+      }
       const dose = addUserSession(imedx); // validates; throws on a bad shape
       // push (not replace) so back goes: session → AI (make another) → home
       navigation.navigate('DoseDetail', { id: dose.id });
@@ -144,6 +156,13 @@ export default function AiSessionScreen({ navigation }) {
             </View>
           ) : null}
           {onDeviceOk && onDevice ? <Text style={styles.segHint}>Runs privately on your iPhone — faster and unlimited.</Text> : null}
+
+          {artOk ? (
+            <TouchableOpacity style={styles.artRow} onPress={() => setMakeArt(v => !v)} activeOpacity={0.8}>
+              <View style={[styles.check, makeArt && styles.checkOn]}>{makeArt ? <Text style={styles.checkMark}>✓</Text> : null}</View>
+              <Text style={styles.artTxt}>🎨  Paint cover art on-device</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <TextInput
             style={styles.input}
@@ -201,6 +220,11 @@ const styles = StyleSheet.create({
   segTxt: { color: '#B9AED6', fontSize: 13, fontWeight: '700' },
   segTxtOn: { color: '#fff' },
   segHint: { color: '#9A8FBE', fontSize: 12, textAlign: 'center', marginTop: -6, marginBottom: 12 },
+  artRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, paddingHorizontal: 2 },
+  check: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(167,139,250,0.6)', alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: 'rgba(139,92,246,0.75)', borderColor: 'rgba(139,92,246,0.75)' },
+  checkMark: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  artTxt: { color: '#CFC6EA', fontSize: 13.5, fontWeight: '600' },
   error: { color: COLORS.accentOrange, fontSize: 13, marginTop: 16, textAlign: 'center' },
   btn: { backgroundColor: '#7C3AED', borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 22, shadowColor: '#7C3AED', shadowOpacity: 0.6, shadowRadius: 16, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   btnDisabled: { opacity: 0.45 },

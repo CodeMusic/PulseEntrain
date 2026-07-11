@@ -22,3 +22,19 @@ export async function generateOnDevice(prompt, system) {
   if (!hasOnDeviceModule) throw new Error('On-device model is not available.');
   return mod.generate(prompt, system);
 }
+
+// On-device cover art via Image Playground (separate capability from the text model).
+export async function isImageAvailable() {
+  if (!hasOnDeviceModule || !mod.imageAvailable) return false;
+  try {
+    return !!(await mod.imageAvailable());
+  } catch (e) {
+    return false;
+  }
+}
+
+// Returns a base64 JPEG data URI (or throws). Callers treat failure as "no art".
+export async function generateImageOnDevice(prompt) {
+  if (!hasOnDeviceModule || !mod.generateImage) throw new Error('Image generation is not available.');
+  return mod.generateImage(prompt);
+}

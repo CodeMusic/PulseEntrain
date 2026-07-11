@@ -11,6 +11,12 @@ import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+#if canImport(ImagePlayground)
+import ImagePlayground
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @objc(OnDeviceAI)
 class OnDeviceAI: NSObject {
@@ -50,5 +56,43 @@ class OnDeviceAI: NSObject {
     }
     #endif
     reject("unavailable", "On-device model unavailable on this device or OS.", nil)
+  }
+
+  @objc(imageAvailable:rejecter:)
+  func imageAvailable(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    #if canImport(ImagePlayground) && canImport(UIKit)
+    if #available(iOS 18.4, *) { resolve(true); return }
+    #endif
+    resolve(false)
+  }
+
+  // Generate cover art on-device via Image Playground; returns a base64 JPEG data URI.
+  @objc(generateImage:resolver:rejecter:)
+  func generateImage(_ prompt: String,
+                     resolver resolve: @escaping RCTPromiseResolveBlock,
+                     rejecter reject: @escaping RCTPromiseRejectBlock) {
+    #if canImport(ImagePlayground) && canImport(UIKit)
+    if #available(iOS 18.4, *) {
+      Task {
+        do {
+          let creator = try await ImageCreator()
+          let style = creator.availableStyles.first ?? .illustration
+          let images = creator.images(for: [.text(prompt)], style: style, limit: 1)
+          for try await created in images {
+            let ui = UIImage(cgImage: created.cgImage)
+            if let data = ui.jpegData(compressionQuality: 0.8) {
+              resolve("data:image/jpeg;base64," + data.base64EncodedString())
+              return
+            }
+          }
+          reject("no_image", "No image was produced.", nil)
+        } catch {
+          reject("image_error", error.localizedDescription, error)
+        }
+      }
+      return
+    }
+    #endif
+    reject("unavailable", "Image generation unavailable on this device or OS.", nil)
   }
 }
