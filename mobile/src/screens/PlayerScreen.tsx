@@ -49,6 +49,7 @@ const playCountKey = id => `@pulseentrain/playcount/${id}`;
 // pose when it engages.
 // Touch-drag bend (on-screen): deeper than the head bend, and springs back on release.
 const TOUCH_CARR_MAX = 200, TOUCH_BEAT_MAX = 10; // Hz bend range for a full drag
+const TAP_KICK = 0.45; // a tap kicks up to this fraction of a full bend, then rings back
 const TOUCH_TRAVEL_PX = 180; // drag distance (px) that reaches the full bend
 // Track strength (1-7) → default Pulsetto base intensity (1-9): strength + 1, clamped.
 const defaultIntensityFor = strength => Math.min(9, Math.max(1, ((strength ?? 4) + 1)));
@@ -659,6 +660,18 @@ export default function PlayerScreen({ route, navigation }) {
       };
       applyBend();
       pressBoost.press(e.pressure);
+    } else if (e.phase === 'tap') {
+      // A tap kicks a small bend toward where you tapped, then springs back — the
+      // audible "ripple" that matches the ring the pad draws.
+      padStartRef.current = null;
+      setPressing(false);
+      pressBoost.release();
+      cancelSpring();
+      touchBendRef.current = {
+        carr: exClamp((e.xN - 0.5) * 2, -1, 1) * TOUCH_CARR_MAX * TAP_KICK,
+        beat: exClamp((0.5 - e.yN) * 2, -1, 1) * TOUCH_BEAT_MAX * TAP_KICK,
+      };
+      springBack();
     } else {
       padStartRef.current = null;
       setPressing(false);

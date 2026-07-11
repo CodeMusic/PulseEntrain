@@ -356,7 +356,7 @@ export default function FieldScreen() {
   // finger → carrier/beat via fromFinger, Z → volume lift + field brightness, and
   // touching engages the push gate + recenters gaze.
   const onPadField = e => {
-    if (e.phase === 'end') { pressBoost.release(); releasePush(); return; }
+    if (e.phase === 'end' || e.phase === 'tap') { pressBoost.release(); releasePush(); return; }
     if (e.phase === 'start') { lastXNRef.current = null; pressEngage(); recenterGaze(); }
     fromFinger(e.xN, e.yN);
     pressBoost.press(e.pressure);
