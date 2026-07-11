@@ -65,11 +65,9 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
   };
 
   const spawnRipple = (cx, cy) => {
-    const v = getValues ? getValues() : { beat: 8 };
-    const beat = Math.max(0.5, Math.min(60, v.beat || 8));
     const rs = ripplesRef.current;
     if (rs.length > 10) rs.shift();
-    rs.push({ cx, cy, radius: 0, speed: (beat * SPEED_SCALE) / 60 }); // 60fps loop → beat×scale cells/sec
+    rs.push({ cx, cy, radius: 0 }); // speed is read live from the beat each frame (springs with it)
     settleFramesRef.current = 60;
   };
 
@@ -115,9 +113,12 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
       front.fill(0);
       rate.fill(BASE_DRIFT);
       const ripples = ripplesRef.current;
+      // Live wave speed = the current beat — so an in-flight wave slows/speeds as the
+      // beat springs back to the program's value (overshoot included).
+      const liveSpeed = (Math.max(0.5, Math.min(60, v.beat || 8)) * SPEED_SCALE) / 60;
       for (let ri = ripples.length - 1; ri >= 0; ri--) {
         const rp = ripples[ri];
-        rp.radius += rp.speed;
+        rp.radius += liveSpeed;
         if (rp.radius > N * 1.9) { ripples.splice(ri, 1); continue; }
         for (let r = 0; r < N; r++) {
           for (let c = 0; c < N; c++) {
