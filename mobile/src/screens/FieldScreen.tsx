@@ -757,7 +757,12 @@ export default function FieldScreen() {
         </>
       ) : null}
 
-      <TouchPad visible={padOpen} onClose={() => setPadOpen(false)} onChange={onPadField} />
+      <TouchPad
+        visible={padOpen}
+        onClose={() => setPadOpen(false)}
+        onChange={onPadField}
+        getValues={() => ({ beat: baseBeatRef.current + beatBendRef.current, carrier: baseCarrierRef.current + carrierBendRef.current })}
+      />
     </View>
   );
 }

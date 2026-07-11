@@ -827,7 +827,19 @@ export default function PlayerScreen({ route, navigation }) {
           <Text style={styles.padChipTxt}>✋ Use the screen as a pad</Text>
         </TouchableOpacity>
       ) : null}
-      <TouchPad visible={padOpen} onClose={() => setPadOpen(false)} onChange={onPad} />
+      <TouchPad
+        visible={padOpen}
+        onClose={() => setPadOpen(false)}
+        onChange={onPad}
+        getValues={() => {
+          const s = synthRef.current;
+          const base = s ? s.current() : { beat: (dose as any)?.beat || 10, carrier: (dose as any)?.carrier || 200 };
+          return {
+            beat: base.beat + touchBendRef.current.beat + headBendRef.current.beat,
+            carrier: base.carrier + touchBendRef.current.carr + headBendRef.current.carr,
+          };
+        }}
+      />
 
       <Slider
         style={styles.progressSlider}
