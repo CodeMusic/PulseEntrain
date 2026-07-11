@@ -98,7 +98,7 @@ export class SessionSynth {
     if (this.playing) return;
     const a = this._activeAt(this.position);
     this._curNoise = normalizeNoise(a.noise);
-    this.engine.start({ carrier: a.carrier, beat: a.beat, volume: this.volume, background: this._curNoise, music: this.music, musicLevel: this.musicLevel });
+    this.engine.start({ carrier: a.carrier, beat: a.beat, volume: this.volume, background: this._curNoise, music: this.music, musicLevel: this.musicLevel, musicOffset: this.position });
     if (this.fadeSeconds > 0) this.engine.fadeIn(this.fadeSeconds);
     this._faded = false;
     this._musicFaded = false;

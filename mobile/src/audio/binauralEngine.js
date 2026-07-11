@@ -73,7 +73,7 @@ export class BinauralEngine {
     return NOISE_LEVEL * (this.hasMusic ? MUSIC_NOISE_DUCK : 1);
   }
 
-  start({ carrier = 200, beat = 10, volume = 0.8, background = 'none', music = null, musicLevel } = {}) {
+  start({ carrier = 200, beat = 10, volume = 0.8, background = 'none', music = null, musicLevel, musicOffset = 0 } = {}) {
     if (this.running) this.stop();
     this.carrier = carrier;
     this.beat = beat;
@@ -130,14 +130,14 @@ export class BinauralEngine {
     this._buildEarPulse();
 
     this._startNoise(background);
-    if (music) this._startMusic(music); // async decode; fades in when ready
+    if (music) this._startMusic(music, musicOffset); // async decode; fades in when ready
     this.running = true;
   }
 
   // Decode a base64 MP3 (data URI or bare base64) and play it once under the tones:
   // src → fade envelope → user level → master. Fades in, and schedules its own fade-
   // out at its end (so a short clip fades while the track keeps going).
-  async _startMusic(music) {
+  async _startMusic(music, offset = 0) {
     if (!music || !this.ctx || !this.master) return;
     const ctx = this.ctx;
     try {
@@ -146,6 +146,10 @@ export class BinauralEngine {
       const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       const audioBuf = await ctx.decodeAudioData(ab);
       if (this.ctx !== ctx || !this.master) return; // stopped/restarted while decoding
+      const dur = audioBuf.duration;
+      const start = Math.max(0, offset); // resume from here (music tracks the session position)
+      const remaining = dur - start;
+      if (remaining <= 0.15) return; // the music already finished earlier in the track
       const src = ctx.createBufferSource();
       src.buffer = audioBuf;
       const fade = ctx.createGain();
@@ -156,14 +160,13 @@ export class BinauralEngine {
       fade.connect(level);
       level.connect(this.master);
       const now = ctx.currentTime;
-      const dur = audioBuf.duration;
-      const fin = Math.min(MUSIC_FADE_IN, dur / 3);
+      const fin = Math.min(MUSIC_FADE_IN, remaining / 3);
       fade.gain.setValueAtTime(0, now);
       fade.gain.linearRampToValueAtTime(1, now + fin);
-      const outStart = Math.max(now + fin, now + dur - MUSIC_FADE_OUT);
+      const outStart = Math.max(now + fin, now + remaining - MUSIC_FADE_OUT);
       fade.gain.setValueAtTime(1, outStart);
-      fade.gain.linearRampToValueAtTime(0, now + dur);
-      src.start(now);
+      fade.gain.linearRampToValueAtTime(0, now + remaining);
+      src.start(now, start); // offset into the buffer → seamless resume
       this.musicSrc = src;
       this.musicFadeGain = fade;
       this.musicLevelGain = level;
