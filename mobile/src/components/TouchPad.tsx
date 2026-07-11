@@ -3,32 +3,31 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } 
 import { clamp01, lerpColor as mix, rgbColor as rgb } from '../shared/math';
 import { carrierRGB } from '../shared/entrainment';
 
-// Full-screen on-phone stand-in for the ROLI Lightpad: a screen door of squares that
-// starts as a purple→indigo diagonal. Your finger lights the cells under it blue
-// (brighter with pressure) and the rest dims while you hold.
+// Full-screen on-phone stand-in for the ROLI Lightpad. Your finger lights the cells
+// under it blue (brighter with pressure) and the rest dims while you hold.
 //
 // It reports the same gesture the block does via onChange({ phase, xN, yN, pressure }):
-// phase is 'start' | 'move' | 'end' (release after a bend) | 'tap' (release with ~no
-// travel → the screen rings a small bend). Force falls back to a medium value on
-// phones without 3D-Touch so pressure still reads.
+// 'start' | 'move' | 'end' (release after a bend) | 'tap' (release with ~no travel →
+// the screen rings a small bend). Force falls back to a medium value without 3D-Touch.
 //
-// Ripples reflect real values. On a tap or a bend-release a wave expands from the
-// touch point at a speed equal to the BINAURAL BEAT (cells per second — 10 Hz = 10
-// cells/s), and behind its front the grid settles into the CARRIER's colour (the same
-// carrier→colour map used elsewhere). So a fast beat ripples quickly, a slow beat
-// crawls, and the grid ends up the colour of the carrier you pulled to. `getValues`
-// supplies the live { beat, carrier } at the moment the ripple is cast.
-const N = 20; // grid resolution — bump for smoother waves (watch perf: N*N Views repaint ~30fps)
-const PURPLE = [124, 58, 237]; // #7C3AED — resting top-left
-const INDIGO = [63, 81, 181]; // bluish-indigo — resting bottom-right
+// COLOUR = the live CARRIER. The whole grid continuously eases toward the carrier's
+// colour (the shared carrier→colour map), so a program's timeline changes recolour it
+// gradually, and a bend that springs back drags the colour back too — overshoot and
+// all. A tap or bend-release also casts a WAVE from the touch point that expands at the
+// live BEAT (cells/sec × a scale) and recolours faster inside its front — so you see the
+// change ripple out at the entrainment rate. getValues() supplies live { beat, carrier }.
+const N = 20; // grid resolution — one constant; N*N Views repaint ~30fps, so watch perf if you raise it
+const PURPLE = [124, 58, 237]; // resting diagonal (blooms into the carrier colour on open)
+const INDIGO = [63, 81, 181];
 const BLUE = [90, 170, 255]; // touch highlight
-const FRONT_COLOR = [225, 238, 255]; // pale crest so the wavefront is visible as it travels
+const FRONT_COLOR = [230, 242, 255]; // pale crest so the wavefront is visible as it travels
 const TOUCH_RADIUS = 3.2; // cells lit around the finger
 const DECAY = 0.9; // touch residue fade per frame
 const DIM = 0.62; // how far the untouched grid darkens while held
-const FILL_RATE = 0.22; // how fast cells behind the front adopt the carrier colour
+const BASE_DRIFT = 0.035; // ambient recolour toward the live carrier (timeline / spring-back / bloom)
+const FILL_RATE = 0.36; // faster recolour inside a wavefront — makes the ripple read as a moving edge
+const SPEED_SCALE = 3.5; // wave speed = beat × this (cells/sec); raise for snappier waves
 const FRONT_W = 1.2; // wavefront crest half-width (cells)
-const RIPPLE_MAX_AGE = 900; // frames (~15 s) — a very slow (low-beat) wave still ends
 const DWELL_MIN = 0.32, DWELL_TAU = 42, DWELL_MOVE_BLEED = 55; // pressure proxy (no 3D-Touch)
 const TAP_MOVE = 0.05; // normalised travel beyond which a release is a bend, not a tap
 
@@ -37,15 +36,18 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
   const cell = Math.max(4, Math.floor(Math.min(width - 8, height - 96) / N));
   const size = cell * N;
   const heatRef = useRef(new Float32Array(N * N));
-  const srRef = useRef(new Float32Array(N * N)); // settled colour the grid has filled to
+  const srRef = useRef(new Float32Array(N * N)); // settled colour the grid has eased to
   const sgRef = useRef(new Float32Array(N * N));
   const sbRef = useRef(new Float32Array(N * N));
   const frontRef = useRef(new Float32Array(N * N)); // wavefront crest highlight, rebuilt per frame
+  const rateRef = useRef(new Float32Array(N * N)); // per-cell recolour rate this frame
   const ripplesRef = useRef<any[]>([]);
   const touchRef = useRef<null | { cx: number; cy: number; xN: number; yN: number; rawForce: number; dwell: number; eff: number }>(null);
   const startRef = useRef<null | { cx: number; cy: number; xN: number; yN: number }>(null);
   const movedRef = useRef(false);
   const dimRef = useRef(1);
+  const lastTargetRef = useRef([0, 0, 0]);
+  const settleFramesRef = useRef(0); // keep repainting for a bit after anything changes
   const [, forceRender] = useState(0);
   const rafRef = useRef<any>(null);
 
@@ -63,29 +65,37 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
   };
 
   const spawnRipple = (cx, cy) => {
-    const v = getValues ? getValues() : { beat: 8, carrier: 200 };
-    const beat = Math.max(0.5, Math.min(60, v.beat || 8)); // cells/sec
-    const [cr, cg, cb] = carrierRGB(v.carrier || 200);
+    const v = getValues ? getValues() : { beat: 8 };
+    const beat = Math.max(0.5, Math.min(60, v.beat || 8));
     const rs = ripplesRef.current;
     if (rs.length > 10) rs.shift();
-    rs.push({ cx, cy, radius: 0, age: 0, speed: beat / 60, r: cr, g: cg, b: cb }); // 60fps loop → beat cells/sec
+    rs.push({ cx, cy, radius: 0, speed: (beat * SPEED_SCALE) / 60 }); // 60fps loop → beat×scale cells/sec
+    settleFramesRef.current = 60;
   };
 
   useEffect(() => {
     if (!visible) {
       heatRef.current.fill(0); frontRef.current.fill(0);
       ripplesRef.current = []; touchRef.current = null; startRef.current = null;
-      movedRef.current = false; dimRef.current = 1;
+      movedRef.current = false; dimRef.current = 1; settleFramesRef.current = 0;
       return;
     }
-    resetSettled(); // each open starts at the purple diagonal
+    resetSettled();
+    settleFramesRef.current = 80; // bloom into the carrier colour on open
     let alive = true;
     let frame = 0;
     const loop = () => {
       if (!alive) return;
-      const heat = heatRef.current, front = frontRef.current;
+      const heat = heatRef.current, front = frontRef.current, rate = rateRef.current;
       const sr = srRef.current, sg = sgRef.current, sb = sbRef.current;
       const t = touchRef.current;
+      const v = getValues ? getValues() : { beat: 8, carrier: 200 };
+      const tgt = carrierRGB(v.carrier || 200);
+      const lt = lastTargetRef.current;
+      if (Math.abs(tgt[0] - lt[0]) + Math.abs(tgt[1] - lt[1]) + Math.abs(tgt[2] - lt[2]) > 1.5) {
+        settleFramesRef.current = Math.max(settleFramesRef.current, 30); // carrier moved → keep painting
+        lastTargetRef.current = tgt;
+      }
       if (t) {
         t.dwell += 1;
         t.eff = pressureOf(t);
@@ -101,32 +111,36 @@ export default function TouchPad({ visible, onClose, onChange, getValues }) {
         }
       }
       for (let i = 0; i < heat.length; i++) heat[i] *= DECAY;
-      // Ripples: expand at the beat rate, fill the carrier colour behind the crest.
+      // Wavefronts: expand at the beat rate; mark cells inside for fast recolour + crest.
       front.fill(0);
+      rate.fill(BASE_DRIFT);
       const ripples = ripplesRef.current;
       for (let ri = ripples.length - 1; ri >= 0; ri--) {
         const rp = ripples[ri];
         rp.radius += rp.speed;
-        rp.age += 1;
-        if (rp.radius > N * 1.7 || rp.age > RIPPLE_MAX_AGE) { ripples.splice(ri, 1); continue; }
+        if (rp.radius > N * 1.9) { ripples.splice(ri, 1); continue; }
         for (let r = 0; r < N; r++) {
           for (let c = 0; c < N; c++) {
             const i = r * N + c;
             const dr = Math.hypot(c - rp.cx, r - rp.cy) - rp.radius;
-            if (dr <= 0) { // behind the front → settle toward the carrier colour
-              sr[i] += (rp.r - sr[i]) * FILL_RATE;
-              sg[i] += (rp.g - sg[i]) * FILL_RATE;
-              sb[i] += (rp.b - sb[i]) * FILL_RATE;
-            }
-            if (dr > -FRONT_W && dr < FRONT_W) front[i] += 1 - Math.abs(dr) / FRONT_W; // crest
+            if (dr <= 0) rate[i] = FILL_RATE;
+            if (dr > -FRONT_W && dr < FRONT_W) front[i] += 1 - Math.abs(dr) / FRONT_W;
           }
         }
+      }
+      // Recolour every cell toward the live carrier colour (fast inside a front, slow outside).
+      for (let i = 0; i < sr.length; i++) {
+        sr[i] += (tgt[0] - sr[i]) * rate[i];
+        sg[i] += (tgt[1] - sg[i]) * rate[i];
+        sb[i] += (tgt[2] - sb[i]) * rate[i];
       }
       const dimTarget = t ? DIM : 1;
       dimRef.current += (dimTarget - dimRef.current) * 0.12;
       if (Math.abs(dimRef.current - dimTarget) < 0.004) dimRef.current = dimTarget;
+      if (t || ripples.length > 0) settleFramesRef.current = 60;
+      else settleFramesRef.current = Math.max(0, settleFramesRef.current - 1);
       frame++;
-      const active = !!t || ripples.length > 0 || dimRef.current < 0.995;
+      const active = settleFramesRef.current > 0 || dimRef.current < 0.995;
       if (active && frame % 2 === 0) {
         if (t) onChange && onChange({ phase: 'move', xN: t.xN, yN: t.yN, pressure: t.eff });
         forceRender(n => n + 1);
