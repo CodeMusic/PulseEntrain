@@ -22,7 +22,17 @@ Shape:
     "masterVolume": 1
   },
   "entrainment": {
-    "scenes": [ { "atSec": <int seconds from start>, "beatHz": <0.5-40>, "carrierHz": <optional, overrides base> } ]
+    "scenes": [
+      {
+        "atSec": <int seconds from start>,
+        "beatHz": <0.5-40, required>,
+        "carrierHz": <optional, moves the base tone this scene onward>,
+        "flashHz": <optional, the LIGHT flicker rate; omit = light follows the beat, set it to flicker faster/slower than the audio>,
+        "flash": <optional "sync"|"left"|"right"; which eye the light pulses (left/right for asymmetric / alternating-eye effects)>,
+        "noise": <optional "none"|"white"|"pink"|"brown"; crossfades the noise bed from here>,
+        "intensity": <optional 1-9; vagus-nerve stim strength from here>
+      }
+    ]
   },
   "nova": { "maxHz": 60 }
 }
@@ -35,17 +45,32 @@ Rules:
 - durationSec MUST equal the final scene's atSec. Pick a sensible length for the goal (e.g. 600-1800s) unless the user asks otherwise.
 - beds is optional; include a gentle noise bed when it suits the mood, else use [].
 - Keep carrierHz comfortable (lower = warmer, higher = brighter).
-- Output valid JSON that parses on the first try.`;
+- Use the WHOLE canvas — a session is a composition, not just a beat ramp. Move the carrier to shift warmth/colour, change flashHz to make the light shimmer against the beat, use flash "left"/"right" (alternating across scenes) so the eyes flicker at different rates, crossfade the noise bed, and lift/drop intensity — all to sculpt an arc with a beginning, a middle and a resolution. The richer or more abstract the request, the more of this you should use; for a simple, calm goal, stay spare. Use your judgement.
+- Every field except beatHz/carrierHz (which glide) holds forward until the next scene changes it.
+- Output valid JSON that parses on the first try. No markdown, no code fences, no commentary — just the JSON object.`;
 
-// Pull the .imedx object out of whatever the webhook returns (raw JSON, a string, or
-// wrapped by n8n as { output }/{ session }/{ json }/{ data }).
+// Pull the .imedx object out of whatever the webhook returns — raw JSON, a JSON
+// string, prose/markdown-fenced text (```json … ```), or n8n wrappers like
+// { output }/{ session }/{ text }/{ json }. Tolerant on purpose: models love fences.
+const stripFences = s => {
+  const m = String(s).match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (m ? m[1] : String(s)).trim();
+};
+const parseLoose = s => {
+  const t = stripFences(s);
+  try { return JSON.parse(t); } catch (e) {}
+  const a = t.indexOf('{'), b = t.lastIndexOf('}'); // grab the outermost object from prose
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {} }
+  return null;
+};
+
 export function extractImedx(data) {
   let d = data;
-  if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) {} }
-  if (d && typeof d === 'object') {
-    const wrap = d.session || d.imedx || d.output || d.json || d.data || d.result;
+  if (typeof d === 'string') d = parseLoose(d) || d;
+  if (d && typeof d === 'object' && !d.entrainment) {
+    const wrap = d.session || d.imedx || d.output || d.json || d.data || d.result || d.text || d.message;
     if (wrap && wrap !== d) d = wrap;
   }
-  if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return null; } }
+  if (typeof d === 'string') d = parseLoose(d);
   return d && typeof d === 'object' ? d : null;
 }

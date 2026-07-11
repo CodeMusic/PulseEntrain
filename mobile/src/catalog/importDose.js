@@ -38,9 +38,9 @@ export function validateImedx(json) {
 export function imedxToDose(json) {
   const meta = json.meta || {};
   const audio = json.audio || {};
-  const beds = audio.beds || [];
-  const noiseBed = beds.find(b => b.source === 'noise');
   const binaural = audio.binaural || {};
+  const beds = audio.beds || binaural.beds || []; // tolerate beds mis-nested under binaural
+  const noiseBed = beds.find(b => b.source === 'noise');
   const id = `imported_${slug(meta.name)}_${++_counter}`;
   return {
     id,

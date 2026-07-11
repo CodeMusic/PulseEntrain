@@ -55,7 +55,7 @@ export default function AiSessionScreen({ navigation }) {
         signal: ctrl.signal,
       });
       if (!res.ok) throw new Error(`The generator returned ${res.status}.`);
-      const imedx = extractImedx(await res.json());
+      const imedx = extractImedx(await res.text()); // tolerate fenced/prose JSON
       if (!imedx) throw new Error("Couldn't read a session from the response.");
       const dose = addUserSession(imedx); // validates; throws on a bad shape
       navigation.replace('DoseDetail', { id: dose.id });
