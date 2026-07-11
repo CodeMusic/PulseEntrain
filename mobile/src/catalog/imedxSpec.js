@@ -27,6 +27,8 @@ Shape:
   "nova": { "maxHz": 60 }
 }
 
+The request may be concrete (a goal + a length) OR abstract — an emotion, a drug or medicine, a holiday, a food, a colour, a place, a memory. When it is abstract, practise SYNESTHESIA: translate the thing's felt ESSENCE into sound rather than describing it literally. Let its energy set the beat band and how it arcs over time; its warmth/brightness set the carrier (low = warm, heavy, close; high = bright, airy, distant); its texture decide the noise bed; its mood shape the name and description. The session should feel like the thing.
+
 Rules:
 - The beat frequency (beatHz) is the entrainment. Bands: delta 0.5-4 (deep rest/sleep), theta 4-8 (meditation/creativity), alpha 8-13 (calm focus), beta 13-30 (alert focus), gamma 30-40 (peak). Choose bands that fit the request and shape a journey.
 - scenes MUST be sorted by atSec, start at atSec 0, and the beat glides linearly between consecutive scenes — so use several scenes to ramp gently (avoid big jumps).
